@@ -13,8 +13,8 @@ compiled_CMSSW_envs=$9
 flist_full=`realpath $flist`
 fname=`echo $flist_full | rev | cut -d "/" -f 1 | rev | cut -d "." -f 1`
 
-mass=`echo $fname | cut -d "_" -f 1-2`
-ctau=`echo $fname | cut -d "_" -f 3`
+mass=`echo $fname | cut -d "_" -f 1-3`
+ctau=`echo $fname | cut -d "_" -f 4`
 outDirName="${mass}/${ctau}"
 
 mkdir -p split_fileLists
