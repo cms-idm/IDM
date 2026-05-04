@@ -398,7 +398,7 @@ ElectronSkimmer::fillDescriptions(edm::ConfigurationDescriptions& descriptions) 
    // Inputs from the run_ntuplizer_cfg python (cmsRun inputs)
    desc.add<bool>("isData", 0);
    desc.add<bool>("isSignal",0);
-   desc.add<std::string>("year","2022"); //XYZ do we need a way to update this dynamically?
+   desc.add<std::string>("year","none"); // placeholder, is updated dynamically later
    desc.add<std::string>("triggerProcessName", "HLT");
    desc.add<std::string>("metFilterName","PAT");
    desc.add<std::vector<std::string> >("metFilters",{});
@@ -665,7 +665,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       // require pT > 5 & pass loose ID to consider GED electron
       //if (ele.pt() < 5 || !ele.electronID("cutBasedElectronID-Fall17-94X-V2-loose")) {
       //if (ele.pt() < 2 || !ele.electronID("mvaEleID-Fall17-noIso-V2-wp90")) {
-      // Run3 - no pt cut for now; XYZ need to fix based on year (not only 2022)
+      // Run3 - no pt cut; will change later with ID studies. for now, equivalent of Run2 choice
       if (!ele.electronID("mvaEleID-RunIIIWinter22-noIso-V1-wp90")) {
 	 iele++;
          continue;
@@ -777,7 +777,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    int ilpt_all = 0;
    for (auto & ele : *lowPtNanoElectronHandle_) {
       // basic cut (should be applied by default in miniAOD stage, but repeating here)
-      // Run3 syntax updated - XYZ do we want the ele.pt() < 1 part?
+      // Run3 syntax updated - below cuts are legacy sanity check from Run2, likely will change later
       if (ele.pt() < 1 || ele.electronID("ID") < -0.25) {
          ilpt_all++;
          continue;
