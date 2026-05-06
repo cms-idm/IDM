@@ -214,6 +214,8 @@ public:
     // special variables for the x-cleaning study
     vector<bool> recoElectronHasLptMatch_;
     vector<int> recoElectronLptMatchIdx_;
+    vector<bool> recoElectronHasXCLptMatch_;
+    vector<int> recoElectronXCLptMatchIdx_;
 
     // Low pT electrons
     int nElectronLowPt_;
@@ -324,6 +326,10 @@ public:
     vector<int> recoXCLowPtElectronExpMissingInnerHits_;
     vector<bool> recoXCLowPtElectronConversionVeto_;
     vector<bool> recoXCLowPtElectronIsEE_;
+    // special variables for the x-cleaning study
+    vector<bool> recoXCLowPtElectronIsXCleaned_;
+    vector<int> recoXCLowPtElectronGEDidx_;
+    vector<bool> recoXCLowPtElectronGEDisMatched_;
 
     // DSA Muons
     int nDSAMuon_;
