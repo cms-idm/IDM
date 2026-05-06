@@ -22,7 +22,7 @@ mkdir -p Logs
 xrdfs root://cmseos.fnal.gov/ mkdir -p /store/group/lpcmetx/iDMe//Samples/Ntuples/signal_${suffix}/${year}/${outDirName}/
 outPath=/store/group/lpcmetx/iDMe//Samples/Ntuples/signal_${suffix}/${year}/${outDirName}/
 
-cp ${flist_full} .
+sort -V ${flist_full} > ${fname}.txt
 split -d -l ${nsplit} --additional-suffix ".txt" ${fname}.txt ${fname}_
 rm ${fname}.txt
 for sublist in `ls ${fname}_*.txt`

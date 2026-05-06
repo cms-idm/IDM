@@ -15,13 +15,23 @@ tar -xzf ${compiled_CMSSW_envs}
 mv ${fname}.txt ${CMSSW}/src/iDMe/AODSkimmer
 cd ${CMSSW}/src/
 
+pwd
+ls
+
 export VO_CMS_SW_DIR=/cvmfs/cms.cern.ch
 source $VO_CMS_SW_DIR/cmsset_default.sh
 scram b ProjectRename
 eval `scram runtime -sh`
 cd iDMe/AODSkimmer
+
+pwd
+ls
+
 cmsRun scripts/ElectronNtuplizer_cfg.py flist=${fname}.txt data=${isData} signal=${isSignal} year=${year} numThreads=${nThreads}
 mv test_output.root ntuples_${fname}.root
 xrdcp -f ntuples_${fname}.root root://cmseos.fnal.gov/${outPath}/ntuples_${fname}.root
 echo "Copied ntuples_${fname}.root"
 echo "Done"
+
+pwd
+ls
