@@ -1,19 +1,28 @@
 from __future__ import with_statement
 import coffea
 from coffea.nanoevents import NanoEventsFactory, NanoAODSchema, BaseSchema
-from mySchema import MySchema
+
+try:
+    from mySchema_newCoffea import MySchema
+    import analysisSubroutines as routines
+    import corrections
+except ModuleNotFoundError:
+    from tools.mySchema_newCoffea import MySchema
+    import tools.analysisSubroutines as routines
+    import tools.corrections
+
 from coffea import processor
 
-#from coffea.dataset_tools import (
-#    apply_to_fileset,
-#    max_chunks,
-#    preprocess,
-#)
-#import dask
+from coffea.dataset_tools import (
+    apply_to_fileset,
+    max_chunks,
+    preprocess,
+)
+import dask
 
 import uproot
 import awkward as ak
-#import vector
+import vector
 #vector.register_awkward()
 import numpy as np
 import matplotlib.pyplot as plt
@@ -179,11 +188,29 @@ class Analyzer:
                                 treename=treename,
                                 processor_instance=proc)
         else:
-            print("Preprocessing")
-            dataset_runnable, dataset_updated = preprocess(fileset,step_size=100_000,files_per_batch=1)
-            print("Done Preprocessing")
-            to_compute = apply_to_fileset(proc,dataset_runnable,schemaclass=MySchema)
-            (accumulator,) = dask.compute(to_compute)
+            if execr == "iterative":
+                executor = processor.IterativeExecutor()
+            elif execr == "futures":
+                executor = processor.FuturesExecutor(workers=workers, merging=merging)
+            elif execr == "dask":
+                if dask_client is None:
+                    print("Need to supply a dask client!")
+                    return
+                else:
+                    executor = processor.DaskExecutor(client=dask_client)
+            else:
+                print("Invalid executor type specification!")
+                return
+
+            runner = processor.Runner(executor=executor,schema=MySchema,savemetrics=True)
+            accumulator = runner(fileset,
+                                 #treename=treename,
+                                 processor_instance=proc)
+            #print("Preprocessing")
+            #dataset_runnable, dataset_updated = preprocess(fileset,step_size=100_000,files_per_batch=1)
+            #print("Done Preprocessing")
+            #to_compute = apply_to_fileset(proc,dataset_runnable,schemaclass=MySchema)
+            #(accumulator,) = dask.compute(to_compute)
         
         return accumulator
 
@@ -278,28 +305,10 @@ class iDMeProcessor(processor.ProcessorABC):
             
         cutDesc['all'] = 'No cuts@'
 
-        ######################################################################################
-        ## Add HEM flags to Event (before applying any quality cuts to jet, electrons ##
-        ######################################################################################
-
-        if str(info['year']) == '2018':
-            routines.checkHEMjet(events)
-            routines.checkHEMelectron(events)
-
         #################################
         ## Calculating Additional Vars ##
         #################################
         events = routines.computeExtraVariables(events,info)
-
-        #################################
-        ## HEM Veto for 2018 ##
-        #################################
- 
-        # Veto HEM jets and electrons for 2018 data and MC
-        if str(info['year']) == '2018':
-            events = events[events.hasHEMjet == 0]
-            events = events[events.hasHEMelecPF == 0]
-            events = events[events.hasHEMelecLpt == 0]
 
         #################################
         ## Applying systematics and SF ##

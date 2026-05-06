@@ -214,6 +214,7 @@ def defineGoodVertices(events,version='v9',ele_id='dR'):
         IDcut = events.vtx.e1.passID & events.vtx.e2.passID
     ossf = events.vtx.sign == -1
     chi2 = events.vtx.reduced_chi2 < 5
+    chi2_loose = events.vtx.reduced_chi2 < 15
     mass = events.vtx.refit_m < 20
     eleDphi = events.vtx.eleDphi < 2
     mindxy = events.vtx.min_dxy > 0.01
@@ -272,7 +273,9 @@ def defineGoodVertices(events,version='v9',ele_id='dR'):
 
     if version == 'v15':
          events["vtx","isGood"] = IDcut & chi2 & maxMiniIso & passConvVeto & mass_lo_refit & mindxy_refit & logdxydz_loose # loosen mindxy
-    
+    if version == 'v15acr':
+        events["vtx","isGood"] = IDcut & maxMiniIso & chi2_loose & mindxy_refit & passConvVeto & mass_lo_refit & logdxydz_loose # up-to-date with AN
+
     if version == 'v40': # For SF studies
          vtx_type = ((events.vtx.e1_typ == 'L') & (events.vtx.e2_typ == 'L'))
          #vtx_type = ((events.vtx.e1_typ == 'R') & (events.vtx.e2_typ == 'R'))
@@ -285,6 +288,39 @@ def defineGoodVertices(events,version='v9',ele_id='dR'):
 def selectBestVertex(events):
     sel_vtx = ak.flatten(events.good_vtx[ak.argmin(events.good_vtx.reduced_chi2,axis=1,keepdims=True)])
     events.__setitem__("sel_vtx",sel_vtx)
+
+def hasGoodVertex(events, info, good_vtx='v15acr'):
+    defineGoodVertices(events,version=good_vtx) # define "good" vertices based on whether associated electrons pass ID cuts
+    events = events[events.nGoodVtx > 0]
+    events = defineVertexInfo(events, info)
+    return events
+
+def defineVertexInfo(events, info):
+
+    # define "selected" vertex based on selection criteria in the routine (nominally: lowest chi2)
+    selectBestVertex(events)
+    #if info['type'] == "signal":
+    #    events = selectTrueVertex(events,events.good_vtx)
+    #    #routines.selectBestVertex(events)
+    #else:
+    #    selectBestVertex(events)
+    prepareBDT(events, None) # prepare BDT inference if the cuts include BDT-based cut
+
+    # Vtx SF related stuff (shitty hack, disabled for now....)
+    if False and info['apply_vtx_SF'] == True:
+        #print('apply_vtx_SF', events["eventWgt"], events.sel_vtx.sf)
+        events["eventWgt"] = events["eventWgt"] * events.sel_vtx.sf
+
+    # For signal, (1) check if the vertex ee are gen-matched (2) check if the event has ee that are gen-matched
+    #if info['type'] == "signal":
+    #
+    #    projectGenLxy(events)
+    #    vtx_matched_events = events[events.sel_vtx.isMatched]
+    #    cutflow_vtx_matched['hasVtx'] += ak.sum(vtx_matched_events.genWgt)/ak.sum(events.genWgt)
+
+    return events
+    
+
 
 def computeExtraVariables(events,info):
     events['Electron','mindRj'] = ak.fill_none(ak.min(events.Electron.dRJets,axis=-1),999)
