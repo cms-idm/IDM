@@ -15,8 +15,8 @@ def stringfy_friendly(num):
 
 vers = 'Apr2026'
     
-m1l = [2] #, 0.5, 1, 2, 5] #[0.05, 0.5, 5, 50]
-dml = [0.05, 0.1, 0.2] #[0.05, 0.1, 0.2]
+m1l = [0.05, 0.5, 1, 2, 5, 50]
+dml = [0.05, 0.1, 0.2] 
 ctaul = [1, 10, 100]
 
 for m1 in m1l:
@@ -35,4 +35,5 @@ for m1 in m1l:
             flist = f'fileLists/signal/2024/{procstring}_flist.txt'
             outfile = f'ntuples/signal/2024/iDMe_run3_ntuples_{vers}_{procstring}.root'
             cmd = f'cmsRun scripts/ElectronNtuplizer_cfg.py year=2024 data=0 signal=1 flist="{flist}" outfile={outfile}'
+            print(cmd)
             os.system(cmd)

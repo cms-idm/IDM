@@ -109,6 +109,8 @@ void NtupleContainerV2::CreateTreeBranches() {
     // special vars for x-clean study
     outT->Branch("Electron_hasLptMatch",&recoElectronHasLptMatch_);
     outT->Branch("Electron_lptMatchIdx",&recoElectronLptMatchIdx_);
+    outT->Branch("Electron_hasXCLptMatch",&recoElectronHasXCLptMatch_);
+    outT->Branch("Electron_XCLptMatchIdx",&recoElectronXCLptMatchIdx_);
 
     // Low pT electrons
     outT->Branch("nLptElectron",&nElectronLowPt_);
@@ -219,6 +221,10 @@ void NtupleContainerV2::CreateTreeBranches() {
     outT->Branch("XCLptElectron_expMissingInnerHits",&recoXCLowPtElectronExpMissingInnerHits_);
     outT->Branch("XCLptElectron_conversionVeto",&recoXCLowPtElectronConversionVeto_);
     outT->Branch("XCLptElectron_isEE",&recoXCLowPtElectronIsEE_);
+    // special vars for x-cleaning study
+    outT->Branch("XCLptElectron_xCleaned",&recoXCLowPtElectronIsXCleaned_);
+    outT->Branch("XCLptElectron_gedIdx",&recoXCLowPtElectronGEDidx_);
+    outT->Branch("XCLptElectron_gedIsMatched",&recoXCLowPtElectronGEDisMatched_);
 
     // DSA muons
     outT->Branch("nDSAMuon", &nDSAMuon_);
@@ -718,6 +724,8 @@ void NtupleContainerV2::ClearTreeBranches() {
     // special vars for x-cleaning study
     recoElectronHasLptMatch_.clear();
     recoElectronLptMatchIdx_.clear();
+    recoElectronHasXCLptMatch_.clear();
+    recoElectronXCLptMatchIdx_.clear();
 
     // Low pT electrons
     nElectronLowPt_ = 0;

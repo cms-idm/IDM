@@ -352,7 +352,6 @@ ElectronSkimmer::beginRun(edm::Run const& iRun, edm::EventSetup const& iSetup)
          }
       }
    }
-
 }
 
 
@@ -439,7 +438,7 @@ void
 ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 {
    using std::cout, std::endl;
-   
+
    // Retrieving event data and assigning to handles
    iEvent.getByToken(recoElectronToken_,recoElectronHandle_);
    iEvent.getByToken(recoNanoElectronToken_,recoNanoElectronHandle_);
@@ -496,11 +495,11 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    nt.PV_y_ = pv.y();
    nt.PV_z_ = pv.z();
       
-    double nPV = 0;
-    for (const auto & ele : *primaryVertexHandle_) {
-      nPV++;
-    }
-    nt.numPV_ = nPV;
+   double nPV = 0;
+   for (const auto & ele : *primaryVertexHandle_) {
+     nPV++;
+   }
+   nt.numPV_ = nPV;
 
    auto beamspot = *beamspotHandle_;
    // Set up objects for vertex reco - different for Run3
@@ -765,6 +764,8 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       // x-cleaning study
       nt.recoElectronHasLptMatch_.push_back(false);
       nt.recoElectronLptMatchIdx_.push_back(-999);
+      nt.recoElectronHasXCLptMatch_.push_back(false);
+      nt.recoElectronXCLptMatchIdx_.push_back(-999);
    }
 
    /////////////////////////////////
@@ -799,10 +800,10 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       if (mindR < PFmatch_threshold) {
 	 // Run3 uncommended below four lines because they seemed useful
 	 // fails cross cleaning
-	 nt.recoLowPtElectronIsXCleaned_.push_back(true);
-         nt.recoLowPtElectronGEDidx_.push_back(iMatch_reg);
-         nt.recoElectronHasLptMatch_[iMatch_reg] = true;
-         nt.recoElectronLptMatchIdx_[iMatch_reg] = ilpt;
+	 nt.recoXCLowPtElectronIsXCleaned_.push_back(true);
+	 nt.recoXCLowPtElectronGEDidx_.push_back(iMatch_reg);
+         nt.recoElectronHasXCLptMatch_[iMatch_reg] = true;
+	 nt.recoElectronXCLptMatchIdx_[iMatch_reg] = ilpt;
          ilpt_all++;
 	 
 	 // Fill Cross-Cleaned Lpt Electron branches
@@ -882,7 +883,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
 
 	 //continue; // PREVIOUSLY: comment this line to disable cross cleaning
 	 // now, cross cleaning always enabled
-
+	 
       } else {
   	 // passes cross cleaning
          nt.recoLowPtElectronIsXCleaned_.push_back(false);
@@ -1135,7 +1136,6 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       nt.recoLowPtElectronMiniRelIsoEleCorr_[i] = nt.recoLowPtElectronMiniIsoEleCorr_[i]/ele.pt();
    }
    
-
    // Handling photons
    for (const auto & ph : *photonsHandle_) {
       nt.nPhotons_++;
@@ -1421,6 +1421,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    // count vertices
    nt.nvtx_ = nt.vtx_recoVtxVxy_.size();
 
+   
    // Computing electron & vertex PF Isolations OBSOLETE
    //IsolationCalculator isoCalc(recoElectronHandle_,lowPtElectronHandle_,packedPFCandHandle_,nt);
    //isoCalc.calcIso();
@@ -1535,12 +1536,12 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          all_eles.insert(all_eles.end(),lowpt_ele_p4s.begin(),lowpt_ele_p4s.end());
          int n_reg_eles = reg_ele_p4s.size();
          
-         float min_dRe = 999.;
+	 float min_dRe = 999.;
          float min_dRp = 999.;
          int iMatch_e = -1;
          int iMatch_p = -1;
          for (size_t icount = 0; icount < all_eles.size(); icount++) {
-            // don't try gen-matching x-cleaned low-pt electrons
+	    // don't try gen-matching x-cleaned low-pt electrons
             if (icount >= (size_t)n_reg_eles) {
 	       // comment this out for removing cross-cleaning and doing efficiency studies (gen-matching needed)
                if (nt.recoLowPtElectronIsXCleaned_[icount - n_reg_eles]) continue;
@@ -1567,7 +1568,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
                   min_dRp = dRp;
                   iMatch_p = icount;
                }
-               else {
+	       else {
                   if (dRe < dRp) {
                      min_dRe = dRe;
                      iMatch_e = icount;
@@ -1583,7 +1584,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          if (iMatch_e != -1 && iMatch_p != -1) {
             nt.signalReconstructed_ = true;
          }
-         
+
          // assign match flags to electrons & vertices
          int iTarg_e = -1; int iTarg_p = -1;
          std::string mType_e = "None"; std::string mType_p = "None";
@@ -1592,9 +1593,9 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
             if (iMatch_e < n_reg_eles) {
                nt.recoElectronGenMatched_[iMatch_e] = true;
                nt.recoElectronMatchType_[iMatch_e] = -1;
-               iTarg_e = iMatch_e;
+	       iTarg_e = iMatch_e;
                mType_e = "R";
-               if (nt.recoElectronHasLptMatch_[iMatch_e]) {
+	       if (nt.recoElectronHasLptMatch_[iMatch_e]) {
                   nt.recoLowPtElectronGEDisMatched_[nt.recoElectronLptMatchIdx_[iMatch_e]] = true;
                }
             }
@@ -1608,7 +1609,6 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
             nt.genEleMatchIdxGlobal_ = iMatch_e;
             nt.genEleMatchIdxLocal_ = iTarg_e;
          }
-         
          if (iMatch_p != -1) {
             nt.genPosMatched_ = true;
             if (iMatch_p < n_reg_eles) {
@@ -1655,7 +1655,8 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
                nt.vtx_matchSign_[iv] = nt.vtx_e1_matchType_[iv]*nt.vtx_e2_matchType_[iv];
             }
          }
-         // constructing gen dilepton object
+
+	 // constructing gen dilepton object
          auto gen_ll = gen_ele_p4 + gen_pos_p4;
          nt.genEEPt_ = gen_ll.pt();
          nt.genEEEta_ = gen_ll.eta();
