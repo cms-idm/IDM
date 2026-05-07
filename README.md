@@ -1,19 +1,21 @@
 # Inelastic Dark Matter with Electrons
 This repository contains all the code I've developed for generating events, skimming AOD, and running analysis with [coffea](https://coffeateam.github.io/coffea/). Each subfolder has its own README (if it doesn't, it means I haven't gotten to it yet and you should bug me about it!).
 
-This is all designed to run in `CMSSW 10_6_26`, and ideally on the Fermilab LPC with the condor job queue. I've tried to avoid hard-coding any user-specific paths etc. into any of the code, but it's certainly not perfect. Please let me know if something is broken for you. Most things tha
+This is all designed to run in `CMSSW_14_0_21`, and ideally on the Fermilab LPC with the condor job queue. I've tried to avoid hard-coding any user-specific paths etc. into any of the code, but it's certainly not perfect. Please let me know if something is broken for you. Most things tha
 
 ## Getting set up
-To use this repository you'll need the `CMSSW 10_6_26` release, which you can get by running
+To use this repository you'll need the `CMSSW_14_0_21` release, which you can get by running
 ```bash
-cmsrel CMSSW_10_6_26
-cd CMSSW_10_6_26/src
+cmsrel CMSSW_14_0_21
+cd CMSSW_14_0_21/src
 cmsenv
 git cms-init
 ```
 Then, clone this repository by running
 ```bash
-git clone https://github.com/SamBT/iDMe.git
+git clone https://github.com/cms-idm/IDM.git
+git checkout Main_Run3
+git pull origin Main_Run3
 ```
 
 ## Cloning CMSSW submodules and applying patches
@@ -21,22 +23,17 @@ I've made a few minor adjustments to some of the MINIAOD-producing code in CMSSW
 ```bash
 git cms-addpkg PhysicsTools/PatAlgos
 git cms-addpkg RecoEgamma/EgammaElectronProducers
+git cms-addpkg RecoEgamma/ElectronIdentification
+git cms-addpkg RecoEgamma/PhotonIdentification
+git cms-addpkg RecoEgamma/EgammaTools
 git cms-addpkg RecoVertex/KalmanVertexFit
 git cms-addpkg RecoVertex/VertexTools
 ```
-and these lines to apply the patch:
-```bash
-git apply iDMe/patches/lowPtElectrons_miniAOD_IDRegression.patch
-```
 
 ## Installing EGamma PostRecoTools
-We need to run EGamma "PostRecoTools" according to [EGamma POG recommendations](https://twiki.cern.ch/twiki/bin/view/CMS/EgammaUL2016To2018#Recipe_for_running_scales_and_sm). Run these commands (copied from the linked twiki) to set it up:
+We need to run EGamma "PostRecoTools" according to [EGamma POG recommendations](https://twiki.cern.ch/twiki/bin/viewauth/CMS/MultivariateElectronIdentificationRun3). Run these commands (copied from the linked twiki) to set it up:
 ```bash
-git cms-addpkg RecoEgamma/EgammaTools
-git clone https://github.com/cms-egamma/EgammaPostRecoTools.git
-mv EgammaPostRecoTools/python/EgammaPostRecoTools.py RecoEgamma/EgammaTools/python/.
-git clone -b ULSSfiles_correctScaleSysMC https://github.com/jainshilpi/EgammaAnalysis-ElectronTools.git EgammaAnalysis/ElectronTools/data/
-git cms-addpkg EgammaAnalysis/ElectronTools
+git clone git@github.com:cms-egamma/EgammaPostRecoTools.git EgammaUser/EgammaPostRecoTools
 ```
 
 ## Building
