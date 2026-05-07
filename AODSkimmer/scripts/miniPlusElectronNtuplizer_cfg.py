@@ -167,7 +167,8 @@ triggerPaths = [
 ]
 
 # Electron effective area input file for PU-corrected PF isolation calculations
-effAreaInputPath = "RecoEgamma/ElectronIdentification/data/Fall17/effAreaElectrons_cone03_pfNeuHadronsAndPhotons_94X.txt"
+#effAreaInputPath = "RecoEgamma/ElectronIdentification/data/Fall17/effAreaElectrons_cone03_pfNeuHadronsAndPhotons_94X.txt"
+
 
 
 ##############################

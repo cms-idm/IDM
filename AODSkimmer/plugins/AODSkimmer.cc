@@ -117,7 +117,7 @@ class AODSkimmer : public edm::one::EDAnalyzer<edm::one::WatchRuns, edm::one::Sh
 
       // Jet Corrector helpers
       edm::ESHandle<JetCorrectorParametersCollection> JetCorParCollHandle_;
-      JetCorrectionUncertainty * jecUnc; 
+      JetCorrectionUncertainty * jecUnc;
 
       // Tokens 
       const edm::EDGetTokenT<reco::JetTagCollection> bTagProbbToken_;
@@ -153,7 +153,12 @@ class AODSkimmer : public edm::one::EDAnalyzer<edm::one::WatchRuns, edm::one::Sh
       const edm::EDGetTokenT<bool> ecalBadCalibFilterToken_;
       const edm::EDGetTokenT<edm::TriggerResults> trigResultsToken_;
       const edm::EDGetTokenT<trigger::TriggerEvent> trigEventToken_;
-
+      // Run3
+      edm::ESGetToken<JetCorrectorParametersCollection, JetCorrectionsRecord> jetCorParCollToken_;
+      edm::ESGetToken<TransientTrackBuilder, TransientTrackRecord> transientTrackToken_;
+      JME::JetResolution::Token jetResolutionToken_;
+      JME::JetResolutionScaleFactor::Token jetResolutionSFToken_;
+  
       // Handles
       edm::Handle<reco::JetTagCollection> bTagProbbHandle_;
       edm::Handle<reco::JetTagCollection> bTagProbbbHandle_;
@@ -251,7 +256,12 @@ AODSkimmer::AODSkimmer(const edm::ParameterSet& ps)
    eeBadScFilterToken_(consumes<bool>(ps.getParameter<edm::InputTag>("eeBadScFilter"))),
    ecalBadCalibFilterToken_(consumes<bool>(ps.getParameter<edm::InputTag>("ecalBadCalibFilter"))),
    trigResultsToken_(consumes<edm::TriggerResults>(ps.getParameter<edm::InputTag>("trigResult"))),
-   trigEventToken_(consumes<trigger::TriggerEvent>(ps.getParameter<edm::InputTag>("trigEvent")))
+   trigEventToken_(consumes<trigger::TriggerEvent>(ps.getParameter<edm::InputTag>("trigEvent"))),
+   // Run3 additions
+   jetCorParCollToken_(esConsumes(edm::ESInputTag("", "AK4PFchs"))),
+   transientTrackToken_(esConsumes<TransientTrackBuilder, TransientTrackRecord>()),
+   jetResolutionToken_(esConsumes(edm::ESInputTag("", "AK4PFchs_pt"))),
+   jetResolutionSFToken_(esConsumes(edm::ESInputTag("", "AK4PFchs")))
 {
    usesResource("TFileService");
    m_random_generator = std::mt19937(37428479);
@@ -372,7 +382,8 @@ AODSkimmer::beginRun(edm::Run const& iRun, edm::EventSetup const& iSetup)
    }
 
    // JEC Uncertainty object
-   iSetup.get<JetCorrectionsRecord>().get("AK4PFchs", JetCorParCollHandle_); 
+   // Run3 modified
+   auto JetCorParCollHandle_ = iSetup.getHandle(jetCorParCollToken_);
    JetCorrectorParameters const & JetCorPar = (*JetCorParCollHandle_)["Uncertainty"];
    jecUnc = new JetCorrectionUncertainty(JetCorPar);
    if (!jecUnc) {
@@ -505,8 +516,10 @@ AODSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
    reco::Vertex pv = (*primaryVertexHandle_).at(0);
    //reco::BeamSpot beamspot = *beamspotHandle_;
    // Set up objects for vertex reco
-   edm::ESHandle<TransientTrackBuilder> theB;
-   iSetup.get<TransientTrackRecord>().get("TransientTrackBuilder", theB);
+   //edm::ESHandle<TransientTrackBuilder> theB;
+   //iSetup.get<TransientTrackRecord>().get("TransientTrackBuilder", theB);
+   // Run3 modified
+   auto theB = iSetup.getHandle(transientTrackToken_);
    KalmanVertexFitter kvf(true);
 
    // MET Filters (as recommended here https://twiki.cern.ch/twiki/bin/view/CMS/MissingETOptionalFiltersRun2#UL_data)
@@ -893,8 +906,9 @@ AODSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
    ///////////////////
    
    // Loading/executing module to compute & apply jet corrections, and write to output tree
-   JME::JetResolution resolution = JME::JetResolution::get(iSetup, "AK4PFchs_pt");
-   JME::JetResolutionScaleFactor resolution_sf = JME::JetResolutionScaleFactor::get(iSetup, "AK4PFchs");
+   // Run3 modified
+   JME::JetResolution resolution = JME::JetResolution::get(iSetup, jetResolutionToken_);
+   JME::JetResolutionScaleFactor resolution_sf = JME::JetResolutionScaleFactor::get(iSetup, jetResolutionSFToken_);
    
    JetCorrections jc(recoJetHandle_, jetCorrectorHandle_, nt, bTagProbbHandle_, bTagProbbbHandle_, recoElectronHandle_, year, isData);
    jc.Correct(resolution, resolution_sf, *jecUnc, rhoHandle_, genJetHandle_, PFMET);

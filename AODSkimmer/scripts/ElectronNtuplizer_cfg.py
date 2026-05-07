@@ -2,11 +2,18 @@ import FWCore.ParameterSet.Config as cms
 import FWCore.ParameterSet.VarParsing as VarParsing
 import FWCore.Utilities.FileUtils as FileUtils
 from TrackingTools.TrackAssociator.default_cfi import TrackAssociatorParameterBlock
+
 from Configuration.Eras.Era_Run2_2018_cff import Run2_2018
 from Configuration.Eras.Era_Run2_2017_cff import Run2_2017
 from Configuration.Eras.Era_Run2_2016_cff import Run2_2016
 from Configuration.Eras.Era_Run2_2016_HIPM_cff import Run2_2016_HIPM
 from Configuration.ProcessModifiers.run2_miniAOD_UL_cff import run2_miniAOD_UL
+
+#Run3 imports
+from Configuration.Eras.Era_Run3_cff import Run3                   #corresponds to Run3 2022 (maybe)
+from Configuration.Eras.Era_Run3_2023_cff import Run3_2023         #corresponds to Run3 2023
+from Configuration.Eras.Era_Run3_2024_cff import Run3_2024         # 2024
+
 import json
 import sys
 
@@ -24,7 +31,8 @@ options.register('signal',
         VarParsing.VarParsing.varType.bool,
         "Run on signal (1) or not (0")
 options.register('year',
-        "2018",
+        "2022",
+
         VarParsing.VarParsing.multiplicity.singleton,
         VarParsing.VarParsing.varType.string,
         "Data/MC year")
@@ -36,6 +44,7 @@ options.register('numThreads',
 options.register("nEvents",
 	-1,
 	VarParsing.VarParsing.multiplicity.singleton,
+
         VarParsing.VarParsing.varType.int,
 	"Number of events to process (defaults to all)")
 options.register('flist',
@@ -56,6 +65,7 @@ if ".txt" in options.flist:
     # list of files
     print("reading input file list: "+options.flist)
     options.inputFiles = FileUtils.loadListFromFile(options.flist)
+
 else:
     # we have passed a file name directly
     options.inputFiles = options.flist
@@ -78,8 +88,28 @@ elif options.year == '2018':
     globaltag = '106X_dataRun2_v37' if options.data else '106X_upgrade2018_realistic_v16_L1v1'
     era = Run2_2018
     recoEgammaTools_era = '2018-UL'
+
+# Run3 below options following https://twiki.cern.ch/twiki/bin/viewauth/CMS/MultivariateElectronIdentificationRun3
+elif options.year == '2022':
+    globaltag = '130X_dataRun3_v2' if options.data else '130X_mcRun3_2022_realistic_v5'  
+    #For data, you can also use 124X_dataRun3_PromptAnalysis_v1 
+    era = Run3
+    recoEgammaTools_era = '2022-Prompt' #XYZ FIX
+    
+elif options.year == '2023':
+    globaltag = '130X_dataRun3_PromptAnalysis_v1' if options.data else '130X_mcRun3_2023_realistic_v14'
+    era = Run3_2023
+    recoEgammaTools_era = '2022-Prompt' #XYZ FIX
+
+elif options.year == '2024': #XYZ FIX
+    globaltag = '' if options.data else '150X_mcRun3_2024_realistic_v2'
+    era = Run3_2024
+    recoEgammaTools_era = '2022-Prompt' #XYZ FIX
+
+
 else:
-    print("Invalid year given for run 2 : {0}".format(options.year))
+    print("Invalid year: {0}".format(options.year))
+
     exit
 
 #######################
@@ -98,7 +128,8 @@ if options.year == '2016' or options.year == '2016APV':
         "Flag_eeBadScFilter",
         "Flag_hfNoisyHitsFilter"
     ]
-elif options.year == '2017' or options.year == '2018':
+elif options.year in ['2017', '2018', '2022', '2023', '2024']:
+
     metFilters = [
         "Flag_goodVertices",
         "Flag_globalSuperTightHalo2016Filter",
@@ -115,26 +146,38 @@ elif options.year == '2017' or options.year == '2018':
 #######################
 ###### Triggers #######
 #######################
+
 # record all trigger paths that might be useful acrcoss all years - some will not always be available,
 # but what's available will get written out to the ntuples
 # Jet triggers (for MET trigger eff)
 metTrigs = [
-    "HLT_PFMET90_PFMHT90_IDTight",
-    "HLT_PFMET100_PFMHT100_IDTight",
-    "HLT_PFMET110_PFMHT110_IDTight",
+    #"HLT_PFMET90_PFMHT90_IDTight", # not included in Run 3
+    #"HLT_PFMET100_PFMHT100_IDTight", # not included in Run 3
+    #"HLT_PFMET110_PFMHT110_IDTight", # not included in Run 3
     "HLT_PFMET120_PFMHT120_IDTight",
+    "HLT_PFMET120_PFMHT120_IDTight_PFHT60",
     "HLT_PFMET130_PFMHT130_IDTight",
     "HLT_PFMET140_PFMHT140_IDTight",
+    "HLT_PFMETNoMu110_PFMHTNoMu110_IDTight_FilterHF",
     "HLT_PFMETNoMu120_PFMHTNoMu120_IDTight",
-    "HLT_PFMETTypeOne110_PFMHT110_IDTight",
-    "HLT_PFMETTypeOne120_PFMHT120_IDTight",
-    "HLT_PFMETTypeOne130_PFMHT130_IDTight",
+    "HLT_PFMETNoMu120_PFMHTNoMu120_IDTight_FilterHF",
+    "HLT_PFMETNoMu120_PFMHTNoMu120_IDTight_PFHT60",
+    "HLT_PFMETNoMu130_PFMHTNoMu130_IDTight",
+    "HLT_PFMETNoMu130_PFMHTNoMu130_IDTight_FilterHF",
+    "HLT_PFMETNoMu140_PFMHTNoMu140_IDTight",
+    "HLT_PFMETNoMu140_PFMHTNoMu140_IDTight_FilterHF",
+    #"HLT_PFMETTypeOne110_PFMHT110_IDTight", # not included in Run 3
+    #"HLT_PFMETTypeOne120_PFMHT120_IDTight", # not included in Run 3
+    #"HLT_PFMETTypeOne130_PFMHT130_IDTight", # not included in Run 3
     "HLT_PFMETTypeOne140_PFMHT140_IDTight",
-    "HLT_PFMET100_PFMHT100_IDTight_PFHT60_v9"
+    #"HLT_PFMET100_PFMHT100_IDTight_PFHT60_v9", # not included in Run 3
+    "HLT_PFMET105_IsoTrk50",
 ]
+
+
 jetTrigs = [
-    "HLT_PFJet15",
-    "HLT_PFJet25",
+    #"HLT_PFJet15", # not included in Run 3
+    #"HLT_PFJet25", # not included in Run 3
     "HLT_PFJet40",
     "HLT_PFJet60",
     "HLT_PFJet80",
@@ -146,25 +189,25 @@ jetTrigs = [
     "HLT_PFJet450",
     "HLT_PFJet500",
     "HLT_PFJet550",
-    "HLT_AK4PFJet30",
-    "HLT_AK4PFJet50",
-    "HLT_AK4PFJet80",
-    "HLT_AK4PFJet100",
-    "HLT_AK4PFJet120"
+    #"HLT_AK4PFJet30", # not included in Run 3
+    #"HLT_AK4PFJet50", # not included in Run 3
+    #"HLT_AK4PFJet80", # not included in Run 3
+    #"HLT_AK4PFJet100", # not included in Run 3
+    #"HLT_AK4PFJet120", # not included in Run 3
 ]
 eleTrigs = list(set([
     "HLT_Ele50_CaloIdVT_GsfTrkIdT_PFJet165",
     "HLT_Ele30_eta2p1_WPTight_Gsf_CentralPFJet35_EleCleaned",
     "HLT_Ele28_eta2p1_WPTight_Gsf_HT150",
-    "HLT_Ele27_Ele37_CaloIdL_MW"
-    "HLT_DoubleEle25_CaloIdL_MW",
+    #"HLT_Ele27_Ele37_CaloIdL_MW",
+    #"HLT_DoubleEle25_CaloIdL_MW",
     "HLT_DoubleEle27_CaloIdL_MW",
     "HLT_DoubleEle33_CaloIdL_MW",
     "HLT_DoubleEle24_eta2p1_WPTight_Gsf",
-    "HLT_Ele20_WPTight_Gsf",
-    "HLT_Ele15_WPLoose_Gsf",
-    "HLT_Ele17_WPLoose_Gsf",
-    "HLT_Ele20_WPLoose_Gsf",
+    #"HLT_Ele20_WPTight_Gsf", # not included in Run 3
+    #"HLT_Ele15_WPLoose_Gsf", # not included in Run 3
+    #"HLT_Ele17_WPLoose_Gsf", # not included in Run 3
+    #"HLT_Ele20_WPLoose_Gsf", # not included in Run 3
     "HLT_Ele27_WPTight_Gsf",
     "HLT_Ele28_WPTight_Gsf",
     "HLT_Ele30_WPTight_Gsf",
@@ -180,7 +223,7 @@ eleTrigs = list(set([
     "HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL_DZ",
     "HLT_Ele8_CaloIdL_TrackIdL_IsoVL_PFJet30",
     "HLT_Ele12_CaloIdL_TrackIdL_IsoVL_PFJet30",
-    "HLT_Ele15_CaloIdL_TrackIdL_IsoVL_PFJet30",
+    #"HLT_Ele15_CaloIdL_TrackIdL_IsoVL_PFJet30", # not included in Run 3
     "HLT_Ele23_CaloIdL_TrackIdL_IsoVL_PFJet30",
     "HLT_Ele8_CaloIdM_TrackIdM_PFJet30",
     "HLT_Ele17_CaloIdM_TrackIdM_PFJet30",
@@ -193,13 +236,13 @@ eleTrigs = list(set([
 muTrigs = [
      "HLT_IsoMu27"
 ]
- 
+
 triggerPaths = metTrigs + jetTrigs + eleTrigs + muTrigs
 
 # Electron effective area input file for PU-corrected PF isolation calculations
-effAreaInputPath = "RecoEgamma/ElectronIdentification/data/Fall17/effAreaElectrons_cone03_pfNeuHadronsAndPhotons_94X.txt"
+effAreaInputPath = "RecoEgamma/ElectronIdentification/data/Run3_Winter22/effAreaElectrons_cone03_pfNeuHadronsAndPhotons_122X.txt"
 
-process = cms.Process("USER",era,run2_miniAOD_UL)
+process = cms.Process("USER",era)
 
 process.load("FWCore.MessageService.MessageLogger_cfi")
 process.load('Configuration.StandardSequences.Services_cff')
@@ -208,6 +251,8 @@ process.load("TrackingTools.TransientTrack.TransientTrackBuilder_cfi")
 process.load("Configuration.StandardSequences.GeometryRecoDB_cff")
 process.load('Configuration.StandardSequences.MagneticField_38T_cff')
 process.load('Configuration.StandardSequences.FrontierConditions_GlobalTag_cff')
+
+process.MessageLogger.cerr.FwkReport.reportEvery = 1000
 
 from Configuration.AlCa.GlobalTag import GlobalTag
 process.GlobalTag = GlobalTag(process.GlobalTag, globaltag, '')
@@ -240,15 +285,25 @@ process.ntuples = ElectronSkimmer.clone(
     year = options.year,
     metFilters = cms.vstring(metFilters),
     triggerPaths = cms.vstring(triggerPaths),
-    effAreasConfigFile = cms.FileInPath(effAreaInputPath)
+    effAreasConfigFile = cms.FileInPath(effAreaInputPath),
+    displacedStandAloneMuons = cms.InputTag("displacedStandAloneMuons")
 )
 
 # import EGamma postreco tools
-from RecoEgamma.EgammaTools.EgammaPostRecoTools import setupEgammaPostRecoSeq
+# old version
+#from RecoEgamma.EgammaTools.EgammaPostRecoTools import setupEgammaPostRecoSeq
+# Run3 working version?
+from EgammaUser.EgammaPostRecoTools.EgammaPostRecoTools import setupEgammaPostRecoSeq
+# Run3 following https://twiki.cern.ch/twiki/bin/viewauth/CMS/MultivariateElectronIdentificationRun3
 setupEgammaPostRecoSeq(process,
-                       runEnergyCorrections=True,
-                       runVID=False, #saves CPU time by not needlessly re-running VID, if you want the Fall17V2 IDs, set this to True or remove (default is True)
-                       era=recoEgammaTools_era)
+                       runEnergyCorrections=False, # XYZ deactivated bc not working for Run3 yet, I think?
+                       runVID=True, #saves CPU time by not needlessly re-running VID, if you want the Fall17V2 IDs, set this to True or remove (default is True)
+                       era=recoEgammaTools_era,
+                       eleIDModules=['RecoEgamma.ElectronIdentification.Identification.mvaElectronID_RunIIIWinter22_iso_V1_cff',
+                                     'RecoEgamma.ElectronIdentification.Identification.mvaElectronID_RunIIIWinter22_noIso_V1_cff',
+                                     'RecoEgamma.ElectronIdentification.Identification.cutBasedElectronID_Winter22_122X_V1_cff']
+                       )
+
 
 # load nanoAOD producer chain for low-pT electrons -- computes mini iso
 process.load('PhysicsTools.NanoAOD.lowPtElectrons_cff')
@@ -268,9 +323,9 @@ process.slimmedElectronsWithUserDataMinimal = process.slimmedElectronsWithUserDa
     userFloats = cms.PSet(
         miniIsoChg = cms.InputTag("isoForEleRelative:miniIsoChg"),
         miniIsoAll = cms.InputTag("isoForEleRelative:miniIsoAll"),
-        PFIsoChg = cms.InputTag("isoForEleRelative:PFIsoChg"),
-        PFIsoAll = cms.InputTag("isoForEleRelative:PFIsoAll"),
-        PFIsoAll04 = cms.InputTag("isoForEleRelative:PFIsoAll04"),
+        #PFIsoChg = cms.InputTag("isoForEleRelative:PFIsoChg"), # Doesn't work for Run 3
+        #PFIsoAll = cms.InputTag("isoForEleRelative:PFIsoAll"), # Doesn't work for Run 3
+        #PFIsoAll04 = cms.InputTag("isoForEleRelative:PFIsoAll04"), # Doesn't work for Run 3
     ),
     userIntFromBools = cms.PSet(),
     userInts = cms.PSet(),
@@ -290,3 +345,4 @@ process.iDMNanoElectronSequence = cms.Sequence(process.lowPtNanoElectronSequence
 process.iDMNanoElectron = cms.Path(process.iDMNanoElectronSequence)
 
 process.schedule = cms.Schedule(process.iDMEgammaPostReco,process.iDMNanoElectron,process.ntuplePath)
+

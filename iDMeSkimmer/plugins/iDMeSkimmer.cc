@@ -246,7 +246,8 @@ iDMeSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
    reco::BeamSpot beamspot = *beamspotHandle_;
    // Set up objects for vertex reco
    edm::ESHandle<TransientTrackBuilder> theB;
-   iSetup.get<TransientTrackRecord>().get("TransientTrackBuilder", theB);
+   // Run3 removed for compilation - we don't use this script anyway
+   //iSetup.get<TransientTrackRecord>().get("TransientTrackBuilder", theB);
    KalmanVertexFitter kvf(true);
 
    // Handling Regular MET

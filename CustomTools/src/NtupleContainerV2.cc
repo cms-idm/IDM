@@ -167,6 +167,39 @@ void NtupleContainerV2::CreateTreeBranches() {
     outT->Branch("LptElectron_gedIdx",&recoLowPtElectronGEDidx_);
     outT->Branch("LptElectron_gedIsMatched",&recoLowPtElectronGEDisMatched_);
 
+    // DSA muons
+    outT->Branch("nDSAMuon", &nDSAMuon_);
+    outT->Branch("recoDSAMuonPt", &recoDSAMuonPt_);
+    outT->Branch("recoDSAMuonPtErr", &recoDSAMuonPtErr_);
+    outT->Branch("recoDSAMuonEta", &recoDSAMuonEta_);
+    outT->Branch("recoDSAMuonEtaErr", &recoDSAMuonEtaErr_);
+    outT->Branch("recoDSAMuonPhi", &recoDSAMuonPhi_);
+    outT->Branch("recoDSAMuonPhiErr", &recoDSAMuonPhiErr_);
+    outT->Branch("recoDSAMuonOuterEta", &recoDSAMuonOuterEta_);
+    outT->Branch("recoDSAMuonOuterPhi", &recoDSAMuonOuterPhi_);
+    outT->Branch("recoDSAMuonE", &recoDSAMuonE_);
+    outT->Branch("recoDSAMuonPx", &recoDSAMuonPx_);
+    outT->Branch("recoDSAMuonPy", &recoDSAMuonPy_);
+    outT->Branch("recoDSAMuonPz", &recoDSAMuonPz_);
+    outT->Branch("recoDSAMuonVxy", &recoDSAMuonVxy_);
+    outT->Branch("recoDSAMuonVz", &recoDSAMuonVz_);
+    outT->Branch("recoDSAMuonDxy", &recoDSAMuonDxy_);
+    outT->Branch("recoDSAMuonDxyError", &recoDSAMuonDxyError_);
+    outT->Branch("recoDSAMuonDz", &recoDSAMuonDz_);
+    outT->Branch("recoDSAMuonDzError", &recoDSAMuonDzError_);
+    outT->Branch("recoDSAMuonTrkChi2", &recoDSAMuonTrkChi2_);
+    outT->Branch("recoDSAMuonTrkProb", &recoDSAMuonTrkProb_);
+    outT->Branch("recoDSAMuonTrkNumTrackerHits", &recoDSAMuonTrkNumTrackerHits_);
+    outT->Branch("recoDSAMuonTrkNumPixHits", &recoDSAMuonTrkNumPixHits_);
+    outT->Branch("recoDSAMuonTrkNumStripHits", &recoDSAMuonTrkNumStripHits_);
+    outT->Branch("recoDSAMuonCharge", &recoDSAMuonCharge_);
+    outT->Branch("recoDSAMuonDisplacedId", &recoDSAMuonDisplacedId_);
+    outT->Branch("recoDSAMuonTrkNumCSCHits", &recoDSAMuonTrkNumCSCHits_);
+    outT->Branch("recoDSAMuonTrkNumHits", &recoDSAMuonTrkNumHits_);
+    outT->Branch("recoDSAMuonTrkNumPlanes", &recoDSAMuonTrkNumPlanes_);
+    outT->Branch("recoDSAMuonTrkNumDTHits", &recoDSAMuonTrkNumDTHits_);
+    outT->Branch("recoDSAMuonIdx", &recoDSAMuonIdx_);
+    
     // Photons
     outT->Branch("nPhoton",&nPhotons_);
     outT->Branch("Photon_et",&PhotonEt_);
@@ -694,6 +727,39 @@ void NtupleContainerV2::ClearTreeBranches() {
     genwgt_ = 0;
     genpuobs_ = -9999;
     genputrue_ = -9999;
+
+    // DSA muons
+    nDSAMuon_ = 0;
+    recoDSAMuonPt_.clear();
+    recoDSAMuonEta_.clear();
+    recoDSAMuonPtErr_.clear();
+    recoDSAMuonEtaErr_.clear();
+    recoDSAMuonPhi_.clear();
+    recoDSAMuonPhiErr_.clear();
+    recoDSAMuonOuterEta_.clear();
+    recoDSAMuonOuterPhi_.clear();
+    recoDSAMuonE_.clear();
+    recoDSAMuonPx_.clear();
+    recoDSAMuonPy_.clear();
+    recoDSAMuonPz_.clear();
+    recoDSAMuonVxy_.clear();
+    recoDSAMuonVz_.clear();
+    recoDSAMuonDxy_.clear();
+    recoDSAMuonDxyError_.clear();
+    recoDSAMuonDz_.clear();
+    recoDSAMuonDzError_.clear();
+    recoDSAMuonTrkChi2_.clear();
+    recoDSAMuonTrkProb_.clear();
+    recoDSAMuonTrkNumTrackerHits_.clear();
+    recoDSAMuonTrkNumPixHits_.clear();
+    recoDSAMuonTrkNumStripHits_.clear();
+    recoDSAMuonCharge_.clear();
+    recoDSAMuonDisplacedId_.clear();
+    recoDSAMuonTrkNumCSCHits_.clear();
+    recoDSAMuonTrkNumHits_.clear();
+    recoDSAMuonTrkNumPlanes_.clear();
+    recoDSAMuonTrkNumDTHits_.clear();
+    recoDSAMuonIdx_.clear();
 
     // Photons
     nPhotons_ = 0;

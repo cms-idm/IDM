@@ -24,6 +24,7 @@ bool JetCorrections::passJetID(const reco::PFJet &jet, int idx) {
 
     bool passID = false;
 
+    // XYZ for Run3 Reshma had subtly different criteria - why?
     if (year == 2016) {
         if (abs(eta) <= 2.4) {
             passID = (neutHadFrac < 0.9) && (neutEmFrac < 0.9) && (nConstit > 1) && (chargedHadFrac > 0) && (chargedMult > 0);

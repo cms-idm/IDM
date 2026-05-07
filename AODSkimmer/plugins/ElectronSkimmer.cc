@@ -99,8 +99,9 @@
 #include "SimDataFormats/PileupSummaryInfo/interface/PileupSummaryInfo.h"
 #include "SimDataFormats/GeneratorProducts/interface/GenEventInfoProduct.h"
 
-#include "RecoEgamma/EgammaTools/interface/EffectiveAreas.h"
-#include "RecoEgamma/EgammaTools/interface/ConversionTools.h"
+// Run3 updated paths, Run2 used RecoEgamma/EgammaTools/...
+#include "CommonTools/Egamma/interface/EffectiveAreas.h"
+#include "CommonTools/Egamma/interface/ConversionTools.h"
 
 #include "iDMe/CustomTools/interface/DisplacedDileptonAOD.hh"
 #include "iDMe/CustomTools/interface/JetCorrections.hh"
@@ -123,6 +124,8 @@ class ElectronSkimmer : public edm::one::EDAnalyzer<edm::one::WatchRuns, edm::on
 
    private:
       bool getCollections(const edm::Event&);
+      // Run3 added
+      bool passesDisplacedID(const reco::Track&) const;
       virtual void beginJob() override;
       virtual void beginRun(edm::Run const&, edm::EventSetup const&) override;
       virtual void analyze(const edm::Event&, const edm::EventSetup&) override;
@@ -140,7 +143,8 @@ class ElectronSkimmer : public edm::one::EDAnalyzer<edm::one::WatchRuns, edm::on
       bool isSignal;
       std::string year;
       const std::string triggerProcessName_;
-      const std::string metFilterName_;
+      // Run3 modified
+      std::string metFilterName_;
       std::vector<std::string> metFilters_;
       std::vector<std::string> trigPaths_;
       // Electron isolation effective areas
@@ -170,6 +174,13 @@ class ElectronSkimmer : public edm::one::EDAnalyzer<edm::one::WatchRuns, edm::on
       const edm::EDGetTokenT<edm::TriggerResults> metFilterResultsToken_;
       const edm::EDGetTokenT<vector<pat::IsolatedTrack> > isoTrackToken_;
       const edm::EDGetTokenT<vector<pat::Muon> > pfRecoMuToken_;
+      // Run3 additions
+      const edm::ESGetToken<TransientTrackBuilder, TransientTrackRecord> ttkToken_;
+      const edm::EDGetTokenT<vector<reco::Track> > dsaMuonToken_;
+      // Added to allow "RECO" or "PAT" tags
+      edm::EDGetTokenT<vector<reco::Conversion> > conversionsAltToken_;
+      edm::EDGetTokenT<edm::TriggerResults> metFilterResultsAltToken_;
+      edm::EDGetTokenT<vector<pat::IsolatedTrack> > isoTrackAltToken_;
 
       // Handles
       edm::Handle<vector<pat::Electron> > recoElectronHandle_;
@@ -195,7 +206,9 @@ class ElectronSkimmer : public edm::one::EDAnalyzer<edm::one::WatchRuns, edm::on
       edm::Handle<edm::TriggerResults> metFilterResultsHandle_;
       edm::Handle<vector<pat::IsolatedTrack> > isoTrackHandle_;
       edm::Handle<vector<pat::Muon> > pfRecoMuHandle_;
-
+      // Run3 addition
+      edm::Handle<vector<reco::Track>> dsaMuonHandle_;
+  
       // Trigger variables
       std::vector<std::string> trigPathsWithVersion_;
       std::vector<bool> trigExist_;
@@ -245,7 +258,17 @@ ElectronSkimmer::ElectronSkimmer(const edm::ParameterSet& ps)
    trigResultsToken_(consumes<edm::TriggerResults>(ps.getParameter<edm::InputTag>("trigResults"))),
    metFilterResultsToken_(consumes<edm::TriggerResults>(ps.getParameter<edm::InputTag>("metFilterResults"))),
    isoTrackToken_(consumes<vector<pat::IsolatedTrack> >(ps.getParameter<edm::InputTag>("isoTracks"))),
-   pfRecoMuToken_(consumes<vector<pat::Muon> >(ps.getParameter<edm::InputTag>("pfRecoMu")))
+   pfRecoMuToken_(consumes<vector<pat::Muon> >(ps.getParameter<edm::InputTag>("pfRecoMu"))),
+   // Run3 additions
+   ttkToken_(esConsumes(edm::ESInputTag{"", "TransientTrackBuilder"})),
+   dsaMuonToken_(consumes<vector<reco::Track> >(ps.getParameter<edm::InputTag>("displacedStandAloneMuons"))),
+   // Added to allow "RECO" or "PAT" tags
+   conversionsAltToken_(mayConsume<vector<reco::Conversion> >(edm::InputTag("reducedEgamma","reducedConversions",
+       ps.getParameter<edm::InputTag>("conversions").process() == "PAT" ? "RECO" : "PAT"))),
+   metFilterResultsAltToken_(mayConsume<edm::TriggerResults>(edm::InputTag("TriggerResults", "",
+       ps.getParameter<edm::InputTag>("metFilterResults").process() == "PAT" ? "RECO" : "PAT"))),
+   isoTrackAltToken_(mayConsume<vector<pat::IsolatedTrack> >(edm::InputTag("isolatedTracks","",
+       ps.getParameter<edm::InputTag>("isoTracks").process() == "PAT" ? "RECO" : "PAT")))
 {
    usesResource("TFileService");
    m_random_generator = std::mt19937(37428479);
@@ -289,8 +312,16 @@ ElectronSkimmer::beginRun(edm::Run const& iRun, edm::EventSetup const& iSetup)
       }
    }
    else {
-      LogError("HLTConfig") << "iDMAnalyzer::beginRun: config extraction failure with metFilterName -> " << metFilterName_;
-      return;
+      // Run3 modified to allow "RECO" or "PAT" tags
+      std::string altName = (metFilterName_ == "PAT") ? "RECO" : "PAT";
+      if (metFilterConfig_.init(iRun,iSetup,altName,changed)) {
+         metFilterName_ = altName;
+         LogInfo("HLTConfig") << "iDMAnalyzer::beginRun: metFilterConfig init succeeded with alternate process name: " << altName;
+      }
+      else {
+         LogError("HLTConfig") << "iDMAnalyzer::beginRun: config extraction failure for both PAT and RECO process names";
+         return;
+      }
    }
 
    // Add trigger paths if they exist
@@ -324,6 +355,22 @@ ElectronSkimmer::beginRun(edm::Run const& iRun, edm::EventSetup const& iSetup)
 
 }
 
+
+// Run3 displaced muon Id as recommended by Muon POG
+bool ElectronSkimmer::passesDisplacedID(const reco::Track& dsaMuon) const {
+  float validHits =  dsaMuon.hitPattern().numberOfValidMuonCSCHits() + dsaMuon.hitPattern().numberOfValidMuonDTHits();
+  if(validHits > 12){
+    if(dsaMuon.hitPattern().numberOfValidMuonCSCHits() != 0 || (dsaMuon.hitPattern().numberOfValidMuonCSCHits() == 0 && dsaMuon.hitPattern().numberOfValidMuonDTHits() > 18)){
+      if(dsaMuon.normalizedChi2() < 2.5) {
+	if(dsaMuon.ptError()/dsaMuon.pt() < 1){
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
 // ------------ method called once each job just before starting event loop  ------------
 void ElectronSkimmer::beginJob()
 {
@@ -351,7 +398,7 @@ ElectronSkimmer::fillDescriptions(edm::ConfigurationDescriptions& descriptions) 
    // Inputs from the run_ntuplizer_cfg python (cmsRun inputs)
    desc.add<bool>("isData", 0);
    desc.add<bool>("isSignal",0);
-   desc.add<std::string>("year","2018");
+   desc.add<std::string>("year","none"); // placeholder, is updated dynamically later
    desc.add<std::string>("triggerProcessName", "HLT");
    desc.add<std::string>("metFilterName","PAT");
    desc.add<std::vector<std::string> >("metFilters",{});
@@ -380,6 +427,10 @@ ElectronSkimmer::fillDescriptions(edm::ConfigurationDescriptions& descriptions) 
    desc.add<edm::InputTag>("metFilterResults",edm::InputTag("TriggerResults","","PAT"));
    desc.add<edm::InputTag>("isoTracks",edm::InputTag("isolatedTracks","","PAT"));
    desc.add<edm::InputTag>("pfRecoMu", edm::InputTag("slimmedMuons"));
+   
+   // Run3 additions
+   desc.add<edm::InputTag>("displacedStandAloneMuons",edm::InputTag("displacedStandAloneMuons"));
+
    descriptions.add("ElectronSkimmer", desc);
 }
 
@@ -409,7 +460,16 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    iEvent.getByToken(metFilterResultsToken_,metFilterResultsHandle_);
    iEvent.getByToken(isoTrackToken_,isoTrackHandle_);
    iEvent.getByToken(pfRecoMuToken_,pfRecoMuHandle_);
-
+   // Run3 additions
+   iEvent.getByToken(dsaMuonToken_,dsaMuonHandle_);
+   // Added to allow "RECO" or "PAT" tags
+   if (!conversionsHandle_.isValid())
+      iEvent.getByToken(conversionsAltToken_,conversionsHandle_);
+   if (!metFilterResultsHandle_.isValid())
+      iEvent.getByToken(metFilterResultsAltToken_,metFilterResultsHandle_);
+   if (!isoTrackHandle_.isValid())
+      iEvent.getByToken(isoTrackAltToken_,isoTrackHandle_);
+   
    if (!isData) { 
       iEvent.getByToken(genEvtInfoToken_,genEvtInfoHandle_);
       iEvent.getByToken(genParticleToken_,genParticleHandle_);
@@ -443,9 +503,8 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
     nt.numPV_ = nPV;
 
    auto beamspot = *beamspotHandle_;
-   // Set up objects for vertex reco
-   edm::ESHandle<TransientTrackBuilder> theB;
-   iSetup.get<TransientTrackRecord>().get("TransientTrackBuilder", theB);
+   // Set up objects for vertex reco - different for Run3
+   const TransientTrackBuilder* theB = &iSetup.getData(ttkToken_);
    KalmanVertexFitter kvf(true);
 
    // MET Filters (as recommended here https://twiki.cern.ch/twiki/bin/view/CMS/MissingETOptionalFiltersRun2#UL_data)
@@ -605,8 +664,10 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    for (const auto & ele : *recoNanoElectronHandle_) {
       // require pT > 5 & pass loose ID to consider GED electron
       //if (ele.pt() < 5 || !ele.electronID("cutBasedElectronID-Fall17-94X-V2-loose")) {
-      if (ele.pt() < 2 || !ele.electronID("mvaEleID-Fall17-noIso-V2-wp90")) {
-         iele++;
+      //if (ele.pt() < 2 || !ele.electronID("mvaEleID-Fall17-noIso-V2-wp90")) {
+      // Run3 - no pt cut; will change later with ID studies. for now, equivalent of Run2 choice
+      if (!ele.electronID("mvaEleID-RunIIIWinter22-noIso-V1-wp90")) {
+	 iele++;
          continue;
       }
       iSaved_ele.push_back(iele);
@@ -624,20 +685,23 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       nt.recoElectronIsPF_.push_back(ele.isPF());
       nt.recoElectronGenMatched_.push_back(false);
       nt.recoElectronMatchType_.push_back(0);
-      nt.recoElectronID_cutVeto_.push_back(ele.electronID("cutBasedElectronID-Fall17-94X-V2-veto"));
-      nt.recoElectronID_cutLoose_.push_back(ele.electronID("cutBasedElectronID-Fall17-94X-V2-loose"));
-      nt.recoElectronID_cutMed_.push_back(ele.electronID("cutBasedElectronID-Fall17-94X-V2-medium"));
-      nt.recoElectronID_cutTight_.push_back(ele.electronID("cutBasedElectronID-Fall17-94X-V2-tight"));
-      nt.recoElectronID_cutVetoInt_.push_back(ele.userInt("cutBasedElectronID-Fall17-94X-V2-veto"));
-      nt.recoElectronID_cutLooseInt_.push_back(ele.userInt("cutBasedElectronID-Fall17-94X-V2-loose"));
-      nt.recoElectronID_cutMedInt_.push_back(ele.userInt("cutBasedElectronID-Fall17-94X-V2-medium"));
-      nt.recoElectronID_cutTightInt_.push_back(ele.userInt("cutBasedElectronID-Fall17-94X-V2-tight"));
-      nt.recoElectronID_mvaIso90_.push_back(ele.electronID("mvaEleID-Fall17-iso-V2-wp90"));
-      nt.recoElectronID_mvaIso80_.push_back(ele.electronID("mvaEleID-Fall17-iso-V2-wp80"));
-      nt.recoElectronID_mvaIsoLoose_.push_back(ele.electronID("mvaEleID-Fall17-iso-V2-wpLoose"));
-      nt.recoElectronID_mva90_.push_back(ele.electronID("mvaEleID-Fall17-noIso-V2-wp90"));
-      nt.recoElectronID_mva80_.push_back(ele.electronID("mvaEleID-Fall17-noIso-V2-wp80"));
-      nt.recoElectronID_mvaLoose_.push_back(ele.electronID("mvaEleID-Fall17-noIso-V2-wpLoose"));
+
+      // Run3 cut tags updated
+      nt.recoElectronID_cutVeto_.push_back(ele.electronID("cutBasedElectronID-RunIIIWinter22-V1-veto"));
+      nt.recoElectronID_cutLoose_.push_back(ele.electronID("cutBasedElectronID-RunIIIWinter22-V1-loose"));
+      nt.recoElectronID_cutMed_.push_back(ele.electronID("cutBasedElectronID-RunIIIWinter22-V1-medium"));
+      nt.recoElectronID_cutTight_.push_back(ele.electronID("cutBasedElectronID-RunIIIWinter22-V1-tight"));
+      nt.recoElectronID_cutVetoInt_.push_back(ele.userInt("cutBasedElectronID-RunIIIWinter22-V1-veto"));
+      nt.recoElectronID_cutLooseInt_.push_back(ele.userInt("cutBasedElectronID-RunIIIWinter22-V1-loose"));
+      nt.recoElectronID_cutMedInt_.push_back(ele.userInt("cutBasedElectronID-RunIIIWinter22-V1-medium"));
+      nt.recoElectronID_cutTightInt_.push_back(ele.userInt("cutBasedElectronID-RunIIIWinter22-V1-tight"));
+      nt.recoElectronID_mvaIso90_.push_back(ele.electronID("mvaEleID-RunIIIWinter22-iso-V1-wp90"));
+      nt.recoElectronID_mvaIso80_.push_back(ele.electronID("mvaEleID-RunIIIWinter22-iso-V1-wp80"));
+      // nt.recoElectronID_mvaIsoLoose_.push_back(ele.electronID("mvaEleID-RunIIIWinter22-iso-V1-wpLoose"));
+      nt.recoElectronID_mva90_.push_back(ele.electronID("mvaEleID-RunIIIWinter22-noIso-V1-wp90"));
+      nt.recoElectronID_mva80_.push_back(ele.electronID("mvaEleID-RunIIIWinter22-noIso-V1-wp80"));
+      // nt.recoElectronID_mvaLoose_.push_back(ele.electronID("mvaEleID-RunIIIWinter22-noIso-V1-wpLoose"));
+      
       nt.recoElectronAngularRes_.push_back(sqrt(track->phiError()*track->phiError() + track->etaError()*track->etaError()));
       nt.recoElectronE_.push_back(ele.energy());
       nt.recoElectronVxy_.push_back(ele.trackPositionAtVtx().rho());
@@ -648,6 +712,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       nt.recoElectronCaloRelIso_.push_back(ele.caloIso()/ele.pt());
       nt.recoElectronCharge_.push_back(ele.charge());
       // Calculating "official" dR03 PF Isolation based on https://github.com/cms-sw/cmssw/blob/CMSSW_10_6_X/RecoEgamma/ElectronIdentification/plugins/cuts/GsfEleRelPFIsoScaledCut.cc#L62
+      // For Run3: https://github.com/cms-sw/cmssw/blob/CMSSW_13_0_X/RecoEgamma/ElectronIdentification/plugins/cuts/GsfEleRelPFIsoScaledCut.cc
       auto pfIso = ele.pfIsolationVariables();
       const float rho = rhoHandle_.isValid() ? (float)(*rhoHandle_) : 0.0;
       const float eA = effectiveAreas_.getEffectiveArea(std::abs(ele.superCluster()->eta()));
@@ -712,7 +777,8 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    int ilpt_all = 0;
    for (auto & ele : *lowPtNanoElectronHandle_) {
       // basic cut (should be applied by default in miniAOD stage, but repeating here)
-      if (ele.pt() < 1 || ele.userFloat("ID") < -0.25) {
+      // Run3 syntax updated - below cuts are legacy sanity check from Run2, likely will change later
+      if (ele.pt() < 1 || ele.electronID("ID") < -0.25) {
          ilpt_all++;
          continue;
       }
@@ -721,20 +787,21 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       float mindR = 999;
       reco::GsfTrackRef track = ele.gsfTrack();
       float PFmatch_threshold = 0.05; // dR threshold for throwing away low-pT electron in favor of PF electron
-      //int iMatch_reg;
+      int iMatch_reg;
       for (size_t ireg = 0; ireg < reg_good_eles.size(); ireg++) {
          float dR = reco::deltaR(ele.p4(), reg_good_eles[ireg]->p4());
          if (dR < mindR) {
             mindR = dR;
-            //iMatch_reg = ireg;
+            iMatch_reg = ireg;
          }
       }
       // can optionally not skip and save whether or not the lpt electron *should* be x-cleaned
       if (mindR < PFmatch_threshold) {
-         //nt.recoLowPtElectronIsXCleaned_.push_back(true);
-         //nt.recoLowPtElectronGEDidx_.push_back(iMatch_reg);
-         //nt.recoElectronHasLptMatch_[iMatch_reg] = true;
-         //nt.recoElectronLptMatchIdx_[iMatch_reg] = ilpt;
+	 // Run3 uncommended below four lines because they seemed useful
+	 nt.recoLowPtElectronIsXCleaned_.push_back(true);
+         nt.recoLowPtElectronGEDidx_.push_back(iMatch_reg);
+         nt.recoElectronHasLptMatch_[iMatch_reg] = true;
+         nt.recoElectronLptMatchIdx_[iMatch_reg] = ilpt;
          ilpt_all++;
          continue;
       }
@@ -761,7 +828,8 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       nt.recoLowPtElectronIsPF_.push_back(ele.isPF());
       nt.recoLowPtElectronGenMatched_.push_back(false);
       nt.recoLowPtElectronMatchType_.push_back(0);
-      nt.recoLowPtElectronID_.push_back(ele.userFloat("ID"));
+      // Run3 syntax updated
+      nt.recoLowPtElectronID_.push_back(ele.electronID("ID"));
       nt.recoLowPtElectronAngularRes_.push_back(sqrt(track->phiError()*track->phiError() + track->etaError()*track->etaError()));
       nt.recoLowPtElectronE_.push_back(ele.energy());
       nt.recoLowPtElectronVxy_.push_back(ele.trackPositionAtVtx().rho());
@@ -825,6 +893,59 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       nt.recoLowPtElectronGEDisMatched_.push_back(false);
    }
 
+   // Handling DSA Muons
+   std::vector<reco::Track> dsa_muonTracks{};
+   std::vector<math::XYZTLorentzVector> dsa_muon_p4s;
+
+   for (const auto & track : *dsaMuonHandle_) {
+      dsa_muonTracks.push_back(track);
+      nt.nDSAMuon_++;
+      // Construct TLorentzVector from track (muon mass assumed)
+      float mass = 0.10566; // GeV
+      float p = track.p();
+      float energy = sqrt(p*p + mass*mass);
+      math::XYZTLorentzVector p4(track.px(), track.py(), track.pz(), energy);
+      dsa_muon_p4s.push_back(p4);
+
+      // Basic kinematics
+      nt.recoDSAMuonPt_.push_back(track.pt());
+      nt.recoDSAMuonEta_.push_back(track.eta());
+      nt.recoDSAMuonPhi_.push_back(track.phi());
+      nt.recoDSAMuonE_.push_back(energy);
+      nt.recoDSAMuonPx_.push_back(track.px());
+      nt.recoDSAMuonPy_.push_back(track.py());
+      nt.recoDSAMuonPz_.push_back(track.pz());
+
+      // Vertex info
+      nt.recoDSAMuonVxy_.push_back(track.vertex().rho());
+      nt.recoDSAMuonVz_.push_back(track.vertex().z());
+
+      // Tracking info
+      nt.recoDSAMuonDxy_.push_back(track.dxy(pv.position()));
+      nt.recoDSAMuonDxyError_.push_back(track.dxyError());
+      nt.recoDSAMuonDz_.push_back(track.dz(pv.position()));
+      nt.recoDSAMuonDzError_.push_back(track.dzError());
+      nt.recoDSAMuonTrkChi2_.push_back(track.normalizedChi2());
+      nt.recoDSAMuonTrkProb_.push_back(TMath::Prob(track.chi2(), (int)track.ndof()));
+      nt.recoDSAMuonTrkNumTrackerHits_.push_back(track.hitPattern().numberOfValidTrackerHits());
+      nt.recoDSAMuonTrkNumPixHits_.push_back(track.hitPattern().numberOfValidPixelHits());
+      nt.recoDSAMuonTrkNumStripHits_.push_back(track.hitPattern().numberOfValidStripHits());
+
+      // Charge
+      nt.recoDSAMuonCharge_.push_back(track.charge());
+      nt.recoDSAMuonTrkNumCSCHits_.push_back(track.hitPattern().numberOfValidMuonCSCHits());
+      nt.recoDSAMuonTrkNumDTHits_.push_back(track.hitPattern().numberOfValidMuonDTHits());
+      nt.recoDSAMuonTrkNumHits_.push_back(track.hitPattern().numberOfValidMuonHits());
+      nt.recoDSAMuonTrkNumPlanes_.push_back(track.hitPattern().muonStationsWithValidHits());
+
+
+      int passesDisplacedId = 0;
+      if (passesDisplacedID(track)) {
+	passesDisplacedId = 1;
+      }
+      nt.recoDSAMuonDisplacedId_.push_back(passesDisplacedId);
+   }   
+      
    // computing dR between low-pT and GED electrons for *all* electrons in each collection.
    // to be used for determining whether any lpt electron is x-cleaned (so it can be neglected when
    // computing the isolation corrections using electrons in the event)

@@ -8,6 +8,15 @@
 **/*.err
 **/*.png
 **/*.pdf
+**/*.lhe
 **/*.tar.gz
 **/*.pyc
 MCSampleProduction/
+
+*~
+*.log
+*.lhe
+CMSSW*
+*.csv
+*.txt
+*.json

@@ -60,7 +60,8 @@ const int nElectronCandidateMax = 1000;
 class DisplacedDileptons {
 
 public:
-    DisplacedDileptons(reco::Vertex &pv_, reco::BeamSpot &beamspot_, edm::Handle<std::vector<pat::IsolatedTrack> > &isotracks_, edm::Handle<std::vector<pat::Photon> > &photons_, edm::Handle<std::vector<pat::PackedCandidate> > &packedPFCandidates_, edm::ESHandle<TransientTrackBuilder> &theTransientTrackBuilder_);
+    // Run3 changed
+    DisplacedDileptons(reco::Vertex &pv_, reco::BeamSpot &beamspot_, edm::Handle<std::vector<pat::IsolatedTrack> > &isotracks_, edm::Handle<std::vector<pat::Photon> > &photons_, edm::Handle<std::vector<pat::PackedCandidate> > &packedPFCandidates_, const edm::ESHandle<TransientTrackBuilder> &theTransientTrackBuilder_);
     ~DisplacedDileptons();
     void findDileptons();
     float getDeltaR(float phi1, float eta1, float phi2, float eta2);
