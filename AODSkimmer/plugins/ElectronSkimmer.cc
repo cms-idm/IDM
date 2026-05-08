@@ -802,13 +802,13 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       float mindR = 999;
       reco::GsfTrackRef track = ele.gsfTrack();
       float PFmatch_threshold = 0.05; // dR threshold for throwing away low-pT electron in favor of PF electron
-      int iMatch_reg;
+      // int iMatch_reg;
       for (size_t ireg = 0; ireg < reg_good_eles.size(); ireg++) {
          float dR = reco::deltaR(ele.p4(), reg_good_eles[ireg]->p4());
          if (dR < mindR) {
             mindR = dR;
             cout<<"mindR="<<mindR<<endl;
-            iMatch_reg = ireg;
+            // iMatch_reg = ireg;
          }
       }
       // can optionally not skip and save whether or not the lpt electron *should* be x-cleaned
@@ -817,14 +817,14 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
 // 	 // Run3 uncommended below four lines because they seemed useful
 // 	 nt.recoLowPtElectronIsXCleaned_.push_back(true);
 // =======
-         cout<<"mindR<PFmatch case="<<mindR<<endl; 
-         nt.recoLowPtElectronIsXCleaned_.push_back(true);
-// >>>>>>> 47aa92c (no cross cleaning for efficiency studies)
-         nt.recoLowPtElectronGEDidx_.push_back(iMatch_reg);
-         nt.recoElectronHasLptMatch_[iMatch_reg] = true;
-         nt.recoElectronLptMatchIdx_[iMatch_reg] = ilpt;
+//          cout<<"mindR<PFmatch case="<<mindR<<endl; 
+//          nt.recoLowPtElectronIsXCleaned_.push_back(true);
+// // >>>>>>> 47aa92c (no cross cleaning for efficiency studies)
+//          nt.recoLowPtElectronGEDidx_.push_back(iMatch_reg);
+//          nt.recoElectronHasLptMatch_[iMatch_reg] = true;
+//          nt.recoElectronLptMatchIdx_[iMatch_reg] = ilpt;
          ilpt_all++;
-         //continue; // "remove" cross cleaning
+         continue; // "remove" cross cleaning
       }
       else {
          nt.recoLowPtElectronIsXCleaned_.push_back(false);
@@ -1481,7 +1481,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          for (size_t icount = 0; icount < all_eles.size(); icount++) {
             // don't try gen-matching x-cleaned low-pt electrons
             if (icount >= (size_t)n_reg_eles) {
-               //if (nt.recoLowPtElectronIsXCleaned_[icount - n_reg_eles]) continue; // comment this out for removing cross-cleaning and doing efficiency studies (gen-matching needed)
+               if (nt.recoLowPtElectronIsXCleaned_[icount - n_reg_eles]) continue; // comment this out for removing cross-cleaning and doing efficiency studies (gen-matching needed)
             }
             auto ele = all_eles[icount];
             float dRe = reco::deltaR(ele,gen_ele_p4);
