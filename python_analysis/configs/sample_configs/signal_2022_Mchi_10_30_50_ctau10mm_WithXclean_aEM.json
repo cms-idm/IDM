@@ -1,0 +1,50 @@
+[
+    {
+        "location": "/uscms/home/reshmar/nobackup/IDMe_Run3_Collab/CMSSW_13_0_13/src/iDMe/AODSkimmer/created_ntuples/WithXclean/2022/Signal_Mchi-10p5_dMchi-1p0_ctau-10_WithXCLEAN.root",
+        "Mchi": 10.5,
+        "dMchi": 1.0,
+        "ctau": 10,
+        "name": "Mchi-10.5_dMchi-1.0_ctau-10",
+        "sum_wgt": 3.245519337724545e-07,
+        "type": "signal",
+        "year": 2022,
+        "alphaD": "aEM",
+        "xsec": 4965.27114,
+        "nFiles": 1,
+        "filter_eff": 0.6612,
+        "num_events": 64604,
+        "blacklist": []
+    },
+    {
+        "location": "/uscms/home/reshmar/nobackup/IDMe_Run3_Collab/CMSSW_13_0_13/src/iDMe/AODSkimmer/created_ntuples/WithXclean/2022/Signal_Mchi-31p5_dMchi-3p0_ctau-10_WithCLEAN.root",
+        "Mchi": 31.5,
+        "dMchi": 3.0,
+        "ctau": 10,
+        "name": "Mchi-31.5_dMchi-3.0_ctau-10",
+        "sum_wgt": 0.0011798522900789976,
+        "type": "signal",
+        "year": 2022,
+        "alphaD": "aEM",
+        "xsec": 289615.332,
+        "nFiles": 1,
+        "filter_eff": 0.704,
+        "num_events": 67428,
+        "blacklist": []
+    },
+    {
+        "location": "/uscms/home/reshmar/nobackup/IDMe_Run3_Collab/CMSSW_13_0_13/src/iDMe/AODSkimmer/created_ntuples/WithXclean/2022/Signal_Mchi-52p5_dMchi-5p0_ctau-10_WithXCLEAN.root",
+        "Mchi": 52.5,
+        "dMchi": 5.0,
+        "ctau": 10,
+        "name": "Mchi-52.5_dMchi-5.0_ctau-10",
+        "sum_wgt": 2.9068182811897714e-06,
+        "type": "signal",
+        "year": 2022,
+        "alphaD": "aEM",
+        "xsec": 311.52733342,
+        "nFiles": 1,
+        "filter_eff": 0.7377,
+        "num_events": 69218,
+        "blacklist": []
+    }
+]
