@@ -1,8 +1,25 @@
 import sys
 import pandas as pd
-import plotTools as ptools
+try:
+    import plotTools as ptools
+except ModuleNotFoundError:
+    import analysisTools.plotTools as ptools
 import json
 from pathlib import Path
+
+def stringfy_friendly(num):
+    if isinstance(num, int):
+        return str(num)
+    elif isinstance(num, float):
+        if int(num*1000) > 0:
+            num = round(num, 3)
+            return str(num).replace('.', 'p') if '.' in str(num) else str(num)
+        else:
+            num = '%.3e' % num
+            return num.replace('.', 'p')
+    else:
+        raise ValueError("{0} is not a number!".format(num))
+
 
 # Signal
 def get_dict_fromCutflow(cf):
