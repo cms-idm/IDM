@@ -37,3 +37,4 @@ for m1 in m1l:
             cmd = f'cmsRun scripts/ElectronNtuplizer_cfg.py year=2024 data=0 signal=1 flist="{flist}" outfile={outfile}'
             print(cmd)
             os.system(cmd)
+            exit()

@@ -764,14 +764,15 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       // x-cleaning study
       nt.recoElectronHasLptMatch_.push_back(false);
       nt.recoElectronLptMatchIdx_.push_back(-999);
-      nt.recoElectronHasXCLptMatch_.push_back(false);
-      nt.recoElectronXCLptMatchIdx_.push_back(-999);
+      nt.recoElectronHasAllLptMatch_.push_back(false);
+      nt.recoElectronAllLptMatchIdx_.push_back(-999);
    }
 
    /////////////////////////////////
    /// Handling low-pT electrons ///
    /////////////////////////////////
    vector<math::XYZTLorentzVector> lowpt_ele_p4s;
+   vector<math::XYZTLorentzVector> allLowPt_ele_p4s;
    vector<const pat::Electron*> lowpt_good_eles;
    int ilpt = 0; // track index (in output tree) of lpt electrons for x-cleaning purposes
    vector<int> iSaved_lpt;
@@ -796,110 +797,112 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
             iMatch_reg = ireg;
          }
       }
-      // can optionally not skip and save whether or not the lpt electron *should* be x-cleaned
-      if (mindR < PFmatch_threshold) {
-	 // Run3 uncommended below four lines because they seemed useful
-	 // fails cross cleaning
-	 nt.recoXCLowPtElectronIsXCleaned_.push_back(true);
-	 nt.recoXCLowPtElectronGEDidx_.push_back(iMatch_reg);
-         nt.recoElectronHasXCLptMatch_[iMatch_reg] = true;
-	 nt.recoElectronXCLptMatchIdx_[iMatch_reg] = ilpt;
-         ilpt_all++;
-	 
-	 // Fill Cross-Cleaned Lpt Electron branches
-         // increment lpt idx
-         nt.nElectronXCLowPt_++;
-         nt.recoXCLowPtElectronMinDrToReg_.push_back(mindR);
-         // Filling basic info, if electron passes cross cleaning
-         nt.recoXCLowPtElectronPt_.push_back(ele.pt());
-         nt.recoXCLowPtElectronPhi_.push_back(ele.phi());
-         nt.recoXCLowPtElectronPhiError_.push_back(track->phiError());
-         nt.recoXCLowPtElectronEta_.push_back(ele.eta());
-         nt.recoXCLowPtElectronEtaError_.push_back(track->etaError());
-         nt.recoXCLowPtElectronIsPF_.push_back(ele.isPF());
-         nt.recoXCLowPtElectronGenMatched_.push_back(false);
-         nt.recoXCLowPtElectronMatchType_.push_back(0);
-         // Run3 syntax updated
-         nt.recoXCLowPtElectronID_.push_back(ele.electronID("ID"));
-         nt.recoXCLowPtElectronAngularRes_.push_back(sqrt(track->phiError()*track->phiError() + track->etaError()*track->etaError()));
-         nt.recoXCLowPtElectronE_.push_back(ele.energy());
-         nt.recoXCLowPtElectronVxy_.push_back(ele.trackPositionAtVtx().rho());
-         nt.recoXCLowPtElectronVz_.push_back(ele.trackPositionAtVtx().z());
-         nt.recoXCLowPtElectronTrkIso_.push_back(ele.trackIso());
-         nt.recoXCLowPtElectronTrkRelIso_.push_back(ele.trackIso()/ele.pt());
-         nt.recoXCLowPtElectronCaloIso_.push_back(ele.caloIso());
-         nt.recoXCLowPtElectronCaloRelIso_.push_back(ele.caloIso()/ele.pt());
-         nt.recoXCLowPtElectronCharge_.push_back(ele.charge());
-         // Calculating "official" dR03 PF Isolation based on https://github.com/cms-sw/cmssw/blob/CMSSW_10_6_X/RecoEgamma/ElectronIdentification/plugins/cuts/GsfEleRelPFIsoScaledCut.cc#L62
+      bool isXCleaned = (mindR < PFmatch_threshold);
+
+      if (isXCleaned) {
+         nt.recoElectronHasAllLptMatch_[iMatch_reg] = true;
+         nt.recoElectronAllLptMatchIdx_[iMatch_reg] = nt.nElectronAllLowPt_;
+      }
+
+      // Fill AllLowPt branches for every LowPt electron regardless of XC status
+      nt.nElectronAllLowPt_++;
+      allLowPt_ele_p4s.push_back(ele.p4());
+      nt.recoAllLowPtElectronIsXCleaned_.push_back(isXCleaned);
+      nt.recoAllLowPtElectronGEDidx_.push_back(isXCleaned ? iMatch_reg : -999);
+      nt.recoAllLowPtElectronMinDrToReg_.push_back(mindR);
+      nt.recoAllLowPtElectronPt_.push_back(ele.pt());
+      nt.recoAllLowPtElectronPhi_.push_back(ele.phi());
+      nt.recoAllLowPtElectronPhiError_.push_back(track->phiError());
+      nt.recoAllLowPtElectronEta_.push_back(ele.eta());
+      nt.recoAllLowPtElectronEtaError_.push_back(track->etaError());
+      nt.recoAllLowPtElectronIsPF_.push_back(ele.isPF());
+      nt.recoAllLowPtElectronGenMatched_.push_back(false);
+      nt.recoAllLowPtElectronMatchType_.push_back(0);
+      nt.recoAllLowPtElectronGEDisMatched_.push_back(false);
+      // Run3 syntax updated
+      nt.recoAllLowPtElectronID_.push_back(ele.electronID("ID"));
+      nt.recoAllLowPtElectronAngularRes_.push_back(sqrt(track->phiError()*track->phiError() + track->etaError()*track->etaError()));
+      nt.recoAllLowPtElectronE_.push_back(ele.energy());
+      nt.recoAllLowPtElectronVxy_.push_back(ele.trackPositionAtVtx().rho());
+      nt.recoAllLowPtElectronVz_.push_back(ele.trackPositionAtVtx().z());
+      nt.recoAllLowPtElectronTrkIso_.push_back(ele.trackIso());
+      nt.recoAllLowPtElectronTrkRelIso_.push_back(ele.trackIso()/ele.pt());
+      nt.recoAllLowPtElectronCaloIso_.push_back(ele.caloIso());
+      nt.recoAllLowPtElectronCaloRelIso_.push_back(ele.caloIso()/ele.pt());
+      nt.recoAllLowPtElectronCharge_.push_back(ele.charge());
+      // Calculating "official" dR03 PF Isolation based on https://github.com/cms-sw/cmssw/blob/CMSSW_10_6_X/RecoEgamma/ElectronIdentification/plugins/cuts/GsfEleRelPFIsoScaledCut.cc#L62
+      {
          auto pfIso = ele.pfIsolationVariables();
          const float rho = rhoHandle_.isValid() ? (float)(*rhoHandle_) : 0.0;
          const float eA = effectiveAreas_.getEffectiveArea(std::abs(ele.superCluster()->eta()));
          float iso = pfIso.sumChargedHadronPt + std::max(0.0f,pfIso.sumNeutralHadronEt + pfIso.sumPhotonEt  - rho*eA);
-         nt.recoXCLowPtElectronPFIso_.push_back(iso);
-         nt.recoXCLowPtElectronPFRelIso_.push_back(iso/ele.pt());
-         nt.recoXCLowPtElectronMiniIso_.push_back(ele.pt()*ele.userFloat("miniIsoAll"));
-         nt.recoXCLowPtElectronMiniRelIso_.push_back(ele.userFloat("miniIsoAll"));
-         // dummy values for corrected isolation 
-         nt.recoXCLowPtElectronPFIsoEleCorr_.push_back(-999.);
-         nt.recoXCLowPtElectronPFRelIsoEleCorr_.push_back(-999.);
-         nt.recoXCLowPtElectronMiniIsoEleCorr_.push_back(-999.);
-         nt.recoXCLowPtElectronMiniRelIsoEleCorr_.push_back(-999.);
+         nt.recoAllLowPtElectronPFIso_.push_back(iso);
+         nt.recoAllLowPtElectronPFRelIso_.push_back(iso/ele.pt());
+         nt.recoAllLowPtElectronMiniIso_.push_back(ele.pt()*ele.userFloat("miniIsoAll"));
+         nt.recoAllLowPtElectronMiniRelIso_.push_back(ele.userFloat("miniIsoAll"));
+         // dummy values for corrected isolation
+         nt.recoAllLowPtElectronPFIsoEleCorr_.push_back(-999.);
+         nt.recoAllLowPtElectronPFRelIsoEleCorr_.push_back(-999.);
+         nt.recoAllLowPtElectronMiniIsoEleCorr_.push_back(-999.);
+         nt.recoAllLowPtElectronMiniRelIsoEleCorr_.push_back(-999.);
          // Saving individual isolation components
-         nt.recoXCLowPtElectronChadIso_.push_back(pfIso.sumChargedHadronPt);
-         nt.recoXCLowPtElectronNhadIso_.push_back(pfIso.sumNeutralHadronEt);
-         nt.recoXCLowPtElectronPhoIso_.push_back(pfIso.sumPhotonEt);
-         nt.recoXCLowPtElectronRhoEA_.push_back(rho*eA);
-         // Filling tracks
-         nt.recoXCLowPtElectronDxy_.push_back(abs(track->dxy(pv.position())));
-         nt.recoXCLowPtElectronDxyError_.push_back(track->dxyError());
-         nt.recoXCLowPtElectronDz_.push_back(track->dz(pv.position()));
-         nt.recoXCLowPtElectronDzError_.push_back(track->dzError());
-         nt.recoXCLowPtElectronTrkChi2_.push_back(track->normalizedChi2());
-         nt.recoXCLowPtElectronTrkProb_.push_back(TMath::Prob(track->chi2(),(int)track->ndof()));
-         nt.recoXCLowPtElectronTrkNumTrackerHits_.push_back(track->hitPattern().numberOfValidTrackerHits());
-         nt.recoXCLowPtElectronTrkNumPixHits_.push_back(track->hitPattern().numberOfValidPixelHits());
-         nt.recoXCLowPtElectronTrkNumStripHits_.push_back(track->hitPattern().numberOfValidStripHits());
-         // Calculating distance to jets
+         nt.recoAllLowPtElectronChadIso_.push_back(pfIso.sumChargedHadronPt);
+         nt.recoAllLowPtElectronNhadIso_.push_back(pfIso.sumNeutralHadronEt);
+         nt.recoAllLowPtElectronPhoIso_.push_back(pfIso.sumPhotonEt);
+         nt.recoAllLowPtElectronRhoEA_.push_back(rho*eA);
+      }
+      // Filling tracks
+      nt.recoAllLowPtElectronDxy_.push_back(abs(track->dxy(pv.position())));
+      nt.recoAllLowPtElectronDxyError_.push_back(track->dxyError());
+      nt.recoAllLowPtElectronDz_.push_back(track->dz(pv.position()));
+      nt.recoAllLowPtElectronDzError_.push_back(track->dzError());
+      nt.recoAllLowPtElectronTrkChi2_.push_back(track->normalizedChi2());
+      nt.recoAllLowPtElectronTrkProb_.push_back(TMath::Prob(track->chi2(),(int)track->ndof()));
+      nt.recoAllLowPtElectronTrkNumTrackerHits_.push_back(track->hitPattern().numberOfValidTrackerHits());
+      nt.recoAllLowPtElectronTrkNumPixHits_.push_back(track->hitPattern().numberOfValidPixelHits());
+      nt.recoAllLowPtElectronTrkNumStripHits_.push_back(track->hitPattern().numberOfValidStripHits());
+      // Calculating distance to jets
+      {
          vector<float> dRtoJets; vector<float> dPhitoJets;
          for (int ij = 0; ij < nt.PFNJet_; ij++) {
-	    dRtoJets.push_back(sqrt(pow(ele.eta() - nt.PFJetEta_[ij],2) + pow(reco::deltaPhi(ele.phi(),nt.PFJetPhi_[ij]),2)));
+            dRtoJets.push_back(sqrt(pow(ele.eta() - nt.PFJetEta_[ij],2) + pow(reco::deltaPhi(ele.phi(),nt.PFJetPhi_[ij]),2)));
             dPhitoJets.push_back(reco::deltaPhi(ele.phi(),nt.PFJetPhi_[ij]));
          }
-         nt.recoXCLowPtElectronDrToJets_.push_back(dRtoJets);
-         nt.recoXCLowPtElectronDphiToJets_.push_back(dPhitoJets);
-         // Electron ID variables
-         nt.recoXCLowPtElectronFull5x5_sigmaIetaIeta_.push_back(ele.full5x5_sigmaIetaIeta());
+         nt.recoAllLowPtElectronDrToJets_.push_back(dRtoJets);
+         nt.recoAllLowPtElectronDphiToJets_.push_back(dPhitoJets);
+      }
+      // Electron ID variables
+      nt.recoAllLowPtElectronFull5x5_sigmaIetaIeta_.push_back(ele.full5x5_sigmaIetaIeta());
+      {
          float dEtaInSeed = ele.superCluster().isNonnull() && ele.superCluster()->seed().isNonnull() ? ele.deltaEtaSuperClusterTrackAtVtx() - ele.superCluster()->eta() + ele.superCluster()->seed()->eta() : std::numeric_limits<float>::max();
-         nt.recoXCLowPtElectronAbsdEtaSeed_.push_back(std::abs(dEtaInSeed));
-         nt.recoXCLowPtElectronAbsdPhiIn_.push_back(std::abs(ele.deltaPhiSuperClusterTrackAtVtx()));
-         nt.recoXCLowPtElectronHoverE_.push_back(ele.hadronicOverEm());
+         nt.recoAllLowPtElectronAbsdEtaSeed_.push_back(std::abs(dEtaInSeed));
+      }
+      nt.recoAllLowPtElectronAbsdPhiIn_.push_back(std::abs(ele.deltaPhiSuperClusterTrackAtVtx()));
+      nt.recoAllLowPtElectronHoverE_.push_back(ele.hadronicOverEm());
+      {
          const float ecal_energy_inverse = 1.0/ele.ecalEnergy();
          const float eSCoverP = ele.eSuperClusterOverP();
-         nt.recoXCLowPtElectronAbs1overEm1overP_.push_back(std::abs(1.0 - eSCoverP)*ecal_energy_inverse);
-         constexpr auto missingHitType =reco::HitPattern::MISSING_INNER_HITS;
-         nt.recoXCLowPtElectronExpMissingInnerHits_.push_back(ele.gsfTrack()->hitPattern().numberOfLostHits(missingHitType));
-         nt.recoXCLowPtElectronConversionVeto_.push_back(!ConversionTools::hasMatchedConversion(ele,*conversionsHandle_,beamspot.position()));
-         nt.recoXCLowPtElectronIsEE_.push_back(ele.isEE());
+         nt.recoAllLowPtElectronAbs1overEm1overP_.push_back(std::abs(1.0 - eSCoverP)*ecal_energy_inverse);
+      }
+      {
+         constexpr auto missingHitType = reco::HitPattern::MISSING_INNER_HITS;
+         nt.recoAllLowPtElectronExpMissingInnerHits_.push_back(ele.gsfTrack()->hitPattern().numberOfLostHits(missingHitType));
+      }
+      nt.recoAllLowPtElectronConversionVeto_.push_back(!ConversionTools::hasMatchedConversion(ele,*conversionsHandle_,beamspot.position()));
+      nt.recoAllLowPtElectronIsEE_.push_back(ele.isEE());
 
-	 //continue; // PREVIOUSLY: comment this line to disable cross cleaning
-	 // now, cross cleaning always enabled
-	 
-      } else {
-  	 // passes cross cleaning
+      if (!isXCleaned) {
+         // passes cross cleaning — fill surviving LowPt branches
          nt.recoLowPtElectronIsXCleaned_.push_back(false);
          nt.recoLowPtElectronGEDidx_.push_back(-999);
 
-	 // Fill Lpt Electron branches
-         // increment lpt idx
          ilpt++;
          iSaved_lpt.push_back(ilpt_all);
-         ilpt_all++;
-         
+
          nt.nElectronLowPt_++;
          nt.recoLowPtElectronMinDrToReg_.push_back(mindR);
          lowpt_ele_p4s.push_back(ele.p4());
          lowpt_good_eles.push_back(&ele);
-         // Filling basic info, if electron passes cross cleaning
          nt.recoLowPtElectronPt_.push_back(ele.pt());
          nt.recoLowPtElectronPhi_.push_back(ele.phi());
          nt.recoLowPtElectronPhiError_.push_back(track->phiError());
@@ -928,7 +931,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          nt.recoLowPtElectronPFRelIso_.push_back(iso/ele.pt());
          nt.recoLowPtElectronMiniIso_.push_back(ele.pt()*ele.userFloat("miniIsoAll"));
          nt.recoLowPtElectronMiniRelIso_.push_back(ele.userFloat("miniIsoAll"));
-         // dummy values for corrected isolation 
+         // dummy values for corrected isolation
          nt.recoLowPtElectronPFIsoEleCorr_.push_back(-999.);
          nt.recoLowPtElectronPFRelIsoEleCorr_.push_back(-999.);
          nt.recoLowPtElectronMiniIsoEleCorr_.push_back(-999.);
@@ -969,9 +972,11 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          nt.recoLowPtElectronExpMissingInnerHits_.push_back(ele.gsfTrack()->hitPattern().numberOfLostHits(missingHitType));
          nt.recoLowPtElectronConversionVeto_.push_back(!ConversionTools::hasMatchedConversion(ele,*conversionsHandle_,beamspot.position()));
          nt.recoLowPtElectronIsEE_.push_back(ele.isEE());
-         // additional x-cleaning study variables 
+         // additional x-cleaning study variables
          nt.recoLowPtElectronGEDisMatched_.push_back(false);
       }
+
+      ilpt_all++;
    }
 
    // Handling DSA Muons
@@ -1598,6 +1603,11 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
 	       if (nt.recoElectronHasLptMatch_[iMatch_e]) {
                   nt.recoLowPtElectronGEDisMatched_[nt.recoElectronLptMatchIdx_[iMatch_e]] = true;
                }
+               for (size_t k = 0; k < nt.recoAllLowPtElectronGEDidx_.size(); k++) {
+                  if (nt.recoAllLowPtElectronGEDidx_[k] == iMatch_e) {
+                     nt.recoAllLowPtElectronGEDisMatched_[k] = true;
+                  }
+               }
             }
             else {
                nt.recoLowPtElectronGenMatched_[iMatch_e - n_reg_eles] = true;
@@ -1618,6 +1628,11 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
                mType_p = "R";
                if (nt.recoElectronHasLptMatch_[iMatch_p]) {
 		  nt.recoLowPtElectronGEDisMatched_[nt.recoElectronLptMatchIdx_[iMatch_p]] = true;
+               }
+               for (size_t k = 0; k < nt.recoAllLowPtElectronGEDidx_.size(); k++) {
+                  if (nt.recoAllLowPtElectronGEDidx_[k] == iMatch_p) {
+                     nt.recoAllLowPtElectronGEDisMatched_[k] = true;
+                  }
                }
             }
             else {
@@ -1654,6 +1669,44 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
                nt.vtx_isMatched_[iv] = true;
                nt.vtx_matchSign_[iv] = nt.vtx_e1_matchType_[iv]*nt.vtx_e2_matchType_[iv];
             }
+         }
+
+         // AllLowPt gen-matching (AllLowPt electrons only, no regular electrons in pool)
+         float min_dRe_all = 999.;
+         float min_dRp_all = 999.;
+         int iMatch_e_all = -1;
+         int iMatch_p_all = -1;
+         for (size_t i = 0; i < allLowPt_ele_p4s.size(); i++) {
+            auto alp = allLowPt_ele_p4s[i];
+            float dRe = reco::deltaR(alp, gen_ele_p4);
+            float dRp = reco::deltaR(alp, gen_pos_p4);
+            if (dRe > 0.1 && dRp > 0.1) continue;
+            if (dRe < 0.1 && dRp > 0.1 && dRe < min_dRe_all) {
+               min_dRe_all = dRe; iMatch_e_all = i;
+            }
+            else if (dRe > 0.1 && dRp < 0.1 && dRp < min_dRp_all) {
+               min_dRp_all = dRp; iMatch_p_all = i;
+            }
+            else if (dRe < 0.1 && dRp < 0.1 && (dRe < min_dRe_all || dRp < min_dRp_all)) {
+               if (dRe < min_dRe_all && dRp > min_dRp_all) {
+                  min_dRe_all = dRe; iMatch_e_all = i;
+               }
+               else if (dRe > min_dRe_all && dRp < min_dRp_all) {
+                  min_dRp_all = dRp; iMatch_p_all = i;
+               }
+               else {
+                  if (dRe < dRp) { min_dRe_all = dRe; iMatch_e_all = i; }
+                  else           { min_dRp_all = dRp; iMatch_p_all = i; }
+               }
+            }
+         }
+         if (iMatch_e_all != -1) {
+            nt.recoAllLowPtElectronGenMatched_[iMatch_e_all] = true;
+            nt.recoAllLowPtElectronMatchType_[iMatch_e_all] = -1;
+         }
+         if (iMatch_p_all != -1) {
+            nt.recoAllLowPtElectronGenMatched_[iMatch_p_all] = true;
+            nt.recoAllLowPtElectronMatchType_[iMatch_p_all] = 1;
          }
 
 	 // constructing gen dilepton object
