@@ -9,15 +9,21 @@ import awkward as ak
 
 def make_histograms():
     histograms = {
-        "ele_reco_lpt_pt_lxy":  Hist(samp, cut, ele_pt_zoom_fine, vxy_zoom_fine, storage=hist.storage.Weight()),
-        "ele_reco_ged_pt_lxy":  Hist(samp, cut, ele_pt_zoom_fine, vxy_zoom_fine, storage=hist.storage.Weight()),
-        "ele_reco_none_pt_lxy": Hist(samp, cut, ele_pt_zoom_fine, vxy_zoom_fine, storage=hist.storage.Weight()),
-        "ele_reco_lpt_pt_eta":  Hist(samp, cut, ele_pt_zoom_fine, ele_eta_fine,  storage=hist.storage.Weight()),
-        "ele_reco_ged_pt_eta":  Hist(samp, cut, ele_pt_zoom_fine, ele_eta_fine,  storage=hist.storage.Weight()),
-        "ele_reco_none_pt_eta": Hist(samp, cut, ele_pt_zoom_fine, ele_eta_fine,  storage=hist.storage.Weight()),
-        "ele_reco_lpt_pt_vz":   Hist(samp, cut, ele_pt_zoom_fine, vz_fine,       storage=hist.storage.Weight()),
-        "ele_reco_ged_pt_vz":   Hist(samp, cut, ele_pt_zoom_fine, vz_fine,       storage=hist.storage.Weight()),
-        "ele_reco_none_pt_vz":  Hist(samp, cut, ele_pt_zoom_fine, vz_fine,       storage=hist.storage.Weight()),
+        "ele_reco_lpt_pt_lxy":  Hist(samp, cut, ele_pt_zoom_fine, Lxy_zoom_fine, storage=hist.storage.Weight()),
+        "ele_reco_ged_pt_lxy":  Hist(samp, cut, ele_pt_zoom_fine, Lxy_zoom_fine, storage=hist.storage.Weight()),
+        "ele_reco_none_pt_lxy": Hist(samp, cut, ele_pt_zoom_fine, Lxy_zoom_fine, storage=hist.storage.Weight()),
+        "ele_reco_lpt_eta":  Hist(samp, cut, ele_eta_fine,  storage=hist.storage.Weight()),
+        "ele_reco_ged_eta":  Hist(samp, cut, ele_eta_fine,  storage=hist.storage.Weight()),
+        "ele_reco_none_eta": Hist(samp, cut, ele_eta_fine,  storage=hist.storage.Weight()),
+        "ele_reco_lpt_lz":   Hist(samp, cut, Lz_fine,       storage=hist.storage.Weight()),
+        "ele_reco_ged_lz":   Hist(samp, cut, Lz_fine,       storage=hist.storage.Weight()),
+        "ele_reco_none_lz":  Hist(samp, cut, Lz_fine,       storage=hist.storage.Weight()),
+        "ele_reco_alllpt_pt_lxy":   Hist(samp, cut, ele_pt_zoom_fine, Lxy_zoom_fine, storage=hist.storage.Weight()),
+        "ele_reco_noalllpt_pt_lxy": Hist(samp, cut, ele_pt_zoom_fine, Lxy_zoom_fine, storage=hist.storage.Weight()),
+        "ele_reco_alllpt_eta":      Hist(samp, cut, ele_eta_fine,  storage=hist.storage.Weight()),
+        "ele_reco_noalllpt_eta":    Hist(samp, cut, ele_eta_fine,  storage=hist.storage.Weight()),
+        "ele_reco_alllpt_lz":       Hist(samp, cut, Lz_fine,       storage=hist.storage.Weight()),
+        "ele_reco_noalllpt_lz":     Hist(samp, cut, Lz_fine,       storage=hist.storage.Weight()),
     }
     return histograms
 
@@ -35,33 +41,36 @@ def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
     wgt = events.eventWgt
     #print(sum_wgt, np.sum(events.eventWgt), np.sum(wgt))
 
-    LptMatchedEle = events.GenEle[events.GenEle.matchType == 'L']
-    GEDMatchedEle = events.GenEle[events.GenEle.matchType == 'R']
-    unMatchedEle = events.GenEle[events.GenEle.matchType == 'None']
-    LptMatchedPos = events.GenPos[events.GenPos.matchType == 'L']
-    GEDMatchedPos = events.GenPos[events.GenPos.matchType == 'R']
-    unMatchedPos = events.GenPos[events.GenPos.matchType == 'None']
+    lxy_ele = np.sqrt((events.GenEle.vx - events.PV.x)**2 + (events.GenEle.vy - events.PV.y)**2)
+    lxy_pos = np.sqrt((events.GenPos.vx - events.PV.x)**2 + (events.GenPos.vy - events.PV.y)**2)
+    lz_ele = np.abs(events.GenEle.vz - events.PV.z)
+    lz_pos = np.abs(events.GenPos.vz - events.PV.z)
+    
+    all_gen           = ak.concatenate([events.GenEle,                    events.GenPos],                   axis=0)
+    all_lxy           = ak.concatenate([lxy_ele,                          lxy_pos],                         axis=0)
+    all_lz            = ak.concatenate([lz_ele,                           lz_pos],                          axis=0)
+    all_wgt           = ak.concatenate([wgt,                              wgt],                             axis=0)
+    all_matchedalllpt = ak.concatenate([events.GenEle.matchedAllLowPt,    events.GenPos.matchedAllLowPt],   axis=0)
 
-    LptMatchedEleWgt = wgt[events.GenEle.matchType == 'L']
-    GEDMatchedEleWgt = wgt[events.GenEle.matchType == 'R']
-    unMatchedEleWgt = wgt[events.GenEle.matchType == 'None']
-    LptMatchedPosWgt = wgt[events.GenPos.matchType == 'L']
-    GEDMatchedPosWgt = wgt[events.GenPos.matchType == 'R']
-    unMatchedPosWgt = wgt[events.GenPos.matchType == 'None']
+    for mtype, prefix in [('L', 'ele_reco_lpt'), ('R', 'ele_reco_ged'), ('None', 'ele_reco_none')]:
+        mask = all_gen.matchType == mtype
+        ele  = all_gen[mask]
+        lxy  = all_lxy[mask]
+        lz   = all_lz[mask]
+        w    = all_wgt[mask]
+        hists[f"{prefix}_pt_lxy"].fill(samp=samp, cut=cut, pt=ele.pt, lxy=lxy, weight=w)
+        hists[f"{prefix}_eta"].fill(   samp=samp, cut=cut, eta=ele.eta,        weight=w)
+        hists[f"{prefix}_lz" ].fill(   samp=samp, cut=cut, lz=lz,              weight=w)
 
-    for ele, wgt, prefix in zip([LptMatchedEle, GEDMatchedEle, unMatchedEle],
-                                [LptMatchedEleWgt, GEDMatchedEleWgt, unMatchedEleWgt],
-                                ["ele_reco_lpt", "ele_reco_ged", "ele_reco_none"]):
-        hists[f"{prefix}_pt_lxy"].fill(samp=samp, cut=cut, pt=ele.pt, vxy=ele.vxy, weight=wgt)
-        hists[f"{prefix}_pt_eta"].fill(samp=samp, cut=cut, pt=ele.pt, eta=ele.eta, weight=wgt)
-        hists[f"{prefix}_pt_vz" ].fill(samp=samp, cut=cut, pt=ele.pt, vz=ele.vz,  weight=wgt)
-
-    for ele, wgt, prefix in zip([LptMatchedPos, GEDMatchedPos, unMatchedPos],
-                                [LptMatchedPosWgt, GEDMatchedPosWgt, unMatchedPosWgt],
-                                ["ele_reco_lpt", "ele_reco_ged", "ele_reco_none"]):
-        hists[f"{prefix}_pt_lxy"].fill(samp=samp, cut=cut, pt=ele.pt, vxy=ele.vxy, weight=wgt)
-        hists[f"{prefix}_pt_eta"].fill(samp=samp, cut=cut, pt=ele.pt, eta=ele.eta, weight=wgt)
-        hists[f"{prefix}_pt_vz" ].fill(samp=samp, cut=cut, pt=ele.pt, vz=ele.vz,  weight=wgt)
+    for matched, prefix in [(True, 'ele_reco_alllpt'), (False, 'ele_reco_noalllpt')]:
+        mask = all_matchedalllpt == matched
+        ele  = all_gen[mask]
+        lxy  = all_lxy[mask]
+        lz   = all_lz[mask]
+        w    = all_wgt[mask]
+        hists[f"{prefix}_pt_lxy"].fill(samp=samp, cut=cut, pt=ele.pt, lxy=lxy, weight=w)
+        hists[f"{prefix}_eta"].fill(   samp=samp, cut=cut, eta=ele.eta,        weight=w)
+        hists[f"{prefix}_lz" ].fill(   samp=samp, cut=cut, lz=lz,              weight=w)
    
 
         

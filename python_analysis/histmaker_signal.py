@@ -19,7 +19,7 @@ import glob
 
 # ---- SETTINGS ----
 vers = 'May2026'
-cuts = 'an'
+cuts = 'recoeff'
 hists = 'elerecoeff'
 
 
