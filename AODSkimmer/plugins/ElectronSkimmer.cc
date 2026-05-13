@@ -1656,6 +1656,48 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
             }
          }
 
+         // AllLowPt gen-matching (AllLowPt electrons only, no regular electrons in pool)
+         float min_dRe_all = 999.;
+         float min_dRp_all = 999.;
+         int iMatch_e_all = -1;
+         int iMatch_p_all = -1;
+         for (size_t i = 0; i < allLowPt_ele_p4s.size(); i++) {
+            auto alp = allLowPt_ele_p4s[i];
+            float dRe = reco::deltaR(alp, gen_ele_p4);
+            float dRp = reco::deltaR(alp, gen_pos_p4);
+            if (dRe > 0.1 && dRp > 0.1) continue;
+            if (dRe < 0.1 && dRp > 0.1 && dRe < min_dRe_all) {
+               min_dRe_all = dRe; iMatch_e_all = i;
+            }
+            else if (dRe > 0.1 && dRp < 0.1 && dRp < min_dRp_all) {
+               min_dRp_all = dRp; iMatch_p_all = i;
+            }
+            else if (dRe < 0.1 && dRp < 0.1 && (dRe < min_dRe_all || dRp < min_dRp_all)) {
+               if (dRe < min_dRe_all && dRp > min_dRp_all) {
+                  min_dRe_all = dRe; iMatch_e_all = i;
+               }
+               else if (dRe > min_dRe_all && dRp < min_dRp_all) {
+                  min_dRp_all = dRp; iMatch_p_all = i;
+               }
+               else {
+                  if (dRe < dRp) { min_dRe_all = dRe; iMatch_e_all = i; }
+                  else           { min_dRp_all = dRp; iMatch_p_all = i; }
+               }
+            }
+         }
+         if (iMatch_e_all != -1) {
+            nt.recoAllLowPtElectronGenMatched_[iMatch_e_all] = true;
+            nt.recoAllLowPtElectronMatchType_[iMatch_e_all] = -1;
+            nt.genEleMatchedAllLowPt_ = true;
+            nt.genEleMatchIdxAllLowPt_ = iMatch_e_all;
+         }
+         if (iMatch_p_all != -1) {
+            nt.recoAllLowPtElectronGenMatched_[iMatch_p_all] = true;
+            nt.recoAllLowPtElectronMatchType_[iMatch_p_all] = 1;
+            nt.genPosMatchedAllLowPt_ = true;
+            nt.genPosMatchIdxAllLowPt_ = iMatch_p_all;
+         }
+
 	 // constructing gen dilepton object
          auto gen_ll = gen_ele_p4 + gen_pos_p4;
          nt.genEEPt_ = gen_ll.pt();

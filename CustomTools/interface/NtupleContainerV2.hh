@@ -82,6 +82,8 @@ public:
     std::string genEleMatchType_;
     int genEleMatchIdxLocal_;
     int genEleMatchIdxGlobal_;
+    bool genEleMatchedAllLowPt_;
+    int genEleMatchIdxAllLowPt_;
 
     int genPosCharge_;
     int genPosMotherID_;
@@ -100,6 +102,8 @@ public:
     std::string genPosMatchType_;
     int genPosMatchIdxLocal_;
     int genPosMatchIdxGlobal_;
+    bool genPosMatchedAllLowPt_;
+    int genPosMatchIdxAllLowPt_;
 
     // Gen Electron + Positron info
     float genEEPt_;
