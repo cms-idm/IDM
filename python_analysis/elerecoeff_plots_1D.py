@@ -28,9 +28,10 @@ import mplhep as hep
 #hists_config = "configs/hists/genstudy.py"
 #sample_config = "configs/samples/signal_2024_Apr2026_aEM.json"
 outdir = 'workarea'
-saved_signal_hists = f"{outdir}/hists_sigMay2026_an-sel_elerecoeff.coffea"
+saved_signal_hists = f"{outdir}/hists_sigMay2026_recoeff-sel_elerecoeff.coffea"
 
 title = 'Electron Reco'
+seltag = 'hlt2eles'
 _pt_edges  = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 6, 7, 8, 9, 10, 12.5, 15, 17.5, 20, 22.5, 25, 30, 40, 50]
 _lxy_edges = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 7.5, 10, 12.5, 15, 20, 25, 30, 40]
 _eta_edges = list(np.linspace(-3, 3, 61))
@@ -41,25 +42,25 @@ proj_configs = [
         'variables':        ['ele_reco_lpt_pt_lxy',   'ele_reco_ged_pt_lxy',   'ele_reco_none_pt_lxy'],
         'alllpt_variables': ['ele_reco_alllpt_pt_lxy','ele_reco_noalllpt_pt_lxy'],
         'project': {"samp": sum, "lxy": sum}, 'rebin_edges': _pt_edges,
-        'plottag': 'prevtx_ele-reco_only-pt',  'var': r'$p_T$ [GeV]',
+        'plottag': f'{seltag}_ele-reco_only-pt',  'var': r'$p_T$ [GeV]',
     },
     {
         'variables':        ['ele_reco_lpt_pt_lxy',   'ele_reco_ged_pt_lxy',   'ele_reco_none_pt_lxy'],
         'alllpt_variables': ['ele_reco_alllpt_pt_lxy','ele_reco_noalllpt_pt_lxy'],
         'project': {"samp": sum, "pt":  sum}, 'rebin_edges': _lxy_edges,
-        'plottag': 'prevtx_ele-reco_only-xy', 'var': r'$L_{xy}$ [cm]', 'doLogx': True,
+        'plottag': f'{seltag}_ele-reco_only-xy', 'var': r'$L_{xy}$ [cm]', 'doLogx': True,
     },
     {
         'variables':        ['ele_reco_lpt_eta',   'ele_reco_ged_eta',   'ele_reco_none_eta'],
         'alllpt_variables': ['ele_reco_alllpt_eta','ele_reco_noalllpt_eta'],
         'project': {"samp": sum}, 'rebin_edges': _eta_edges,
-        'plottag': 'prevtx_ele-reco_only-eta', 'var': r'$\eta$',
+        'plottag': f'{seltag}_ele-reco_only-eta', 'var': r'$\eta$',
     },
     {
         'variables':        ['ele_reco_lpt_lz',   'ele_reco_ged_lz',   'ele_reco_none_lz'],
         'alllpt_variables': ['ele_reco_alllpt_lz','ele_reco_noalllpt_lz'],
         'project': {"samp": sum}, 'rebin_edges': _vz_edges,
-        'plottag': 'prevtx_ele-reco_only-vz',  'var': r'$L_z$ [cm]', 'doLogx': True,
+        'plottag': f'{seltag}_ele-reco_only-vz',  'var': r'$L_z$ [cm]', 'doLogx': True,
     },
 ]
 
@@ -78,7 +79,7 @@ fig, ax = plt.subplots(figsize=size)
 plot_dict = {
     'variable': ['ele_reco_lpt_pt_lxy', 'ele_reco_ged_pt_lxy', 'ele_reco_none_pt_lxy'], 
     'year': 2024,
-    'cut': 'cut8',
+    'cut': 'cut3',
 }
 
 style_dict = {
@@ -354,7 +355,14 @@ _ha = [s_hists[v][{"cut": _cut, "samp": sum, "lxy": sum}] for v in _comp_alllpt_
 _comp_plot(_comp_effhists([rebin_variable(h, _comp_pt_edges) for h in _h],
                           [rebin_variable(h, _comp_pt_edges) for h in _ha]),
            r'$p_T$ [GeV]', rf'{title} Efficiency vs $p_T$',
-           'plots/hist_comp_eff_pt.png')
+           f'plots/hist_{seltag}_comp_eff_pt.png')
+
+# Plot 1b: efficiency vs pT, all Lxy, no rebinning
+_h  = [s_hists[v][{"cut": _cut, "samp": sum, "lxy": sum}] for v in _comp_pt_vars]
+_ha = [s_hists[v][{"cut": _cut, "samp": sum, "lxy": sum}] for v in _comp_alllpt_vars]
+_comp_plot(_comp_effhists(_h, _ha),
+           r'$p_T$ [GeV]', rf'{title} Efficiency vs $p_T$ (no rebin)',
+           f'plots/hist_{seltag}_comp_eff_pt_norebin.png')
 
 # Plot 2: efficiency vs Lxy, all pT
 _h  = [s_hists[v][{"cut": _cut, "samp": sum, "pt": sum}] for v in _comp_pt_vars]
@@ -362,7 +370,7 @@ _ha = [s_hists[v][{"cut": _cut, "samp": sum, "pt": sum}] for v in _comp_alllpt_v
 _comp_plot(_comp_effhists([rebin_variable(h, _comp_lxy_edges) for h in _h],
                           [rebin_variable(h, _comp_lxy_edges) for h in _ha]),
            r'$L_{xy}$ [cm]', rf'{title} Efficiency vs $L_{{xy}}$',
-           'plots/hist_comp_eff_lxy.png')
+           f'plots/hist_{seltag}_comp_eff_lxy.png')
 
 # Plots 3-7: efficiency vs pT in Lxy slices
 _lxy_slices = [
@@ -386,7 +394,7 @@ for slc in _lxy_slices:
                               [rebin_variable(h, _comp_pt_edges) for h in _ha]),
                r'$p_T$ [GeV]',
                rf'{title} Efficiency vs $p_T$, {slc["label"]}',
-               f'plots/hist_comp_eff_pt_{slc["tag"]}.png')
+               f'plots/hist_{seltag}_comp_eff_pt_{slc["tag"]}.png')
 
 # Plots 8-11: efficiency vs Lxy in pT slices
 _pt_slices = [
@@ -410,4 +418,4 @@ for slc in _pt_slices:
                               [rebin_variable(h, _comp_lxy_edges) for h in _ha]),
                r'$L_{xy}$ [cm]',
                rf'{title} Efficiency vs {axlab}, {slc["label"]}',
-               f'plots/hist_comp_eff_lxy_{slc["tag"]}.png')
+               f'plots/hist_{seltag}_comp_eff_lxy_{slc["tag"]}.png')

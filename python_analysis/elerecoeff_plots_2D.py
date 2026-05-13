@@ -21,6 +21,7 @@ from hist import Hist
 from hist.axis import Variable
 from hist.storage import Weight
 import copy
+import warnings
 import mplhep as hep
 
 outdir = 'workarea'
@@ -44,7 +45,7 @@ plot_dict = {
 s_hists = util.load(saved_signal_hists)[0]
 s_pts   = utils.get_signal_point_dict(s_hists)
 
-size = (8, 6)
+size = (12, 8)
 
 _cmap = plt.cm.viridis.copy()
 _cmap.set_bad('white')  # nan bins (zero denominator) render white
@@ -111,10 +112,16 @@ def sample_label(row):
 
 
 def plot_2D_eff(h_eff, ax, title_str):
-    hep.hist2dplot(h_eff, ax=ax, cmap=_cmap, cmin=0, cmax=1, cbarextend=False)
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', message='.*Locator attempting to generate.*')
+        hep.hist2dplot(h_eff, ax=ax, cmap=_cmap, cmin=0, cmax=1, cbarextend=False)
     ax.set_xlabel(r'$p_T$ [GeV]')
-    ax.set_ylabel(r'$v_{xy}$ [cm]')
+    ax.set_ylabel(r'$L_{xy}$ [cm]')
     ax.set_title(title_str, fontsize=11)
+    ax.xaxis.set_major_locator(mpl.ticker.FixedLocator(_pt_edges))
+    ax.yaxis.set_major_locator(mpl.ticker.FixedLocator(_lxy_edges))
+    ax.xaxis.set_minor_locator(mpl.ticker.NullLocator())
+    ax.yaxis.set_minor_locator(mpl.ticker.NullLocator())
 
 
 selected_samples = pick_representative_samples(s_pts)
@@ -149,7 +156,7 @@ labels_all = {
 for tag, h_eff in eff_all.items():
     fig, ax = plt.subplots(figsize=size)
     hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6', ax=ax)
-    plot_2D_eff(h_eff, ax, rf'{title}: {labels_all[tag]} Efficiency ($p_T$ vs $v_{{xy}}$) — all samples')
+    plot_2D_eff(h_eff, ax, rf'{title}: {labels_all[tag]} Efficiency ($p_T$ vs $L_{{xy}}$) — all samples')
     plt.tight_layout()
     plt.savefig(f"plots/hist_{plottag}_{tag}_allsamps.png")
     plt.close(fig)
@@ -187,7 +194,7 @@ for sname in selected_samples:
     plot_2D_eff(eff_ps['ged'],    axes[0, 1], rf'GED — {slabel}')
     plot_2D_eff(eff_ps['both'],   axes[1, 0], rf'Both — {slabel}')
     plot_2D_eff(eff_ps['alllpt'], axes[1, 1], rf'AllLowPt — {slabel}')
-    fig.suptitle(rf'{title} Efficiency ($p_T$ vs $v_{{xy}}$)', fontsize=14)
+    fig.suptitle(rf'{title} Efficiency ($p_T$ vs $L_{{xy}}$)', fontsize=14)
     plt.tight_layout()
     plt.savefig(f"plots/hist_{plottag}_persamp_{sname}.png")
     plt.close(fig)
