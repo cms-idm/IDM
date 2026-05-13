@@ -28,7 +28,8 @@ ENV_TAR  = 'ntuplizer_CMSSW_14_0_21_acrobert.tar.gz'
 
 XRD      = 'root://cmseos.fnal.gov/'
 EOS_BASE = f'/store/group/lpcmetx/iDMe/Samples/Ntuples/signal_{VERS}/{YEAR}'
-TREE     = 'ntuples/outT'
+TREE          = 'ntuples/outT'
+REQUIRED_BRANCH = 'GenEle_matchedAllLowPt'
 SPLIT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'split_fileLists')
 
 def xrdfs_ls(path):
@@ -42,7 +43,9 @@ def xrdfs_ls(path):
 def tree_ok(xrd_url):
     try:
         with uproot.open(xrd_url) as f:
-            return TREE in f
+            if TREE not in f:
+                return False
+            return REQUIRED_BRANCH in f[TREE].keys()
     except Exception:
         return False
 

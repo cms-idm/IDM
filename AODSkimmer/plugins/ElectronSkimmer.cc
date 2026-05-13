@@ -1703,10 +1703,14 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          if (iMatch_e_all != -1) {
             nt.recoAllLowPtElectronGenMatched_[iMatch_e_all] = true;
             nt.recoAllLowPtElectronMatchType_[iMatch_e_all] = -1;
+            nt.genEleMatchedAllLowPt_ = true;
+            nt.genEleMatchIdxAllLowPt_ = iMatch_e_all;
          }
          if (iMatch_p_all != -1) {
             nt.recoAllLowPtElectronGenMatched_[iMatch_p_all] = true;
             nt.recoAllLowPtElectronMatchType_[iMatch_p_all] = 1;
+            nt.genPosMatchedAllLowPt_ = true;
+            nt.genPosMatchIdxAllLowPt_ = iMatch_p_all;
          }
 
 	 // constructing gen dilepton object

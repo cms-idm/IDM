@@ -508,6 +508,8 @@ void NtupleContainerV2::CreateTreeBranches() {
             outT->Branch("GenEle_matchType",&genEleMatchType_);
             outT->Branch("GenEle_matchIdxLocal",&genEleMatchIdxLocal_);
             outT->Branch("GenEle_matchIdxGlobal",&genEleMatchIdxGlobal_);
+            outT->Branch("GenEle_matchedAllLowPt",&genEleMatchedAllLowPt_);
+            outT->Branch("GenEle_matchIdxAllLowPt",&genEleMatchIdxAllLowPt_);
 
             outT->Branch("GenPos_charge",&genPosCharge_);
             outT->Branch("GenPos_motherID",&genPosMotherID_);
@@ -526,6 +528,8 @@ void NtupleContainerV2::CreateTreeBranches() {
             outT->Branch("GenPos_matchType",&genPosMatchType_);
             outT->Branch("GenPos_matchIdxLocal",&genPosMatchIdxLocal_);
             outT->Branch("GenPos_matchIdxGlobal",&genPosMatchIdxGlobal_);
+            outT->Branch("GenPos_matchedAllLowPt",&genPosMatchedAllLowPt_);
+            outT->Branch("GenPos_matchIdxAllLowPt",&genPosMatchIdxAllLowPt_);
 
             // Signal reco info
             outT->Branch("signalReconstructed",&signalReconstructed_);
@@ -593,6 +597,8 @@ void NtupleContainerV2::ClearTreeBranches() {
     genEleMatchType_ = "None";
     genEleMatchIdxLocal_ = -999;
     genEleMatchIdxGlobal_ = -999;
+    genEleMatchedAllLowPt_ = false;
+    genEleMatchIdxAllLowPt_ = -999;
 
     genPosCharge_ = 0;
     genPosMotherID_ = 0;
@@ -611,6 +617,8 @@ void NtupleContainerV2::ClearTreeBranches() {
     genPosMatchType_ = "None";
     genPosMatchIdxLocal_ = -999;
     genPosMatchIdxGlobal_ = -999;
+    genPosMatchedAllLowPt_ = false;
+    genPosMatchIdxAllLowPt_ = -999;
 
     // Signal reconstruction info
     signalReconstructed_ = false;
