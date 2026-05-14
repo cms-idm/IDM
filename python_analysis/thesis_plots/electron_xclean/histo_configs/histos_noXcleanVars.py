@@ -56,8 +56,9 @@ class myHisto:
         # self.ele_pt = self.parse_axis(("pt",25,0,50))   #LPT 2D
 
         # self.ele_pt = self.parse_axis(("pt",40,0,40))   #LPT 2D
+        self.ele_pt = self.parse_axis(("pt",[0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6]))  #Good for low pT electrons for 1000mm
 
-        self.ele_pt = self.parse_axis(("pt",[0,1,2,3,4,5,8,10,12,14,16,18,20,25,30]))  #Good for low pT electrons for 1000mm
+        # self.ele_pt = self.parse_axis(("pt",[0,1,2,3,4,5,8,10,12,14,16,18,20,25,30]))  #Good for low pT electrons for 1000mm
         # # self.ele_pt = self.parse_axis(("pt",[0,2,4,8,10,14,16,18,20,22,25,27,29,33,38,40]))   #Good for GED electrons
         # self.ele_pt = self.parse_axis(("pt",[0,4,8,12,16,20]))   #Good for GED electrons
         # self.ele_pt = self.parse_axis(("pt",[0,4,8,12,16,22,30,35,40,45,50,60,70,80]))  #10mm
