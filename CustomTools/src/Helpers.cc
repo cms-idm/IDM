@@ -20,6 +20,7 @@ bool Helper::JetID(const pat::Jet &jet, std::string year) {
        // Run3 XYZ need to update!
        if (abs(eta) <= 2.6) {
             passID = (neutHadFrac < 0.9) && (neutEmFrac < 0.9) && (nConstit > 1) && (muonFrac < 0.8) && (chargedHadFrac > 0) && (chargedMult > 0) && (chEmFrac < 0.80);
+
         }
         else if ((abs(eta) > 2.6) && (abs(eta) <= 2.7)) {
             passID = (neutHadFrac < 0.9) && (neutEmFrac < 0.99) && (muonFrac < 0.8) && (chargedMult > 0) && (chEmFrac < 0.8);
@@ -33,12 +34,14 @@ bool Helper::JetID(const pat::Jet &jet, std::string year) {
     }
 
     // Apply additional cuts to leading jet (see monojet analysis: https://arxiv.org/pdf/1703.01651.pdf)
+    // Run3 not in current Run2 AN so ignoring
     //if (idx == 0) {
     //    passID = passID && (chargedHadFrac > 0.1) && (neutHadFrac < 0.8);
     //}
 
     return passID;
 }
+<<<<<<< HEAD
 
 
 
@@ -168,3 +171,5 @@ bool Helper::JetID(const pat::Jet &jet, std::string year) {
 
 //     return passID;
 // }
+=======
+>>>>>>> origin/Main_Run3

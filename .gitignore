@@ -19,3 +19,4 @@ MCSampleProduction/
 CMSSW*
 *.csv
 *.txt
+*.json

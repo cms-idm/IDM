@@ -109,6 +109,8 @@ void NtupleContainerV2::CreateTreeBranches() {
     // special vars for x-clean study
     outT->Branch("Electron_hasLptMatch",&recoElectronHasLptMatch_);
     outT->Branch("Electron_lptMatchIdx",&recoElectronLptMatchIdx_);
+    outT->Branch("Electron_hasAllLptMatch",&recoElectronHasAllLptMatch_);
+    outT->Branch("Electron_AllLptMatchIdx",&recoElectronAllLptMatchIdx_);
 
     // Low pT electrons
     outT->Branch("nLptElectron",&nElectronLowPt_);
@@ -166,6 +168,63 @@ void NtupleContainerV2::CreateTreeBranches() {
     outT->Branch("LptElectron_xCleaned",&recoLowPtElectronIsXCleaned_);
     outT->Branch("LptElectron_gedIdx",&recoLowPtElectronGEDidx_);
     outT->Branch("LptElectron_gedIsMatched",&recoLowPtElectronGEDisMatched_);
+
+    // All Low pT electrons (includes cross-cleaned)
+    outT->Branch("nAllLptElectron",&nElectronAllLowPt_);
+    outT->Branch("AllLptElectron_pt",&recoAllLowPtElectronPt_);
+    outT->Branch("AllLptElectron_eta",&recoAllLowPtElectronEta_);
+    outT->Branch("AllLptElectron_etaErr",&recoAllLowPtElectronEtaError_);
+    outT->Branch("AllLptElectron_phi",&recoAllLowPtElectronPhi_);
+    outT->Branch("AllLptElectron_phiErr",&recoAllLowPtElectronPhiError_);
+    outT->Branch("AllLptElectron_ID",&recoAllLowPtElectronID_);
+    outT->Branch("AllLptElectron_angRes",&recoAllLowPtElectronAngularRes_);
+    outT->Branch("AllLptElectron_e",&recoAllLowPtElectronE_);
+    outT->Branch("AllLptElectron_vxy",&recoAllLowPtElectronVxy_);
+    outT->Branch("AllLptElectron_vz",&recoAllLowPtElectronVz_);
+    outT->Branch("AllLptElectron_dxy",&recoAllLowPtElectronDxy_);
+    outT->Branch("AllLptElectron_dxyErr",&recoAllLowPtElectronDxyError_);
+    outT->Branch("AllLptElectron_dz",&recoAllLowPtElectronDz_);
+    outT->Branch("AllLptElectron_dzErr",&recoAllLowPtElectronDzError_);
+    outT->Branch("AllLptElectron_trkChi2",&recoAllLowPtElectronTrkChi2_);
+    outT->Branch("AllLptElectron_trkIso",&recoAllLowPtElectronTrkIso_);
+    outT->Branch("AllLptElectron_trkRelIso",&recoAllLowPtElectronTrkRelIso_);
+    outT->Branch("AllLptElectron_calIso",&recoAllLowPtElectronCaloIso_);
+    outT->Branch("AllLptElectron_calRelIso",&recoAllLowPtElectronCaloRelIso_);
+    outT->Branch("AllLptElectron_PFIso",&recoAllLowPtElectronPFIso_);
+    outT->Branch("AllLptElectron_PFRelIso",&recoAllLowPtElectronPFRelIso_);
+    outT->Branch("AllLptElectron_miniIso",&recoAllLowPtElectronMiniIso_);
+    outT->Branch("AllLptElectron_miniRelIso",&recoAllLowPtElectronMiniRelIso_);
+    outT->Branch("AllLptElectron_PFIsoEleCorr",&recoAllLowPtElectronPFIsoEleCorr_);
+    outT->Branch("AllLptElectron_PFRelIsoEleCorr",&recoAllLowPtElectronPFRelIsoEleCorr_);
+    outT->Branch("AllLptElectron_miniIsoEleCorr",&recoAllLowPtElectronMiniIsoEleCorr_);
+    outT->Branch("AllLptElectron_miniRelIsoEleCorr",&recoAllLowPtElectronMiniRelIsoEleCorr_);
+    outT->Branch("AllLptElectron_chadIso",&recoAllLowPtElectronChadIso_);
+    outT->Branch("AllLptElectron_nhadIso",&recoAllLowPtElectronNhadIso_);
+    outT->Branch("AllLptElectron_phoIso",&recoAllLowPtElectronPhoIso_);
+    outT->Branch("AllLptElectron_rhoEA",&recoAllLowPtElectronRhoEA_);
+    outT->Branch("AllLptElectron_trkProb",&recoAllLowPtElectronTrkProb_);
+    outT->Branch("AllLptElectron_numTrackerHits",&recoAllLowPtElectronTrkNumTrackerHits_);
+    outT->Branch("AllLptElectron_numPixHits",&recoAllLowPtElectronTrkNumPixHits_);
+    outT->Branch("AllLptElectron_numStripHits",&recoAllLowPtElectronTrkNumStripHits_);
+    outT->Branch("AllLptElectron_charge",&recoAllLowPtElectronCharge_);
+    outT->Branch("AllLptElectron_minDRtoReg",&recoAllLowPtElectronMinDrToReg_);
+    outT->Branch("AllLptElectron_isPF",&recoAllLowPtElectronIsPF_);
+    outT->Branch("AllLptElectron_genMatched",&recoAllLowPtElectronGenMatched_);
+    outT->Branch("AllLptElectron_matchType",&recoAllLowPtElectronMatchType_);
+    outT->Branch("AllLptElectron_dRJets",&recoAllLowPtElectronDrToJets_);
+    outT->Branch("AllLptElectron_dPhiJets",&recoAllLowPtElectronDphiToJets_);
+    outT->Branch("AllLptElectron_full55sigmaIetaIeta",&recoAllLowPtElectronFull5x5_sigmaIetaIeta_);
+    outT->Branch("AllLptElectron_absdEtaSeed",&recoAllLowPtElectronAbsdEtaSeed_);
+    outT->Branch("AllLptElectron_absdPhiIn",&recoAllLowPtElectronAbsdPhiIn_);
+    outT->Branch("AllLptElectron_HoverE",&recoAllLowPtElectronHoverE_);
+    outT->Branch("AllLptElectron_abs1overEm1overP",&recoAllLowPtElectronAbs1overEm1overP_);
+    outT->Branch("AllLptElectron_expMissingInnerHits",&recoAllLowPtElectronExpMissingInnerHits_);
+    outT->Branch("AllLptElectron_conversionVeto",&recoAllLowPtElectronConversionVeto_);
+    outT->Branch("AllLptElectron_isEE",&recoAllLowPtElectronIsEE_);
+    // x-cleaning status and GED match info
+    outT->Branch("AllLptElectron_xCleaned",&recoAllLowPtElectronIsXCleaned_);
+    outT->Branch("AllLptElectron_gedIdx",&recoAllLowPtElectronGEDidx_);
+    outT->Branch("AllLptElectron_gedIsMatched",&recoAllLowPtElectronGEDisMatched_);
 
     // DSA muons
     outT->Branch("nDSAMuon", &nDSAMuon_);
@@ -449,6 +508,8 @@ void NtupleContainerV2::CreateTreeBranches() {
             outT->Branch("GenEle_matchType",&genEleMatchType_);
             outT->Branch("GenEle_matchIdxLocal",&genEleMatchIdxLocal_);
             outT->Branch("GenEle_matchIdxGlobal",&genEleMatchIdxGlobal_);
+            outT->Branch("GenEle_matchedAllLowPt",&genEleMatchedAllLowPt_);
+            outT->Branch("GenEle_matchIdxAllLowPt",&genEleMatchIdxAllLowPt_);
 
             outT->Branch("GenEle_GEDPtRes",&genEleGEDPtRes_);
             outT->Branch("GenEle_GEDPtResRel",&genEleGEDPtResRel_);
@@ -472,6 +533,8 @@ void NtupleContainerV2::CreateTreeBranches() {
             outT->Branch("GenPos_matchType",&genPosMatchType_);
             outT->Branch("GenPos_matchIdxLocal",&genPosMatchIdxLocal_);
             outT->Branch("GenPos_matchIdxGlobal",&genPosMatchIdxGlobal_);
+            outT->Branch("GenPos_matchedAllLowPt",&genPosMatchedAllLowPt_);
+            outT->Branch("GenPos_matchIdxAllLowPt",&genPosMatchIdxAllLowPt_);
 
             outT->Branch("GenPos_GEDPtRes",&genPosGEDPtRes_);
             outT->Branch("GenPos_GEDPtResRel",&genPosGEDPtResRel_);
@@ -545,6 +608,8 @@ void NtupleContainerV2::ClearTreeBranches() {
     genEleMatchType_ = "None";
     genEleMatchIdxLocal_ = -999;
     genEleMatchIdxGlobal_ = -999;
+    genEleMatchedAllLowPt_ = false;
+    genEleMatchIdxAllLowPt_ = -999;
 
     genPosCharge_ = 0;
     genPosMotherID_ = 0;
@@ -563,6 +628,8 @@ void NtupleContainerV2::ClearTreeBranches() {
     genPosMatchType_ = "None";
     genPosMatchIdxLocal_ = -999;
     genPosMatchIdxGlobal_ = -999;
+    genPosMatchedAllLowPt_ = false;
+    genPosMatchIdxAllLowPt_ = -999;
 
     genEleGEDPtRes_ = -999;
     genEleGEDPtResRel_ = -999;
@@ -686,6 +753,8 @@ void NtupleContainerV2::ClearTreeBranches() {
     // special vars for x-cleaning study
     recoElectronHasLptMatch_.clear();
     recoElectronLptMatchIdx_.clear();
+    recoElectronHasAllLptMatch_.clear();
+    recoElectronAllLptMatchIdx_.clear();
 
     // Low pT electrons
     nElectronLowPt_ = 0;
@@ -743,6 +812,62 @@ void NtupleContainerV2::ClearTreeBranches() {
     recoLowPtElectronIsXCleaned_.clear();
     recoLowPtElectronGEDidx_.clear();
     recoLowPtElectronGEDisMatched_.clear();
+
+    // Low pT electrons
+    nElectronAllLowPt_ = 0;
+    recoAllLowPtElectronPt_.clear();
+    recoAllLowPtElectronEta_.clear();
+    recoAllLowPtElectronEtaError_.clear();
+    recoAllLowPtElectronPhi_.clear();
+    recoAllLowPtElectronPhiError_.clear();
+    recoAllLowPtElectronID_.clear();
+    recoAllLowPtElectronAngularRes_.clear();
+    recoAllLowPtElectronE_.clear();
+    recoAllLowPtElectronVxy_.clear();
+    recoAllLowPtElectronVz_.clear();
+    recoAllLowPtElectronDxy_.clear();
+    recoAllLowPtElectronDxyError_.clear();
+    recoAllLowPtElectronDz_.clear();
+    recoAllLowPtElectronDzError_.clear();
+    recoAllLowPtElectronTrkChi2_.clear();
+    recoAllLowPtElectronTrkIso_.clear();
+    recoAllLowPtElectronTrkRelIso_.clear();
+    recoAllLowPtElectronCaloIso_.clear();
+    recoAllLowPtElectronCaloRelIso_.clear();
+    recoAllLowPtElectronPFIso_.clear();
+    recoAllLowPtElectronPFRelIso_.clear();
+    recoAllLowPtElectronMiniIso_.clear();
+    recoAllLowPtElectronMiniRelIso_.clear();
+    recoAllLowPtElectronPFIsoEleCorr_.clear();
+    recoAllLowPtElectronPFRelIsoEleCorr_.clear();
+    recoAllLowPtElectronMiniIsoEleCorr_.clear();
+    recoAllLowPtElectronMiniRelIsoEleCorr_.clear();
+    recoAllLowPtElectronChadIso_.clear();
+    recoAllLowPtElectronNhadIso_.clear();
+    recoAllLowPtElectronPhoIso_.clear();
+    recoAllLowPtElectronRhoEA_.clear();
+    recoAllLowPtElectronTrkProb_.clear();
+    recoAllLowPtElectronTrkNumTrackerHits_.clear();
+    recoAllLowPtElectronTrkNumPixHits_.clear();
+    recoAllLowPtElectronTrkNumStripHits_.clear();
+    recoAllLowPtElectronCharge_.clear();
+    recoAllLowPtElectronMinDrToReg_.clear();
+    recoAllLowPtElectronIsPF_.clear();
+    recoAllLowPtElectronGenMatched_.clear();
+    recoAllLowPtElectronMatchType_.clear();
+    recoAllLowPtElectronDrToJets_.clear();
+    recoAllLowPtElectronDphiToJets_.clear();
+    recoAllLowPtElectronFull5x5_sigmaIetaIeta_.clear();
+    recoAllLowPtElectronAbsdEtaSeed_.clear();
+    recoAllLowPtElectronAbsdPhiIn_.clear();
+    recoAllLowPtElectronHoverE_.clear();
+    recoAllLowPtElectronAbs1overEm1overP_.clear();
+    recoAllLowPtElectronExpMissingInnerHits_.clear();
+    recoAllLowPtElectronConversionVeto_.clear();
+    recoAllLowPtElectronIsEE_.clear();
+    recoAllLowPtElectronIsXCleaned_.clear();
+    recoAllLowPtElectronGEDidx_.clear();
+    recoAllLowPtElectronGEDisMatched_.clear();
 
     // Gen weight and pileup
     genwgt_ = 0;
