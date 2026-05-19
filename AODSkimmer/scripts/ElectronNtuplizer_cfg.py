@@ -267,7 +267,8 @@ process.maxEvents = cms.untracked.PSet(
 )
 process.source = cms.Source("PoolSource",
     fileNames = cms.untracked.vstring(options.inputFiles),
-    skipBadFiles = cms.untracked.bool(True)
+    skipBadFiles = cms.untracked.bool(True),
+    cacheSize = cms.untracked.uint32(0)
 )
 process.TFileService = cms.Service("TFileService",
     fileName = cms.string(options.outfile),

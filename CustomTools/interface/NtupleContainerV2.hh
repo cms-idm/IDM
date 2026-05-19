@@ -82,6 +82,8 @@ public:
     std::string genEleMatchType_;
     int genEleMatchIdxLocal_;
     int genEleMatchIdxGlobal_;
+    bool genEleMatchedAllLowPt_;
+    int genEleMatchIdxAllLowPt_;
 
     int genPosCharge_;
     int genPosMotherID_;
@@ -100,6 +102,8 @@ public:
     std::string genPosMatchType_;
     int genPosMatchIdxLocal_;
     int genPosMatchIdxGlobal_;
+    bool genPosMatchedAllLowPt_;
+    int genPosMatchIdxAllLowPt_;
 
     // Gen Electron + Positron info
     float genEEPt_;
@@ -214,6 +218,8 @@ public:
     // special variables for the x-cleaning study
     vector<bool> recoElectronHasLptMatch_;
     vector<int> recoElectronLptMatchIdx_;
+    vector<bool> recoElectronHasAllLptMatch_;
+    vector<int> recoElectronAllLptMatchIdx_;
 
     // Low pT electrons
     int nElectronLowPt_;
@@ -271,6 +277,63 @@ public:
     vector<bool> recoLowPtElectronIsXCleaned_;
     vector<int> recoLowPtElectronGEDidx_;
     vector<bool> recoLowPtElectronGEDisMatched_;
+
+    // All Low pT electrons (includes cross-cleaned)
+    int nElectronAllLowPt_;
+    vector<float> recoAllLowPtElectronPt_;
+    vector<float> recoAllLowPtElectronEta_;
+    vector<float> recoAllLowPtElectronEtaError_;
+    vector<float> recoAllLowPtElectronPhi_;
+    vector<float> recoAllLowPtElectronPhiError_;
+    vector<float> recoAllLowPtElectronID_;
+    vector<float> recoAllLowPtElectronAngularRes_;
+    vector<float> recoAllLowPtElectronE_;
+    vector<float> recoAllLowPtElectronVxy_;
+    vector<float> recoAllLowPtElectronVz_;
+    vector<float> recoAllLowPtElectronDxy_;
+    vector<float> recoAllLowPtElectronDxyError_;
+    vector<float> recoAllLowPtElectronDz_;
+    vector<float> recoAllLowPtElectronDzError_;
+    vector<float> recoAllLowPtElectronTrkChi2_;
+    vector<float> recoAllLowPtElectronTrkIso_;
+    vector<float> recoAllLowPtElectronTrkRelIso_;
+    vector<float> recoAllLowPtElectronCaloIso_;
+    vector<float> recoAllLowPtElectronCaloRelIso_;
+    vector<float> recoAllLowPtElectronPFIso_;
+    vector<float> recoAllLowPtElectronPFRelIso_;
+    vector<float> recoAllLowPtElectronMiniIso_;
+    vector<float> recoAllLowPtElectronMiniRelIso_;
+    vector<float> recoAllLowPtElectronPFIsoEleCorr_;
+    vector<float> recoAllLowPtElectronPFRelIsoEleCorr_;
+    vector<float> recoAllLowPtElectronMiniIsoEleCorr_;
+    vector<float> recoAllLowPtElectronMiniRelIsoEleCorr_;
+    vector<float> recoAllLowPtElectronTrkProb_;
+    vector<float> recoAllLowPtElectronChadIso_;
+    vector<float> recoAllLowPtElectronNhadIso_;
+    vector<float> recoAllLowPtElectronPhoIso_;
+    vector<float> recoAllLowPtElectronRhoEA_;
+    vector<int> recoAllLowPtElectronTrkNumTrackerHits_;
+    vector<int> recoAllLowPtElectronTrkNumPixHits_;
+    vector<int> recoAllLowPtElectronTrkNumStripHits_;
+    vector<int> recoAllLowPtElectronCharge_;
+    vector<float> recoAllLowPtElectronMinDrToReg_;
+    vector<bool> recoAllLowPtElectronIsPF_;
+    vector<bool> recoAllLowPtElectronGenMatched_;
+    vector<int> recoAllLowPtElectronMatchType_;
+    vector<vector<float> > recoAllLowPtElectronDrToJets_;
+    vector<vector<float> > recoAllLowPtElectronDphiToJets_;
+    vector<float> recoAllLowPtElectronFull5x5_sigmaIetaIeta_;
+    vector<float> recoAllLowPtElectronAbsdEtaSeed_;
+    vector<float> recoAllLowPtElectronAbsdPhiIn_;
+    vector<float> recoAllLowPtElectronHoverE_;
+    vector<float> recoAllLowPtElectronAbs1overEm1overP_;
+    vector<int> recoAllLowPtElectronExpMissingInnerHits_;
+    vector<bool> recoAllLowPtElectronConversionVeto_;
+    vector<bool> recoAllLowPtElectronIsEE_;
+    // x-cleaning status and GED match info
+    vector<bool> recoAllLowPtElectronIsXCleaned_;
+    vector<int> recoAllLowPtElectronGEDidx_;
+    vector<bool> recoAllLowPtElectronGEDisMatched_;
 
     // DSA Muons
     int nDSAMuon_;
