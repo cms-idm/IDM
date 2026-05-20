@@ -543,18 +543,9 @@ def plot_signal_1D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
 
     fig = style_dict['fig']
     ax = style_dict['ax']
-    
-# <<<<<<< HEAD
-# <<<<<<< HEAD
-    hep.cms.label('Private Work', data=False, year=plot_dict['year'], com='13.6')
-    # hep.cms.label('Preliminary', data=False, year=plot_dict['year'], com='13.6')
 
-# # =======
-# #     hep.cms.label('', data=False, year=plot_dict['year'])
-# # >>>>>>> kyungmin/main
-# =======
-#     hep.cms.label('', data=False, year=plot_dict['year'])
-# >>>>>>> Andrew/ACR_Run3
+    hep.cms.label('Private Work', data=False, year=plot_dict['year'], com='13.6')
+  
     
     # get signal point info
     si = utils.get_signal_point_dict(sig_histo)
@@ -603,6 +594,7 @@ def plot_signal_1D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
         ax.set_yscale('log')
     
     count = histo.values()
+    edges = histo.axes[0].edges
     
 
 
@@ -615,7 +607,7 @@ def plot_signal_1D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
         plt.tight_layout()
         plt.savefig(f"{style_dict['outDir']}/{style_dict['outName']}")
         print(f"Saved: {style_dict['outDir']}/{style_dict['outName']}")
-    return count
+    return count, edges
 
 #Used for Electron Reconstruction Efficiency when projecting pT
 def plot_signal_1D_match(sig_histo, m1, delta, ctau, plot_dict, style_dict, match_type='R', passID='1'):
