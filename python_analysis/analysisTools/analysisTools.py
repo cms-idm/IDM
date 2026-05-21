@@ -563,7 +563,7 @@ class genProcessor(iDMeProcessor):
         #### Demand >= 1 ee vertices ####
         #################################
         #routines.defineGoodVertices(events) # define "good" vertices based on whether associated electrons pass ID cuts
-        routines.defineGoodVertices(events,version='none') # define "good" vertices based on whether associated electrons pass ID cuts
+        routines.defineGoodVertices(events,version='none',ele_id='dR') # define "good" vertices based on whether associated electrons pass ID cuts
 
         #events.__setitem__("nGoodVtx",ak.count(events.good_vtx.vxy,axis=1))
         #events = events[events.nGoodVtx > 0]
