@@ -214,7 +214,7 @@ def getBtagInfo(events):
      events["PFJet","btagNum"] = btagNum
      events["PFJet","btagDenom"] = btagDenom
 
-def defineGoodVertices(events,version='v9',ele_id='dR'):
+def defineGoodVertices(events,version='none',ele_id='dR'):
     # Selecting electrons that pass basic pT and eta cuts
     if ele_id == 'basic':
         IDcut = events.vtx.e1.passIDBasic & events.vtx.e2.passIDBasic
