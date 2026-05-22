@@ -28,16 +28,26 @@ class myHisto:
         self.mindR = self.parse_axis(('mindR',60,0,0.06)) 
         
         #For eff studies
-        self.ele_pt = self.parse_axis(("pt",[0,1,2,3,4,5,8,10,12,14,16,18,20,25]))   
+        self.ele_pt = self.parse_axis(("pt",[0,1,2,3,4,5,8,10,12,14,16,18,20,25])) 
+        self.vxy1 = self.parse_axis(('vxy',[0,1,2,3,4,5,6,7,8,9,10,12,14,16,18,20]))  #Lxy 10, 100
+
 
         self.PT_GED = self.parse_axis(("PT_GED",[0,1,2,3,4,5,8,10,12,14,16,18,20,25]))  
         self.PT_Lpt = self.parse_axis(("PT_Lpt",[0,1,2,3,4,5,8,10,12,14,16,18,20,25]))  
 
         self.PT_Lpt_noxclean = self.parse_axis(("PT_Lpt_noxclean",[0,1,2,3,4,5,8,10,12,14,16,18,20,25]))  
 
+
+        self.VXY_GED = self.parse_axis(("VXY_GED",[0,1,2,3,4,5,6,7,8,9,10,12,14,16,18,20]))  
+        self.VXY_Lpt = self.parse_axis(("VXY_Lpt",[0,1,2,3,4,5,6,7,8,9,10,12,14,16,18,20]))  
+
+        self.VXY_Lpt_noxclean = self.parse_axis(("VXY_Lpt_noxclean",[0,1,2,3,4,5,6,7,8,9,10,12,14,16,18,20]))  
+
+
        
         self.IDScore = self.parse_axis(('id',100,-1,3))
         self.ele_passID = self.parse_axis(('passID',[0,1]))
+
 
       
 
@@ -82,11 +92,20 @@ def make_histograms():
     
     
     h.make('gen_ele_pt','ele_pt')
+    h.make('gen_ele_vxy1','vxy1')
+
+    
     h.make('pT_genElePos_GED', 'PT_GED')
     h.make('pT_genElePos_Lpt', 'PT_Lpt')
 
+    h.make('vxy_genElePos_GED', 'VXY_GED')
+    h.make('vxy_genElePos_Lpt', 'VXY_Lpt')
+    
+
+
     #No xclean
     h.make("pT_genElePos_Lpt_Noxclean", 'PT_Lpt_noxclean')
+    h.make("vxy_genElePos_Lpt_Noxclean", 'VXY_Lpt_noxclean')
 
     
 
@@ -111,6 +130,10 @@ def fillHistos(events,h,samp,cut,info,sum_wgt=1):
 
         pt_genele_GED = events_with_genEle_matched.GenEle.pt[mask_R] 
         pt_genele_Lpt = events_with_genEle_matched.GenEle.pt[mask_L]
+        
+        #vxy cases
+        vxy_genele_GED = events_with_genEle_matched.GenEle.vxy[mask_R] 
+        vxy_genele_Lpt = events_with_genEle_matched.GenEle.vxy[mask_L]
        
         
         mask_genpos = events.GenPos.matched        
@@ -122,15 +145,21 @@ def fillHistos(events,h,samp,cut,info,sum_wgt=1):
         pt_genpos_GED = events_with_genpos_matched.GenPos.pt[mask_R_pos] 
         pt_genpos_Lpt = events_with_genpos_matched.GenPos.pt[mask_L_pos] 
 
+        
+        #vxy cases
+        vxy_genpos_GED = events_with_genpos_matched.GenPos.vxy[mask_R_pos] 
+        vxy_genpos_Lpt = events_with_genpos_matched.GenPos.vxy[mask_L_pos] 
+
 
         #All Lpt ele (No xclean)
         mask_allLpt_e = events.GenEle.matchedAllLowPt 
-        print ("mask_allLpt_e=", mask_allLpt_e)
         pt_genele_Lpt_ALL = events.GenEle.pt[mask_allLpt_e]
+        vxy_genele_Lpt_ALL = events.GenEle.vxy[mask_allLpt_e]
+
 
         mask_allLpt_p = events.GenPos.matchedAllLowPt
-        print ("mask_allLpt_p=", mask_allLpt_p)
         pt_genpos_Lpt_ALL = events.GenPos.pt[mask_allLpt_p]
+        vxy_genpos_Lpt_ALL = events.GenPos.vxy[mask_allLpt_p]
 
         
         
@@ -142,16 +171,32 @@ def fillHistos(events,h,samp,cut,info,sum_wgt=1):
         h.fill("gen_ele_pt",pt=events.GenEle.pt)
         h.fill("gen_ele_pt",pt=events.GenPos.pt)
 
+
         h.fill("pT_genElePos_GED", PT_GED = pt_genele_GED)
         h.fill("pT_genElePos_GED", PT_GED = pt_genpos_GED)
 
         h.fill("pT_genElePos_Lpt", PT_Lpt = pt_genele_Lpt)
-        h.fill("pT_genElePos_Lpt", PT_Lpt = pt_genpos_Lpt)
+        h.fill("pT_genElePos_Lpt", PT_Lpt = pt_genpos_Lpt)      
+
+        
 
         h.fill("pT_genElePos_Lpt_Noxclean", PT_Lpt_noxclean = pt_genele_Lpt_ALL)
         h.fill("pT_genElePos_Lpt_Noxclean", PT_Lpt_noxclean = pt_genpos_Lpt_ALL)
 
+###################################vxy cases##############
 
+        h.fill("gen_ele_vxy1",vxy=events.GenEle.vxy)
+        h.fill("gen_ele_vxy1",vxy=events.GenPos.vxy)
+        
+        h.fill("vxy_genElePos_GED", VXY_GED = vxy_genele_GED)
+        h.fill("vxy_genElePos_GED", VXY_GED = vxy_genpos_GED)
+
+        h.fill("vxy_genElePos_Lpt", VXY_Lpt = vxy_genele_Lpt)
+        h.fill("vxy_genElePos_Lpt", VXY_Lpt = vxy_genpos_Lpt)
+
+
+        h.fill("vxy_genElePos_Lpt_Noxclean", VXY_Lpt_noxclean = vxy_genele_Lpt_ALL)
+        h.fill("vxy_genElePos_Lpt_Noxclean", VXY_Lpt_noxclean = vxy_genpos_Lpt_ALL)
 
 
         
