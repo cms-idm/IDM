@@ -1,4 +1,5 @@
-from hist.axis import StrCategory, Regular, Integer, IntCategory
+from hist.axis import StrCategory, Regular, Integer, IntCategory, Variable
+import numpy as np
 
 ############################
 ##### Categorical Axes #####
@@ -38,11 +39,18 @@ ele_PFRelIso = Regular(100,0,10,name="relIso",label="PF Relative Iso")
 ele_PFIso = Regular(100,0,100,name="iso",label="PF Isolation")
 ele_PFRelIsoM = Regular(100,0,200,name="isoM",label=r"$I_{PF}^{rel} \times m_{e^+e^-}$")
 ele_PFIsoM = Regular(100,0,200,name="isoM",label=r"$I_{PF} \times m_{e^+e^-}$")
+ele_miniIso = Regular(100,0,100,name="iso",label="Mini Iso")
+ele_miniRelIso = Regular(100,0,10,name="iso",label="Mini Relative Iso")
+ele_miniIsoCorr = Regular(100,0,100,name="iso",label="Corrected Mini Iso")
+ele_miniRelIsoCorr = Regular(100,0,10,name="iso",label="Corrected Mini Relative Iso")
+
 ele_prob = Regular(100,0,1,name="prob",label=r"Electron Track $\chi^2$ Probability")
 ele_angRes = Regular(100,0,0.1,name="angRes",label=r"Angular Resolution $\sqrt{\sigma_\eta^2 + \sigma_\phi^2}$")
 ele_dxy = Regular(100,0,20,name="dxy",label="Electron Track $d_{xy}$ [cm]")
 ele_dxySignif = Regular(150,0,150,name="dxy_signif",label=r"Electron Track $d_{xy}/\sigma_{d_{xy}}$")
 ele_dz = Regular(100,0,5,name="dz",label="Electron Track $d_{z}$ [cm]")
+ele_dxydz = Regular(100,0,5,name="dxydz",label="Electron Track $d_{xy}/d_{z}$")
+ele_logdxydz = Regular(200,-10,10,name="logdxydz",label="Electron Track $log(d_{xy}/d_{z})$")
 
 # Dielectrons
 ee_mass = Regular(100,0,4,name="mass",label="$m_{e^+e^-}$ [GeV]")
@@ -78,7 +86,7 @@ vtx_chi2 = Regular(150,0,30,name="chi2",label=r"Vertex Fit $\chi^2/df$")
 vtx_vxySignif = Regular(100,0,100,name="vxy_signif",label="Vertex $v_{xy}$ Significance")
 vtx_prob = Regular(100,0,1,name="prob",label=r"Vertex $\chi^2$ Probability")
 vtx_pt = Regular(100,0,200,name="pt",label="Selected Vertex $p_T$")
-vtx_mass = Regular(100,0,1,name="mass",label="$m_{e^+e^-}$ [GeV]")
+vtx_mass = Regular(100,0,5,name="mass",label="$m_{e^+e^-}$ [GeV]")
 ee_met_dphi = Regular(100,0,0.5,name="dphi",label=r"$\Delta \phi$")
 
 # Gen-matching
@@ -107,6 +115,7 @@ pfiso = Regular(100,0,1,name='pfiso',label=r"$I_{\mathrm{PF}}^{\mathrm{rel}}$")
 dphi_generic = Regular(32,0,3.2,name="dphi",label=r"$\Delta \phi$")
 met_pt = Regular(100,0,400,name="met_pt",label="$p_T^{miss}$ [GeV]")
 njets = Integer(0,8,name="njets",label="$N_{jets}$")
+nvtxs = Integer(0,8,name="nvtxs",label="$N_{vertices}$")
 neles = Integer(0,4,name="neles",label="$N_{electrons}$")
 nphos = Integer(0,4,name="nphos",label="$N_{photons}$")
 btag = Regular(100,0,1,name="btag",label="DeepJet B-Tag Score")
@@ -118,5 +127,30 @@ ctau = Regular(10000, 0, 1000, name="ctau", label=r"$c\tau$ [mm]")
 
 # Electron ID
 ele_id = Regular(50,-1,4,name="ele_id",label="Low $p_T$ electron ID Score")
-
 #triggercut = Integer(0,1,name="triggercut",label="triggercut")
+
+# Special axes for managing 2D hist rebinning + memory issues
+edges = np.concatenate([
+    np.linspace(0, 0.1, 21),      # 20 bins × 0.005 width
+    np.linspace(0.15, 1.0, 18),   # 18 bins × 0.05 width
+    np.linspace(1.5, 10.0, 18),   # 18 bins × 0.5 width
+    np.linspace(11.0, 50.0, 40),  # 40 bins × 1 width
+])
+ele_pt_special = Variable(edges, name="pt", label="$p_{T}$ [GeV]")
+#Lxy_zoom_fine = Regular(400,0,40,name="lxy",label="$L_{xy}$ [cm]")
+edges = np.concatenate([
+    np.linspace(0, 0.1, 21),      # 20 bins × 0.005 width
+    np.linspace(0.15, 1.0, 18),   # 18 bins × 0.05 width
+    np.linspace(1.5, 10.0, 18),   # 18 bins × 0.5 width
+    np.linspace(11.0, 40.0, 30),  # 30 bins × 1 width
+])
+ele_lxy_special = Variable(edges, name="lxy", label="$L_{xy}$ [cm]")
+
+# resolution axes
+edges = np.concatenate([
+    np.linspace(-2.0, -1.0, 21),         # 20 bins  × 0.05 width
+    np.linspace(-0.98, 1.0, 100),      # 100 bins × 0.02 width
+    np.linspace( 1.05, 2.0, 20),        # 20 bins  × 0.05 width
+])
+res_pt = Variable(edges, name="res", label=r"$\Delta p_T/p_T^\mathrm{gen}$")
+res_e = Variable(edges, name="res", label=r"$\Delta E/E^\mathrm{gen}$")

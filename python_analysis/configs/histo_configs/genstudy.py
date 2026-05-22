@@ -36,7 +36,7 @@ def make_histograms():
 
 subroutines = []
 
-def fillHists(events, hists, samp, cut, info, sum_wgt=1):
+def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
     wgt = events.eventWgt/sum_wgt
 
     if info['type'] == "signal":
@@ -105,11 +105,11 @@ def fillHists(events, hists, samp, cut, info, sum_wgt=1):
         #print(eechi1_p3, eechi1_e, eechi1_mass, eechi1_betagamma, eechi1_ctau_proper)
         hists["gen_eechi1_ctau_proper"  ].fill(samp = samp, cut = cut, ctau = eechi1_ctau_proper, weight = wgt[eechi1_mask])
 
-        print(chi2.mass, chi2_betagamma)
-        print(eechi1_mass, eechi1_betagamma)
+        #print(chi2.mass, chi2_betagamma)
+        #print(eechi1_mass, eechi1_betagamma)
         # These should be identical event-by-event if reconstruction is consistent
-        print(ak.mean(eechi1_mass))
-        print(ak.mean(chi2.mass))
+        #print(ak.mean(eechi1_mass))
+        #print(ak.mean(chi2.mass))
         # Also check the boost
-        print(ak.mean(eechi1_betagamma))
-        print(ak.mean(chi2_betagamma))
+        #print(ak.mean(eechi1_betagamma))
+        #print(ak.mean(chi2_betagamma))

@@ -25,21 +25,19 @@ import warnings
 import mplhep as hep
 
 outdir = 'workarea'
-saved_signal_hists = f"{outdir}/hists_sigMay2026_an-sel_elerecoeff.coffea"
+saved_signal_hists = f"{outdir}/hists_sigMay2026_recoeff-sel_elerecoeff.coffea"
 
 title = 'Electron Reco'
-plottag = 'prevtx_ele-reco_pt-lxy'
-
+plottag = 'hlt2eles_ele-reco_pt-lxy'
+plot_dict = {
+    'year': 2024,
+    'cut': 'cut3',
+}
 _pt_edges  = [0, 1, 2, 5, 10, 20, 50]
 _lxy_edges = [0, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 40]
 
 histvars        = ['ele_reco_lpt_pt_lxy', 'ele_reco_ged_pt_lxy', 'ele_reco_none_pt_lxy']
 alllpt_histvars = ['ele_reco_alllpt_pt_lxy', 'ele_reco_noalllpt_pt_lxy']
-
-plot_dict = {
-    'year': 2024,
-    'cut': 'cut8',
-}
 
 # Signal
 s_hists = util.load(saved_signal_hists)[0]

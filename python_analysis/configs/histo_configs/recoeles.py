@@ -10,13 +10,15 @@ import awkward as ak
 def make_histograms():
     histograms = {
         # quantities associated w/ selected vertex
-        "reco_N_good_vtx":                Hist(samp, cut, neles,         storage=hist.storage.Weight()),
+        "reco_N_pairs":                   Hist(samp, cut, nvtxs,         storage=hist.storage.Weight()),
+        "reco_N_vtx":                     Hist(samp, cut, nvtxs,         storage=hist.storage.Weight()),
+        "reco_N_good_vtx":                Hist(samp, cut, nvtxs,         storage=hist.storage.Weight()),
         "reco_N_jets":                    Hist(samp, cut, njets,         storage=hist.storage.Weight()),
         "reco_N_photons":                 Hist(samp, cut, nphos,         storage=hist.storage.Weight()),
         "reco_N_Lpt_eles":                Hist(samp, cut, neles,         storage=hist.storage.Weight()),
         "reco_N_GED_eles":                Hist(samp, cut, neles,         storage=hist.storage.Weight()),
-        "reco_ele_lpt_leading_pt" :       Hist(samp, cut, ele_pt,        storage=hist.storage.Weight()),
-        "reco_ele_lpt_subleading_pt" :    Hist(samp, cut, ele_pt,        storage=hist.storage.Weight()),
+        "reco_ele_lpt_leading_pt" :       Hist(samp, cut, ele_pt_zoom_fine,        storage=hist.storage.Weight()),
+        "reco_ele_lpt_subleading_pt" :    Hist(samp, cut, ele_pt_zoom_fine,        storage=hist.storage.Weight()),
         "reco_ele_lpt_leading_eta" :      Hist(samp, cut, ele_eta,       storage=hist.storage.Weight()),
         "reco_ele_lpt_subleading_eta" :   Hist(samp, cut, ele_eta,       storage=hist.storage.Weight()),
         "reco_ele_lpt_leading_dxy" :      Hist(samp, cut, ele_dxy,       storage=hist.storage.Weight()),
@@ -27,8 +29,8 @@ def make_histograms():
         "reco_ele_lpt_subleading_vxy" :   Hist(samp, cut, vxy_coarse,    storage=hist.storage.Weight()),
         "reco_ele_lpt_leading_vz" :       Hist(samp, cut, vz_coarse,     storage=hist.storage.Weight()),
         "reco_ele_lpt_subleading_vz" :    Hist(samp, cut, vz_coarse,     storage=hist.storage.Weight()),
-        "reco_ele_ged_leading_pt" :       Hist(samp, cut, ele_pt,        storage=hist.storage.Weight()),
-        "reco_ele_ged_subleading_pt" :    Hist(samp, cut, ele_pt,        storage=hist.storage.Weight()),
+        "reco_ele_ged_leading_pt" :       Hist(samp, cut, ele_pt_zoom_fine,        storage=hist.storage.Weight()),
+        "reco_ele_ged_subleading_pt" :    Hist(samp, cut, ele_pt_zoom_fine,        storage=hist.storage.Weight()),
         "reco_ele_ged_leading_eta" :      Hist(samp, cut, ele_eta,       storage=hist.storage.Weight()),
         "reco_ele_ged_subleading_eta" :   Hist(samp, cut, ele_eta,       storage=hist.storage.Weight()),
         "reco_ele_ged_leading_dxy" :      Hist(samp, cut, ele_dxy,       storage=hist.storage.Weight()),
@@ -50,7 +52,7 @@ subroutines = []
 #sel_vtx ['typ', 'vxy', 'sigmavxy', 'vx', 'vy', 'vz', 'reduced_chi2', 'prob', 'dR', 'sign', 'minDxy', 'METdPhi', 'pt', 'eta', 'phi', 'energy', 'm', 'px', 'py', 'pz', 'refit_m', 'refit_pt', 'refit_eta', 'refit_phi', 'refit_dR', 'isMatched', 'matchSign', 'dRJets', 'dPhiJets', 'e1_typ', 'e1_idx', 'e1_isMatched', 'e1_matchType', 'e1_refit_dxy', 'e1_refit_dxyErr', 'e1_refit_dz', 'e1_refit_dzErr', 'e1_refit_chi2', 'e2_typ', 'e2_idx', 'e2_isMatched', 'e2_matchType', 'e2_refit_dxy', 'e2_refit_dxyErr', 'e2_refit_dz', 'e2_refit_dzErr', 'e2_refit_chi2', 'mindRj', 'mindPhiJ', 'corrMinDxy', 'cos_collinear', 'projectedLxy', 'cos_collinear_fromPV', 'cos_collinear_fromPV_refit', 'e1', 'e2', 'min_dxy', 'eleDphi', 'vxy_fromPV', 'gen_cos_collinear_fromPV', 'isGood']
 #LptElectron ['pt', 'eta', 'etaErr', 'phi', 'phiErr', 'ID', 'angRes', 'e', 'vxy', 'vz', 'dxy', 'dxyErr', 'dz', 'dzErr', 'trkChi2', 'trkIso', 'trkRelIso', 'calIso', 'calRelIso', 'PFIso', 'PFRelIso', 'miniIso', 'miniRelIso', 'PFIsoEleCorr', 'PFRelIsoEleCorr', 'miniIsoEleCorr', 'miniRelIsoEleCorr', 'chadIso', 'nhadIso', 'phoIso', 'rhoEA', 'trkProb', 'numTrackerHits', 'numPixHits', 'numStripHits', 'charge', 'minDRtoReg', 'isPF', 'genMatched', 'matchType', 'dRJets', 'dPhiJets', 'full55sigmaIetaIeta', 'absdEtaSeed', 'absdPhiIn', 'HoverE', 'abs1overEm1overP', 'expMissingInnerHits', 'conversionVeto', 'isEE', 'xCleaned', 'gedIdx', 'gedIsMatched', 'mindRj', 'mindPhiJ', 'IDscore', 'passID', 'passIDBasic']
 
-def fillHists(events, hists, samp, cut, info, sum_wgt=1):
+def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
     #wgt = events.eventWgt/sum_wgt
     wgt = events.eventWgt/np.sum(events.eventWgt)
     #print(sum_wgt, np.sum(events.eventWgt), np.sum(wgt))
@@ -73,7 +75,11 @@ def fillHists(events, hists, samp, cut, info, sum_wgt=1):
     cut_1_gedele = ak.num(eles_ged) >= 1
     cut_2_gedele = ak.num(eles_ged) >= 2
     
-    hists["reco_N_good_vtx"              ].fill(samp = samp, cut = cut, neles = events.nGoodVtx, weight = wgt)
+    n_total = ak.num(eles_ged) + ak.num(eles_lpt)
+    n_pairs = n_total * (n_total - 1) // 2   # C(N,2) = N*(N-1)/2
+    hists["reco_N_pairs"                 ].fill(samp = samp, cut = cut, nvtxs = n_pairs, weight = wgt)
+    hists["reco_N_vtx"                   ].fill(samp = samp, cut = cut, nvtxs = ak.num(events.vtx), weight = wgt)
+    hists["reco_N_good_vtx"              ].fill(samp = samp, cut = cut, nvtxs = events.nGoodVtx, weight = wgt)
     hists["reco_N_jets"                  ].fill(samp = samp, cut = cut, njets = ak.num(jets), weight = wgt)
     hists["reco_N_photons"               ].fill(samp = samp, cut = cut, nphos = ak.num(jets), weight = wgt)
     hists["reco_N_GED_eles"              ].fill(samp = samp, cut = cut, neles = ak.num(eles_ged), weight = wgt)

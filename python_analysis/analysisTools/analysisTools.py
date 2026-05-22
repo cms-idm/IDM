@@ -268,6 +268,7 @@ class iDMeProcessor(processor.ProcessorABC):
         cutflow = defaultdict(float)               # efficiency
         cutflow_counts = defaultdict(float)        # xsec-weighted event counts
         cutflow_nevts = defaultdict(int)           # raw event counts
+        cutflow_wgts2 = defaultdict(float)         # sum of squared normalized weights (for exact stat errors)
         cutflow_vtx_matched = defaultdict(float)   # (for signal MC) fraction that the selected vertex is truth-matched
         # (for signal MC) also check the above, but only counting the events where both gen ee are reconstructed: dR(reco,gen) < 0.1
 
@@ -294,6 +295,7 @@ class iDMeProcessor(processor.ProcessorABC):
         # Initial number of events
         if isMC:
             cutflow['all'] += ak.sum(events.genWgt)/sum_wgt
+            cutflow_wgts2['all'] += ak.sum(events.genWgt**2)/sum_wgt**2
         else:
             cutflow['all'] += len(events)/sum_wgt
         cutflow_nevts['all'] += len(events)
@@ -370,6 +372,7 @@ class iDMeProcessor(processor.ProcessorABC):
             # Initial number of events
             if isMC:
                 cutflow['njet'] += ak.sum(events.genWgt)/sum_wgt
+                cutflow_wgts2['njet'] += ak.sum(events.genWgt**2)/sum_wgt**2
             else:
                 cutflow['njet'] += len(events)/sum_wgt
             cutflow_nevts['njet'] += len(events)
@@ -434,6 +437,7 @@ class iDMeProcessor(processor.ProcessorABC):
             events, cutName, cutDescription, savePlots = cut(events,info)
             if isMC:
                 cutflow[cutName] += ak.sum(events.genWgt)/sum_wgt
+                cutflow_wgts2[cutName] += ak.sum(events.genWgt**2)/sum_wgt**2
             else:
                 cutflow[cutName] += len(events)/sum_wgt
             cutflow_nevts[cutName] += len(events)
@@ -461,6 +465,7 @@ class iDMeProcessor(processor.ProcessorABC):
         histos['cutflow'] = {samp:cutflow}
         histos['cutflow_cts'] = {samp:cutflow_counts}
         histos['cutflow_nevts'] = {samp:cutflow_nevts}
+        histos['cutflow_wgts2'] = {samp:cutflow_wgts2}
         histos['cutflow_vtx_matched'] = {samp:cutflow_vtx_matched}
 
         return histos
@@ -485,7 +490,8 @@ class genProcessor(iDMeProcessor):
         cutflow = defaultdict(float)               # efficiency
         cutflow_counts = defaultdict(float)        # xsec-weighted event counts
         cutflow_nevts = defaultdict(int)           # raw event counts
-        
+        cutflow_wgts2 = defaultdict(float)         # sum of squared normalized weights (for exact stat errors)
+
         sum_wgt = info["sum_wgt"]
         lumi, unc = getLumi(info['year'])
         xsec = info['xsec']
@@ -497,6 +503,7 @@ class genProcessor(iDMeProcessor):
 
         # Initial number of events
         cutflow['all'] += ak.sum(events.genWgt)/sum_wgt
+        cutflow_wgts2['all'] += ak.sum(events.genWgt**2)/sum_wgt**2
         cutflow_nevts['all'] += len(events)
         cutDesc['all'] = 'No cuts'
 
@@ -545,7 +552,8 @@ class genProcessor(iDMeProcessor):
         for cut in self.cuts:
             events, cutName, cutDescription, savePlots = cut(events,info)
             cutflow[cutName] += ak.sum(events.genWgt)/sum_wgt
-            cutflow_nevts[cutName] += len(events)            
+            cutflow_wgts2[cutName] += ak.sum(events.genWgt**2)/sum_wgt**2
+            cutflow_nevts[cutName] += len(events)
             cutDesc[cutName] += cutDescription + "@"
             # Fill histograms
             if savePlots and len(events) > 0: # fixes some bugginess trying to fill histograms with empty arrays
@@ -560,7 +568,8 @@ class genProcessor(iDMeProcessor):
         histos['cutflow'] = {samp:cutflow}
         histos['cutflow_cts'] = {samp:cutflow_counts}
         histos['cutflow_nevts'] = {samp:cutflow_nevts}
-        
+        histos['cutflow_wgts2'] = {samp:cutflow_wgts2}
+
         return histos
 
 # processor for doing nothing but filling histos

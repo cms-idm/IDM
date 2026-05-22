@@ -32,6 +32,12 @@ saved_signal_hists = f"{outdir}/hists_sigMay2026_recoeff-sel_elerecoeff.coffea"
 
 title = 'Electron Reco'
 seltag = 'hlt2eles'
+# Plot settings
+plot_dict = {
+    'variable': ['ele_reco_lpt_pt_lxy', 'ele_reco_ged_pt_lxy', 'ele_reco_none_pt_lxy'], 
+    'year': 2024,
+    'cut': 'cut3',
+}
 _pt_edges  = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 6, 7, 8, 9, 10, 12.5, 15, 17.5, 20, 22.5, 25, 30, 40, 50]
 _lxy_edges = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 7.5, 10, 12.5, 15, 20, 25, 30, 40]
 _eta_edges = list(np.linspace(-3, 3, 61))
@@ -74,13 +80,6 @@ s_cutsname = utils.get_signal_list_of_cuts(s_hists, get_cut_idx = False)
 df = utils.get_signal_cutflow_dict(s_hists, 'cutflow')
 size = (16, 12)
 fig, ax = plt.subplots(figsize=size)
-
-# Plot settings
-plot_dict = {
-    'variable': ['ele_reco_lpt_pt_lxy', 'ele_reco_ged_pt_lxy', 'ele_reco_none_pt_lxy'], 
-    'year': 2024,
-    'cut': 'cut3',
-}
 
 style_dict = {
     'fig': fig, 'ax': ax,

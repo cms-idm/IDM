@@ -5,14 +5,14 @@ import awkward as ak
 
 import sys
 #sys.path.append("../../analysisTools/")
-from tools.analysisTools import Analyzer
-from tools.analysisTools import loadSchema
-import tools.analysisTools as tools
-import tools.analysisSubroutines as routines
+from analysisTools.analysisTools import Analyzer
+from analysisTools.analysisTools import loadSchema
+import analysisTools.analysisTools as tools
+import analysisTools.analysisSubroutines as routines
 import importlib
 import coffea.util as util
-import tools.utils as utils
-import tools.plotTools as ptools
+import analysisTools.utils as utils
+import analysisTools.plotTools as ptools
 import time
 import json
 import os
@@ -22,7 +22,7 @@ import glob
 #hists_config = "configs/hists/genstudy.py"
 #sample_config = "configs/samples/signal_2024_Apr2026_aEM.json"
 outdir = 'workarea'
-saved_signal_hists = f"{outdir}/step1_genstudy_signal_minimalselection.coffea"
+saved_signal_hists = f"{outdir}/hists_sigMay2026_ansplitvtx-sel_genstudy.coffea"
 
 # Signal
 s_hists = util.load(saved_signal_hists)[0]
@@ -36,6 +36,24 @@ s_cutsname = utils.get_signal_list_of_cuts(s_hists, get_cut_idx = False)
 #print(s_cutsname)
 
 df = utils.get_signal_cutflow_dict(s_hists, 'cutflow')
+
+# Weighted fraction in first bin (dr < 0.01), summed over delta/ctau, one entry per m1
+print("\nWeighted fraction of gen diele dR in first bin (dr < 0.01) at cut5 (summed over delta, ctau):")
+for m1_val in sorted(s_pts['m1'].unique()):
+    rows = s_pts[np.isclose(s_pts['m1'], m1_val)]
+    h_sum = None
+    for _, row in rows.iterrows():
+        h = s_hists['gen_diele_dR'][{"samp": row['name'], "cut": "cut8"}]
+        h_sum = h if h_sum is None else h_sum + h
+    vals  = h_sum.values()
+    varis = h_sum.variances()
+    W     = vals.sum()
+    W_0   = vals[0]
+    V_0   = varis[0]
+    V_rest = varis.sum() - V_0
+    f     = W_0 / W if W > 0 else float('nan')
+    sigma = np.sqrt((1 - f)**2 * V_0 + f**2 * V_rest) / W if W > 0 else float('nan')
+    print(f"  m1={m1_val:.4g} GeV:  {f:.4f} +/- {sigma:.4f}  ({f*100:.2f} +/- {sigma*100:.2f}%)")
 
 #m1s = [0.05, 0.5, 5, 50]
 #deltas = [0.1, 0.2]
@@ -54,7 +72,7 @@ plot_title = r'Gen EE $\Delta R$'
 plot_dict = {
     'variable': ['gen_diele_dR'],
     'year': 2024,
-    'cut': 'cut5',
+    'cut': 'cut8',
 }
 
 style_dict = {

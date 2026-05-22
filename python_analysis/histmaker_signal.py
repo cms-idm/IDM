@@ -19,8 +19,8 @@ import glob
 
 # ---- SETTINGS ----
 vers = 'May2026'
-cuts = 'recoeff'
-hists = 'elerecoeff'
+cuts = 'ansplitvtx'
+hists = 'recores'
 
 
 # ---- FILES ----
