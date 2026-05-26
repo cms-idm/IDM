@@ -24,7 +24,7 @@ class myHisto:
         self.match_type = self.parse_axis(('match_type',['L','R']))
         self.match = self.parse_axis(('match',[0,1]))
         self.met = self.parse_axis(('met',60,50,300))
-        self.dR = self.parse_axis(('dR',200,0,1)) 
+        self.dR = self.parse_axis(('dR',50,0,5)) 
         self.mindR = self.parse_axis(('mindR',60,0,0.06)) 
         
         #For eff studies
@@ -47,6 +47,12 @@ class myHisto:
        
         self.IDScore = self.parse_axis(('id',100,-1,3))
         self.ele_passID = self.parse_axis(('passID',[0,1]))
+
+        self.dRgenGEDGED = self.parse_axis(("dRgenGEDGED",50,0,5)) 
+        self.dRgenGEDLpt = self.parse_axis(("dRgenGEDLpt",50,0,5)) 
+        self.dRgenLptLpt = self.parse_axis(("dRgenLptLpt",50,0,5)) 
+        self.dRgenLptGED = self.parse_axis(("dRgenLptGED",50,0,5)) 
+
 
 
       
@@ -90,7 +96,13 @@ class myHisto:
 def make_histograms():
     h = myHisto()
     
-    
+    h.make('gen_dR', 'dR')
+    h.make('dR_gen_GED_GED', 'dRgenGEDGED')
+    h.make('dR_gen_Lpt_Lpt', 'dRgenLptLpt')
+    h.make('dR_gen_GED_Lpt', 'dRgenGEDLpt')
+    h.make('dR_gen_Lpt_GED', 'dRgenLptGED')
+
+           
     h.make('gen_ele_pt','ele_pt')
     h.make('gen_ele_vxy1','vxy1')
 
@@ -122,42 +134,69 @@ def fillHistos(events,h,samp,cut,info,sum_wgt=1):
     if info["type"] == "signal":
 
         #When no lpt ele with GED match (with-xclean)
+
+        #GenEle########################
         mask_genele = events.GenEle.matched
         events_with_genEle_matched = events[mask_genele]
         
         mask_R = (events_with_genEle_matched.GenEle.matchType == 'R')  
         mask_L = (events_with_genEle_matched.GenEle.matchType == 'L')        
 
+        #pT cases
         pt_genele_GED = events_with_genEle_matched.GenEle.pt[mask_R] 
         pt_genele_Lpt = events_with_genEle_matched.GenEle.pt[mask_L]
         
         #vxy cases
         vxy_genele_GED = events_with_genEle_matched.GenEle.vxy[mask_R] 
         vxy_genele_Lpt = events_with_genEle_matched.GenEle.vxy[mask_L]
+
        
         
+        #GenPos###########################
         mask_genpos = events.GenPos.matched        
         events_with_genpos_matched = events[mask_genpos]
         
         mask_R_pos = (events_with_genpos_matched.GenPos.matchType == 'R')   
         mask_L_pos = (events_with_genpos_matched.GenPos.matchType == 'L')        
 
+        #pT cases
         pt_genpos_GED = events_with_genpos_matched.GenPos.pt[mask_R_pos] 
         pt_genpos_Lpt = events_with_genpos_matched.GenPos.pt[mask_L_pos] 
 
-        
+                
         #vxy cases
         vxy_genpos_GED = events_with_genpos_matched.GenPos.vxy[mask_R_pos] 
         vxy_genpos_Lpt = events_with_genpos_matched.GenPos.vxy[mask_L_pos] 
 
 
+        #dR cases: Only x-cleaned ele
+        MASK = (mask_genele) & (mask_genpos)
+        events_mask = events[MASK]
+
+        mask_GED_GED = (events_mask.GenEle.matchType == 'R') &  (events_mask.GenPos.matchType == 'R')
+        mask_Lpt_Lpt = (events_mask.GenEle.matchType == 'L') &  (events_mask.GenPos.matchType == 'L')
+        mask_GED_Lpt = (events_mask.GenEle.matchType == 'R') &  (events_mask.GenPos.matchType == 'L')
+        mask_Lpt_GED = (events_mask.GenEle.matchType == 'L') &  (events_mask.GenPos.matchType == 'R')
+       
+        
+        dR_gen_GED_GED = events_mask.genEE.dr[mask_GED_GED]
+        dR_gen_Lpt_Lpt = events_mask.genEE.dr[mask_Lpt_Lpt]
+        dR_gen_GED_Lpt = events_mask.genEE.dr[mask_GED_Lpt]
+        dR_gen_Lpt_GED = events_mask.genEE.dr[mask_Lpt_GED]
+      
+       
+
+        
+
         #All Lpt ele (No xclean)
         mask_allLpt_e = events.GenEle.matchedAllLowPt 
+        
         pt_genele_Lpt_ALL = events.GenEle.pt[mask_allLpt_e]
         vxy_genele_Lpt_ALL = events.GenEle.vxy[mask_allLpt_e]
 
 
         mask_allLpt_p = events.GenPos.matchedAllLowPt
+        
         pt_genpos_Lpt_ALL = events.GenPos.pt[mask_allLpt_p]
         vxy_genpos_Lpt_ALL = events.GenPos.vxy[mask_allLpt_p]
 
@@ -176,9 +215,9 @@ def fillHistos(events,h,samp,cut,info,sum_wgt=1):
         h.fill("pT_genElePos_GED", PT_GED = pt_genpos_GED)
 
         h.fill("pT_genElePos_Lpt", PT_Lpt = pt_genele_Lpt)
-        h.fill("pT_genElePos_Lpt", PT_Lpt = pt_genpos_Lpt)      
+        h.fill("pT_genElePos_Lpt", PT_Lpt = pt_genpos_Lpt)   
 
-        
+                
 
         h.fill("pT_genElePos_Lpt_Noxclean", PT_Lpt_noxclean = pt_genele_Lpt_ALL)
         h.fill("pT_genElePos_Lpt_Noxclean", PT_Lpt_noxclean = pt_genpos_Lpt_ALL)
@@ -198,6 +237,12 @@ def fillHistos(events,h,samp,cut,info,sum_wgt=1):
         h.fill("vxy_genElePos_Lpt_Noxclean", VXY_Lpt_noxclean = vxy_genele_Lpt_ALL)
         h.fill("vxy_genElePos_Lpt_Noxclean", VXY_Lpt_noxclean = vxy_genpos_Lpt_ALL)
 
+####dR cases############################
 
+        h.fill("gen_dR",dR=events.genEE.dr)
         
-       
+        h.fill("dR_gen_GED_GED", dRgenGEDGED=dR_gen_GED_GED)
+        h.fill("dR_gen_Lpt_Lpt", dRgenLptLpt=dR_gen_Lpt_Lpt)
+        h.fill("dR_gen_GED_Lpt", dRgenGEDLpt=dR_gen_GED_Lpt)
+        h.fill("dR_gen_Lpt_GED", dRgenLptGED=dR_gen_Lpt_GED)
+     
