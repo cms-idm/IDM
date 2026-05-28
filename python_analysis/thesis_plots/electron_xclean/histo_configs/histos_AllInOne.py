@@ -28,20 +28,18 @@ class myHisto:
         self.mindR = self.parse_axis(('mindR',60,0,0.06)) 
         
         #For eff studies
-        self.ele_pt = self.parse_axis(("pt",[0,1,2,3,4,5,8,10,12,14,16,18,20,28,36,45,55])) 
-        self.vxy1 = self.parse_axis(('vxy',[0,1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,28,35,45]))  #Lxy 10, 100
+        self.vxy1 = self.parse_axis(('vxy',[0,1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,30]))  #Lxy 10, 100
+
+        self.ele_pt = self.parse_axis(("pt",[0,1,2,3,4,5,8,10,12,14,16,18,20,30])) 
+        self.PT_GED = self.parse_axis(("PT_GED",[0,1,2,3,4,5,8,10,12,14,16,18,20,30]))  
+        self.PT_Lpt = self.parse_axis(("PT_Lpt",[0,1,2,3,4,5,8,10,12,14,16,18,20,30]))  
+        self.PT_Lpt_noxclean = self.parse_axis(("PT_Lpt_noxclean",[0,1,2,3,4,5,8,10,12,14,16,18,20,30]))  
 
 
-        self.PT_GED = self.parse_axis(("PT_GED",[0,1,2,3,4,5,8,10,12,14,16,18,20,28,36,45,55]))  
-        self.PT_Lpt = self.parse_axis(("PT_Lpt",[0,1,2,3,4,5,8,10,12,14,16,18,20,28,36,45,55]))  
+        self.VXY_GED = self.parse_axis(("VXY_GED",[0,1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,30]))  
+        self.VXY_Lpt = self.parse_axis(("VXY_Lpt",[0,1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,30]))  
 
-        self.PT_Lpt_noxclean = self.parse_axis(("PT_Lpt_noxclean",[0,1,2,3,4,5,8,10,12,14,16,18,20,28,36,45,55]))  
-
-
-        self.VXY_GED = self.parse_axis(("VXY_GED",[0,1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,28,35,45]))  
-        self.VXY_Lpt = self.parse_axis(("VXY_Lpt",[0,1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,28,35,45]))  
-
-        self.VXY_Lpt_noxclean = self.parse_axis(("VXY_Lpt_noxclean",[0,1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,28,35,45]))  
+        self.VXY_Lpt_noxclean = self.parse_axis(("VXY_Lpt_noxclean",[0,1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,30]))  
 
 
        
@@ -132,6 +130,7 @@ def fillHistos(events,h,samp,cut,info,sum_wgt=1):
     wgt = events.eventWgt/sum_wgt
     
     if info["type"] == "signal":
+        
 
         #When no lpt ele with GED match (with-xclean)
 
