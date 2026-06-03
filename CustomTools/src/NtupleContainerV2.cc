@@ -490,6 +490,56 @@ void NtupleContainerV2::CreateTreeBranches() {
         outT->Branch("GenPart_vz",&genVz_);
         outT->Branch("GenPart_mass", &genMass_);
 
+        outT->Branch("GenPartAll_ID",&genPartID_);
+        outT->Branch("GenPartAll_motherID",&genPartMotherID_);
+        outT->Branch("GenPartAll_status",&genPartStatus_);
+        outT->Branch("GenPartAll_charge",&genPartCharge_);
+        outT->Branch("GenPartAll_pt",&genPartPt_);
+        outT->Branch("GenPartAll_eta",&genPartEta_);
+        outT->Branch("GenPartAll_phi",&genPartPhi_);
+        outT->Branch("GenPartAll_energy",&genPartEn_);
+        outT->Branch("GenPartAll_px",&genPartPx_);
+        outT->Branch("GenPartAll_py",&genPartPy_);
+        outT->Branch("GenPartAll_pz",&genPartPz_);
+        outT->Branch("GenPartAll_vxy",&genPartVxy_);
+        outT->Branch("GenPartAll_vx",&genPartVx_);
+        outT->Branch("GenPartAll_vy",&genPartVy_);
+        outT->Branch("GenPartAll_vz",&genPartVz_);
+        outT->Branch("GenPartAll_mass",&genPartMass_);
+
+        // All gen muons and anti-muons, independent of status and mother ID.
+        outT->Branch("nGenMuon",&nGenMuon_);
+        outT->Branch("GenMuon_motherID",&genMuonMotherID_);
+        outT->Branch("GenMuon_status",&genMuonStatus_);
+        outT->Branch("GenMuon_charge",&genMuonCharge_);
+        outT->Branch("GenMuon_pt",&genMuonPt_);
+        outT->Branch("GenMuon_eta",&genMuonEta_);
+        outT->Branch("GenMuon_phi",&genMuonPhi_);
+        outT->Branch("GenMuon_energy",&genMuonEn_);
+        outT->Branch("GenMuon_px",&genMuonPx_);
+        outT->Branch("GenMuon_py",&genMuonPy_);
+        outT->Branch("GenMuon_pz",&genMuonPz_);
+        outT->Branch("GenMuon_vxy",&genMuonVxy_);
+        outT->Branch("GenMuon_vz",&genMuonVz_);
+        outT->Branch("GenMuon_vx",&genMuonVx_);
+        outT->Branch("GenMuon_vy",&genMuonVy_);
+
+        outT->Branch("nGenAntiMuon",&nGenAntiMuon_);
+        outT->Branch("GenAntiMuon_motherID",&genAntiMuonMotherID_);
+        outT->Branch("GenAntiMuon_status",&genAntiMuonStatus_);
+        outT->Branch("GenAntiMuon_charge",&genAntiMuonCharge_);
+        outT->Branch("GenAntiMuon_pt",&genAntiMuonPt_);
+        outT->Branch("GenAntiMuon_eta",&genAntiMuonEta_);
+        outT->Branch("GenAntiMuon_phi",&genAntiMuonPhi_);
+        outT->Branch("GenAntiMuon_energy",&genAntiMuonEn_);
+        outT->Branch("GenAntiMuon_px",&genAntiMuonPx_);
+        outT->Branch("GenAntiMuon_py",&genAntiMuonPy_);
+        outT->Branch("GenAntiMuon_pz",&genAntiMuonPz_);
+        outT->Branch("GenAntiMuon_vxy",&genAntiMuonVxy_);
+        outT->Branch("GenAntiMuon_vz",&genAntiMuonVz_);
+        outT->Branch("GenAntiMuon_vx",&genAntiMuonVx_);
+        outT->Branch("GenAntiMuon_vy",&genAntiMuonVy_);
+
         if (isSignal_) {
             outT->Branch("GenEle_charge",&genEleCharge_);
             outT->Branch("GenEle_motherID",&genEleMotherID_);
@@ -546,6 +596,60 @@ void NtupleContainerV2::CreateTreeBranches() {
             outT->Branch("genEE_vz",&genEEVz_);
             outT->Branch("genEE_vx",&genEEVx_);
             outT->Branch("genEE_vy",&genEEVy_);
+
+
+
+            // Signal muon and anti-muon: status == 1 and immediate motherID == 1000023.
+            outT->Branch("GenSigMuon_charge",&genSigMuonCharge_);
+            outT->Branch("GenSigMuon_motherID",&genSigMuonMotherID_);
+            outT->Branch("GenSigMuon_status",&genSigMuonStatus_);
+            outT->Branch("GenSigMuon_pt",&genSigMuonPt_);
+            outT->Branch("GenSigMuon_eta",&genSigMuonEta_);
+            outT->Branch("GenSigMuon_phi",&genSigMuonPhi_);
+            outT->Branch("GenSigMuon_energy",&genSigMuonEn_);
+            outT->Branch("GenSigMuon_px",&genSigMuonPx_);
+            outT->Branch("GenSigMuon_py",&genSigMuonPy_);
+            outT->Branch("GenSigMuon_pz",&genSigMuonPz_);
+            outT->Branch("GenSigMuon_vxy",&genSigMuonVxy_);
+            outT->Branch("GenSigMuon_vz",&genSigMuonVz_);
+            outT->Branch("GenSigMuon_vx",&genSigMuonVx_);
+            outT->Branch("GenSigMuon_vy",&genSigMuonVy_);
+            outT->Branch("GenSigMuon_matched",&genSigMuonMatched_);
+            outT->Branch("GenSigMuon_matchType",&genSigMuonMatchType_);
+            outT->Branch("GenSigMuon_matchIdxLocal",&genSigMuonMatchIdxLocal_);
+            outT->Branch("GenSigMuon_matchIdxGlobal",&genSigMuonMatchIdxGlobal_);
+
+            outT->Branch("GenSigAntiMuon_charge",&genSigAntiMuonCharge_);
+            outT->Branch("GenSigAntiMuon_motherID",&genSigAntiMuonMotherID_);
+            outT->Branch("GenSigAntiMuon_status",&genSigAntiMuonStatus_);
+            outT->Branch("GenSigAntiMuon_pt",&genSigAntiMuonPt_);
+            outT->Branch("GenSigAntiMuon_eta",&genSigAntiMuonEta_);
+            outT->Branch("GenSigAntiMuon_phi",&genSigAntiMuonPhi_);
+            outT->Branch("GenSigAntiMuon_energy",&genSigAntiMuonEn_);
+            outT->Branch("GenSigAntiMuon_px",&genSigAntiMuonPx_);
+            outT->Branch("GenSigAntiMuon_py",&genSigAntiMuonPy_);
+            outT->Branch("GenSigAntiMuon_pz",&genSigAntiMuonPz_);
+            outT->Branch("GenSigAntiMuon_vxy",&genSigAntiMuonVxy_);
+            outT->Branch("GenSigAntiMuon_vz",&genSigAntiMuonVz_);
+            outT->Branch("GenSigAntiMuon_vx",&genSigAntiMuonVx_);
+            outT->Branch("GenSigAntiMuon_vy",&genSigAntiMuonVy_);
+            outT->Branch("GenSigAntiMuon_matched",&genSigAntiMuonMatched_);
+            outT->Branch("GenSigAntiMuon_matchType",&genSigAntiMuonMatchType_);
+            outT->Branch("GenSigAntiMuon_matchIdxLocal",&genSigAntiMuonMatchIdxLocal_);
+            outT->Branch("GenSigAntiMuon_matchIdxGlobal",&genSigAntiMuonMatchIdxGlobal_);
+
+            outT->Branch("genSigDimuon_pt",&genSigDimuonPt_);
+            outT->Branch("genSigDimuon_eta",&genSigDimuonEta_);
+            outT->Branch("genSigDimuon_phi",&genSigDimuonPhi_);
+            outT->Branch("genSigDimuon_energy",&genSigDimuonEn_);
+            outT->Branch("genSigDimuon_mass",&genSigDimuonMass_);
+            outT->Branch("genSigDimuon_dr",&genSigDimuonDr_);
+            outT->Branch("genSigDimuon_METdPhi",&genSigDimuonMETdPhi_);
+            outT->Branch("genSigDimuon_vxy",&genSigDimuonVxy_);
+            outT->Branch("genSigDimuon_vz",&genSigDimuonVz_);
+            outT->Branch("genSigDimuon_vx",&genSigDimuonVx_);
+            outT->Branch("genSigDimuon_vy",&genSigDimuonVy_);
+            outT->Branch("signalDimuonReconstructed",&signalDimuonReconstructed_);            
         }
     }
 
@@ -578,6 +682,111 @@ void NtupleContainerV2::ClearTreeBranches() {
     genVy_.clear();
     genVz_.clear();
     genMass_.clear();
+
+
+    genPartID_.clear();
+    genPartMotherID_.clear();
+    genPartStatus_.clear();
+    genPartCharge_.clear();
+    genPartPt_.clear();
+    genPartEta_.clear();
+    genPartPhi_.clear();
+    genPartEn_.clear();
+    genPartPx_.clear();
+    genPartPy_.clear();
+    genPartPz_.clear();
+    genPartVxy_.clear();
+    genPartVx_.clear();
+    genPartVy_.clear();
+    genPartVz_.clear();
+    genPartMass_.clear();
+
+
+    // All gen muons and anti-muons, independent of status and mother ID
+    nGenMuon_ = 0;
+    genMuonMotherID_.clear();
+    genMuonStatus_.clear();
+    genMuonCharge_.clear();
+    genMuonPt_.clear();
+    genMuonEta_.clear();
+    genMuonPhi_.clear();
+    genMuonEn_.clear();
+    genMuonPx_.clear();
+    genMuonPy_.clear();
+    genMuonPz_.clear();
+    genMuonVxy_.clear();
+    genMuonVz_.clear();
+    genMuonVx_.clear();
+    genMuonVy_.clear();
+
+    nGenAntiMuon_ = 0;
+    genAntiMuonMotherID_.clear();
+    genAntiMuonStatus_.clear();
+    genAntiMuonCharge_.clear();
+    genAntiMuonPt_.clear();
+    genAntiMuonEta_.clear();
+    genAntiMuonPhi_.clear();
+    genAntiMuonEn_.clear();
+    genAntiMuonPx_.clear();
+    genAntiMuonPy_.clear();
+    genAntiMuonPz_.clear();
+    genAntiMuonVxy_.clear();
+    genAntiMuonVz_.clear();
+    genAntiMuonVx_.clear();
+    genAntiMuonVy_.clear();
+
+    // Gen Signal Muon & Anti-Muon from iDM signal: status == 1 and motherID == 1000023
+    genSigMuonMotherID_ = 0;
+    genSigMuonStatus_ = 0;
+    genSigMuonCharge_ = 0;
+    genSigMuonPt_ = -999;
+    genSigMuonEta_ = -999;
+    genSigMuonPhi_ = -999;
+    genSigMuonEn_ = -999;
+    genSigMuonPx_ = -999;
+    genSigMuonPy_ = -999;
+    genSigMuonPz_ = -999;
+    genSigMuonVxy_ = -999;
+    genSigMuonVz_ = -999;
+    genSigMuonVx_ = -999;
+    genSigMuonVy_ = -999;
+    genSigMuonMatched_ = false;
+    genSigMuonMatchType_ = "None";
+    genSigMuonMatchIdxLocal_ = -999;
+    genSigMuonMatchIdxGlobal_ = -999;
+
+    genSigAntiMuonMotherID_ = 0;
+    genSigAntiMuonStatus_ = 0;
+    genSigAntiMuonCharge_ = 0;
+    genSigAntiMuonPt_ = -999;
+    genSigAntiMuonEta_ = -999;
+    genSigAntiMuonPhi_ = -999;
+    genSigAntiMuonEn_ = -999;
+    genSigAntiMuonPx_ = -999;
+    genSigAntiMuonPy_ = -999;
+    genSigAntiMuonPz_ = -999;
+    genSigAntiMuonVxy_ = -999;
+    genSigAntiMuonVz_ = -999;
+    genSigAntiMuonVx_ = -999;
+    genSigAntiMuonVy_ = -999;
+    genSigAntiMuonMatched_ = false;
+    genSigAntiMuonMatchType_ = "None";
+    genSigAntiMuonMatchIdxLocal_ = -999;
+    genSigAntiMuonMatchIdxGlobal_ = -999;
+
+    genSigDimuonPt_ = -999;
+    genSigDimuonEta_ = -999;
+    genSigDimuonPhi_ = -999;
+    genSigDimuonEn_ = -999;
+    genSigDimuonMass_ = -999;
+    genSigDimuonDr_ = -999;
+    genSigDimuonMETdPhi_ = -999;
+    genSigDimuonVxy_ = -999;
+    genSigDimuonVz_ = -999;
+    genSigDimuonVx_ = -999;
+    genSigDimuonVy_ = -999;
+    signalDimuonReconstructed_ = false;
+
 
     // Gen Electron & Positron from iDM signal
     genEleCharge_ = 0;
