@@ -1465,17 +1465,125 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       }
 
       // Handling gen particles
-      // Saving the hard process particles (i.e. iDM signal) as well as any other gen leptons 
+      // First pass: save all gen particles; save all gen muons/anti-muons by charge;
+      // and identify the status-1 chi2-daughter signal muon / anti-muon.
+      math::XYZTLorentzVector gen_sig_muon_p4;
+      math::XYZTLorentzVector gen_sig_antimuon_p4;
+      bool foundGenSigMuon = false;
+      bool foundGenSigAntiMuon = false;
+
+      for (const auto & genParticle : *genParticleHandle_) {
+         int motherID = -999;
+         if (genParticle.numberOfMothers() > 0 && genParticle.mother(0) != nullptr) {
+            motherID = genParticle.mother(0)->pdgId();
+         }
+
+         nt.genPartID_.push_back(genParticle.pdgId());
+         nt.genPartMotherID_.push_back(motherID);
+         nt.genPartStatus_.push_back(genParticle.status());
+         nt.genPartCharge_.push_back(genParticle.charge());
+         nt.genPartPt_.push_back(genParticle.pt());
+         nt.genPartEta_.push_back(genParticle.eta());
+         nt.genPartPhi_.push_back(genParticle.phi());
+         nt.genPartEn_.push_back(genParticle.energy());
+         nt.genPartPx_.push_back(genParticle.px());
+         nt.genPartPy_.push_back(genParticle.py());
+         nt.genPartPz_.push_back(genParticle.pz());
+         nt.genPartVxy_.push_back(std::sqrt(genParticle.vx()*genParticle.vx() + genParticle.vy()*genParticle.vy()));
+         nt.genPartVx_.push_back(genParticle.vx());
+         nt.genPartVy_.push_back(genParticle.vy());
+         nt.genPartVz_.push_back(genParticle.vz());
+         nt.genPartMass_.push_back(genParticle.mass());
+
+         // All gen-level muons by charge. No status requirement. No mother-ID requirement.
+         if (genParticle.pdgId() == 13) {
+            nt.nGenMuon_++;
+            nt.genMuonMotherID_.push_back(motherID);
+            nt.genMuonStatus_.push_back(genParticle.status());
+            nt.genMuonCharge_.push_back(genParticle.charge());
+            nt.genMuonPt_.push_back(genParticle.pt());
+            nt.genMuonEta_.push_back(genParticle.eta());
+            nt.genMuonPhi_.push_back(genParticle.phi());
+            nt.genMuonEn_.push_back(genParticle.energy());
+            nt.genMuonPx_.push_back(genParticle.px());
+            nt.genMuonPy_.push_back(genParticle.py());
+            nt.genMuonPz_.push_back(genParticle.pz());
+            nt.genMuonVxy_.push_back(genParticle.vertex().rho());
+            nt.genMuonVz_.push_back(genParticle.vertex().z());
+            nt.genMuonVx_.push_back(genParticle.vertex().x());
+            nt.genMuonVy_.push_back(genParticle.vertex().y());
+         }
+         else if (genParticle.pdgId() == -13) {
+            nt.nGenAntiMuon_++;
+            nt.genAntiMuonMotherID_.push_back(motherID);
+            nt.genAntiMuonStatus_.push_back(genParticle.status());
+            nt.genAntiMuonCharge_.push_back(genParticle.charge());
+            nt.genAntiMuonPt_.push_back(genParticle.pt());
+            nt.genAntiMuonEta_.push_back(genParticle.eta());
+            nt.genAntiMuonPhi_.push_back(genParticle.phi());
+            nt.genAntiMuonEn_.push_back(genParticle.energy());
+            nt.genAntiMuonPx_.push_back(genParticle.px());
+            nt.genAntiMuonPy_.push_back(genParticle.py());
+            nt.genAntiMuonPz_.push_back(genParticle.pz());
+            nt.genAntiMuonVxy_.push_back(genParticle.vertex().rho());
+            nt.genAntiMuonVz_.push_back(genParticle.vertex().z());
+            nt.genAntiMuonVx_.push_back(genParticle.vertex().x());
+            nt.genAntiMuonVy_.push_back(genParticle.vertex().y());
+         }
+
+         // Keep the requested immediate-mother signal definition unchanged.
+         if (isSignal && std::abs(genParticle.pdgId()) == 13 && genParticle.status() == 1 && motherID == 1000023) {
+            if (genParticle.pdgId() == 13) {
+               foundGenSigMuon = true;
+               gen_sig_muon_p4 = genParticle.p4();
+               nt.genSigMuonCharge_ = genParticle.charge();
+               nt.genSigMuonMotherID_ = motherID;
+               nt.genSigMuonStatus_ = genParticle.status();
+               nt.genSigMuonPt_ = genParticle.pt();
+               nt.genSigMuonEta_ = genParticle.eta();
+               nt.genSigMuonPhi_ = genParticle.phi();
+               nt.genSigMuonEn_ = genParticle.energy();
+               nt.genSigMuonPx_ = genParticle.px();
+               nt.genSigMuonPy_ = genParticle.py();
+               nt.genSigMuonPz_ = genParticle.pz();
+               nt.genSigMuonVxy_ = genParticle.vertex().rho();
+               nt.genSigMuonVz_ = genParticle.vertex().z();
+               nt.genSigMuonVx_ = genParticle.vertex().x();
+               nt.genSigMuonVy_ = genParticle.vertex().y();
+            }
+            else if (genParticle.pdgId() == -13) {
+               foundGenSigAntiMuon = true;
+               gen_sig_antimuon_p4 = genParticle.p4();
+               nt.genSigAntiMuonCharge_ = genParticle.charge();
+               nt.genSigAntiMuonMotherID_ = motherID;
+               nt.genSigAntiMuonStatus_ = genParticle.status();
+               nt.genSigAntiMuonPt_ = genParticle.pt();
+               nt.genSigAntiMuonEta_ = genParticle.eta();
+               nt.genSigAntiMuonPhi_ = genParticle.phi();
+               nt.genSigAntiMuonEn_ = genParticle.energy();
+               nt.genSigAntiMuonPx_ = genParticle.px();
+               nt.genSigAntiMuonPy_ = genParticle.py();
+               nt.genSigAntiMuonPz_ = genParticle.pz();
+               nt.genSigAntiMuonVxy_ = genParticle.vertex().rho();
+               nt.genSigAntiMuonVz_ = genParticle.vertex().z();
+               nt.genSigAntiMuonVx_ = genParticle.vertex().x();
+               nt.genSigAntiMuonVy_ = genParticle.vertex().y();
+            }
+         }
+      }
+
+      // Second pass: save the original reduced gen collection used by the electron analysis.
+      // This keeps the original hard-process/status-1-lepton logic intact.
       math::XYZTLorentzVector gen_ele_p4, gen_pos_p4;
       for (const auto & genParticle : *genParticleHandle_) {
-         int absID = abs(genParticle.pdgId());
+         int absID = std::abs(genParticle.pdgId());
          // veto anything that isn't a lepton or a hard process particle
          if ((!genParticle.isHardProcess()) && (genParticle.status() != 1 || (absID < 11) || (absID > 16))) {
             continue;
          }
          nt.nGen_++;
          int motherID = -999;
-         if (genParticle.numberOfMothers() > 0) {
+         if (genParticle.numberOfMothers() > 0 && genParticle.mother(0) != nullptr) {
             motherID = genParticle.mother(0)->pdgId();
          }
 
@@ -1489,14 +1597,14 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          nt.genPx_.push_back(genParticle.px());
          nt.genPy_.push_back(genParticle.py());
          nt.genPz_.push_back(genParticle.pz());
-         nt.genVxy_.push_back(sqrt(genParticle.vx()*genParticle.vx() + genParticle.vy()*genParticle.vy()));
+         nt.genVxy_.push_back(std::sqrt(genParticle.vx()*genParticle.vx() + genParticle.vy()*genParticle.vy()));
          nt.genVx_.push_back(genParticle.vx());
          nt.genVy_.push_back(genParticle.vy());
          nt.genVz_.push_back(genParticle.vz());
          nt.genMass_.push_back(genParticle.mass());
 
          if (isSignal) {
-            if ((abs(genParticle.pdgId()) == 11) && (motherID == 1000023)) {
+            if ((std::abs(genParticle.pdgId()) == 11) && (motherID == 1000023)) {
                // Recording basic info
                if (genParticle.pdgId() == 11) {
                   gen_ele_p4 = genParticle.p4();
@@ -1532,6 +1640,21 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
                }
             }
          }
+      }
+
+      if (isSignal && foundGenSigMuon && foundGenSigAntiMuon) {
+         auto gen_mumu = gen_sig_muon_p4 + gen_sig_antimuon_p4;
+         nt.genSigDimuonPt_ = gen_mumu.pt();
+         nt.genSigDimuonEta_ = gen_mumu.eta();
+         nt.genSigDimuonPhi_ = gen_mumu.phi();
+         nt.genSigDimuonEn_ = gen_mumu.energy();
+         nt.genSigDimuonMass_ = gen_mumu.mass();
+         nt.genSigDimuonDr_ = reco::deltaR(gen_sig_muon_p4, gen_sig_antimuon_p4);
+         nt.genSigDimuonMETdPhi_ = reco::deltaPhi(gen_mumu.phi(), nt.genLeadMETPhi_);
+         nt.genSigDimuonVxy_ = nt.genSigMuonVxy_;
+         nt.genSigDimuonVz_ = nt.genSigMuonVz_;
+         nt.genSigDimuonVx_ = nt.genSigMuonVx_;
+         nt.genSigDimuonVy_ = nt.genSigMuonVy_;
       }
 
       if (isSignal) {
