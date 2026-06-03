@@ -64,6 +64,114 @@ public:
     vector<float> genVy_;
     vector<float> genMass_;
 
+
+    // All gen particles (including non-hard processes)
+    vector<int> genPartID_;
+    vector<int> genPartMotherID_;
+    vector<int> genPartStatus_;
+    vector<int> genPartCharge_;
+    vector<float> genPartPt_;
+    vector<float> genPartEta_;
+    vector<float> genPartPhi_;
+    vector<float> genPartEn_;
+    vector<float> genPartPx_;
+    vector<float> genPartPy_;
+    vector<float> genPartPz_;
+    vector<float> genPartVxy_;
+    vector<float> genPartVz_;
+    vector<float> genPartVx_;
+    vector<float> genPartVy_;
+    vector<float> genPartMass_;
+
+    // All gen muons and anti-muons (not restricted by status or mother ID)
+    int nGenMuon_;
+    vector<int> genMuonMotherID_;
+    vector<int> genMuonStatus_;
+    vector<int> genMuonCharge_;
+    vector<float> genMuonPt_;
+    vector<float> genMuonEta_;
+    vector<float> genMuonPhi_;
+    vector<float> genMuonEn_;
+    vector<float> genMuonPx_;
+    vector<float> genMuonPy_;
+    vector<float> genMuonPz_;
+    vector<float> genMuonVxy_;
+    vector<float> genMuonVz_;
+    vector<float> genMuonVx_;
+    vector<float> genMuonVy_;
+
+    int nGenAntiMuon_;
+    vector<int> genAntiMuonMotherID_;
+    vector<int> genAntiMuonStatus_;
+    vector<int> genAntiMuonCharge_;
+    vector<float> genAntiMuonPt_;
+    vector<float> genAntiMuonEta_;
+    vector<float> genAntiMuonPhi_;
+    vector<float> genAntiMuonEn_;
+    vector<float> genAntiMuonPx_;
+    vector<float> genAntiMuonPy_;
+    vector<float> genAntiMuonPz_;
+    vector<float> genAntiMuonVxy_;
+    vector<float> genAntiMuonVz_;
+    vector<float> genAntiMuonVx_;
+    vector<float> genAntiMuonVy_;
+
+    // Gen Signal Muon & Anti-Muon from iDM signal only: status == 1 and motherID == 1000023
+    int genSigMuonCharge_;
+    int genSigMuonMotherID_;
+    int genSigMuonStatus_;
+    float genSigMuonPt_;
+    float genSigMuonEta_;
+    float genSigMuonPhi_;
+    float genSigMuonEn_;
+    float genSigMuonPx_;
+    float genSigMuonPy_;
+    float genSigMuonPz_;
+    float genSigMuonVxy_;
+    float genSigMuonVz_;
+    float genSigMuonVx_;
+    float genSigMuonVy_;
+    bool genSigMuonMatched_;
+    std::string genSigMuonMatchType_;
+    int genSigMuonMatchIdxLocal_;
+    int genSigMuonMatchIdxGlobal_;
+
+    int genSigAntiMuonCharge_;
+    int genSigAntiMuonMotherID_;
+    int genSigAntiMuonStatus_;
+    float genSigAntiMuonPt_;
+    float genSigAntiMuonEta_;
+    float genSigAntiMuonPhi_;
+    float genSigAntiMuonEn_;
+    float genSigAntiMuonPx_;
+    float genSigAntiMuonPy_;
+    float genSigAntiMuonPz_;
+    float genSigAntiMuonVxy_;
+    float genSigAntiMuonVz_;
+    float genSigAntiMuonVx_;
+    float genSigAntiMuonVy_;
+    bool genSigAntiMuonMatched_;
+    std::string genSigAntiMuonMatchType_;
+    int genSigAntiMuonMatchIdxLocal_;
+    int genSigAntiMuonMatchIdxGlobal_;
+
+    // Gen Signal Dimuon (from iDM signal only)
+
+    float genSigDimuonPt_;
+    float genSigDimuonEta_;
+    float genSigDimuonPhi_;
+    float genSigDimuonEn_;
+    float genSigDimuonMass_;
+    float genSigDimuonDr_;
+    float genSigDimuonMETdPhi_;
+    float genSigDimuonVxy_;
+    float genSigDimuonVz_;
+    float genSigDimuonVx_;
+    float genSigDimuonVy_;
+
+     // Track whether full signal (mu anti-mu) are reconstructed
+    bool signalDimuonReconstructed_;
+
     // Gen Electron & Positron from iDM signal
     int genEleCharge_;
     int genEleMotherID_;
@@ -136,12 +244,29 @@ public:
     float genLeadMETET_;
 
     // Reco Particles
-    // Muons: used only for SF measurement with Z/Gamma events
+    // Muons
     int nMuon_;
     vector<float> recoMuonPt_;
+    vector<float> recoMuonPtErr_;
     vector<float> recoMuonEta_;
+    vector<float> recoMuonEtaErr_;
     vector<float> recoMuonPhi_;
+    vector<float> recoMuonPhiErr_;
     vector<float> recoMuonEnergy_;
+    vector<float> recoMuonE_;
+    vector<float> recoMuonVxy_;
+    vector<float> recoMuonVz_;
+    vector<float> recoMuonVx_;
+    vector<float> recoMuonVy_;
+    vector<float> recoMuonDxy_;
+    vector<float> recoMuonDxyError_;
+    vector<float> recoMuonDz_;
+    vector<float> recoMuonDzError_;
+    vector<float> recoMuonTrkChi2_;
+    vector<float> recoMuonTrkProb_;
+    vector<int> recoMuonTrkNumTrackerHits_;
+    vector<int> recoMuonTrkNumPixHits_;
+    vector<int> recoMuonTrkNumStripHits_;
     vector<float> recoMuonCharge_;
     vector<int> recoMuonIDcutBasedLoose_;
     vector<int> recoMuonIDcutBasedMedium_;
