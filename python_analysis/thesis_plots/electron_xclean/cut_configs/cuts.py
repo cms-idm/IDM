@@ -21,12 +21,12 @@ def cut1(events,info):
 #     return events[cut], name, desc, plots
 
 
-def cut2(events,info):
-    name = "cut2"
-    desc = "Lxy cut0"
-    plots = True
-    cut = ((events.GenEle.vxy > 0) & (events.GenEle.vxy <1)) | ((events.GenPos.vxy >0)) & (events.GenPos.vxy <1) )
-    return events[cut], name, desc, plots
+# def cut2(events,info):
+#     name = "cut2"
+#     desc = "Lxy cut0"
+#     plots = True
+#     cut = ((events.GenEle.vxy > 0) & (events.GenEle.vxy <1)) | ((events.GenPos.vxy >0)) & (events.GenPos.vxy <1) )
+#     return events[cut], name, desc, plots
 
 
 
