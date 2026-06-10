@@ -28,21 +28,21 @@ class myHisto:
         self.mindR = self.parse_axis(('mindR',60,0,0.06)) 
         
         #For eff studies
-        self.vxy1 = self.parse_axis(('vxy',[0,1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,30]))  #Lxy 10, 100
-
-        self.ele_pt = self.parse_axis(("pt",[0,1,2,3,4,5,8,10,12,14,16,18,20,30])) 
-        self.PT_GED = self.parse_axis(("PT_GED",[0,1,2,3,4,5,8,10,12,14,16,18,20,30]))  
-        self.PT_Lpt = self.parse_axis(("PT_Lpt",[0,1,2,3,4,5,8,10,12,14,16,18,20,30]))  
-        self.PT_Lpt_noxclean = self.parse_axis(("PT_Lpt_noxclean",[0,1,2,3,4,5,8,10,12,14,16,18,20,30]))  
-
-
-        self.VXY_GED = self.parse_axis(("VXY_GED",[0,1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,30]))  
-        self.VXY_Lpt = self.parse_axis(("VXY_Lpt",[0,1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,30]))  
-
-        self.VXY_Lpt_noxclean = self.parse_axis(("VXY_Lpt_noxclean",[0,1,2,3,4,5,6,7,8,9,10,12,14,16,18,20,30]))  
+        self.vxy1 = self.parse_axis(('vxy',[0,1,2,3,4,5,6,8,10,12,14,16,18,20]))  #Lxy 10, 100
+        self.ele_pt = self.parse_axis(("pt",[0,5,10,20,30])) 
+        
+        self.PT_GED = self.parse_axis(("PT_GED",[0,5,10,20,30]))  
+        self.PT_Lpt = self.parse_axis(("PT_Lpt",[0,5,10,20,30]))  
+        self.PT_Lpt_noxclean = self.parse_axis(("PT_Lpt_noxclean",[0,5,10,20,30]))  
 
 
-       
+        self.VXY_GED = self.parse_axis(("VXY_GED",[0,1,2,3,4,5,6,8,10,12,14,16,18,20]))  
+        self.VXY_Lpt = self.parse_axis(("VXY_Lpt",[0,1,2,3,4,5,6,8,10,12,14,16,18,20]))  
+
+        self.VXY_Lpt_noxclean = self.parse_axis(("VXY_Lpt_noxclean",[0,1,2,3,4,5,6,8,10,12,14,16,18,20]))  
+
+
+        ############################################
         self.IDScore = self.parse_axis(('id',100,-1,3))
         self.ele_passID = self.parse_axis(('passID',[0,1]))
 
@@ -116,6 +116,14 @@ def make_histograms():
     #No xclean
     h.make("pT_genElePos_Lpt_Noxclean", 'PT_Lpt_noxclean')
     h.make("vxy_genElePos_Lpt_Noxclean", 'VXY_Lpt_noxclean')
+
+    #2D plots
+    h.make("gen_ele_pt_vs_gen_ele_vxy1",'ele_pt','vxy1')
+
+    h.make("pT_genElePos_GED_vs_vxy_genElePos_GED",'PT_GED','VXY_GED')
+    
+    h.make("pT_genElePos_Lpt_vs_vxy_genElePos_Lpt",'PT_Lpt','VXY_Lpt')
+    h.make("pT_genElePos_Lpt_Noxclean_vs_vxy_genElePos_Lpt_Noxclean",'PT_Lpt_noxclean','VXY_Lpt_noxclean') #when you remove x-cleaning
 
     
 
@@ -199,13 +207,7 @@ def fillHistos(events,h,samp,cut,info,sum_wgt=1):
         pt_genpos_Lpt_ALL = events.GenPos.pt[mask_allLpt_p]
         vxy_genpos_Lpt_ALL = events.GenPos.vxy[mask_allLpt_p]
 
-        
-        
-
-       
-        
-        
-        
+    
         h.fill("gen_ele_pt",pt=events.GenEle.pt)
         h.fill("gen_ele_pt",pt=events.GenPos.pt)
 
@@ -235,6 +237,23 @@ def fillHistos(events,h,samp,cut,info,sum_wgt=1):
 
         h.fill("vxy_genElePos_Lpt_Noxclean", VXY_Lpt_noxclean = vxy_genele_Lpt_ALL)
         h.fill("vxy_genElePos_Lpt_Noxclean", VXY_Lpt_noxclean = vxy_genpos_Lpt_ALL)
+                
+        #2D fill
+        h.fill('gen_ele_pt_vs_gen_ele_vxy1',pt=events.GenEle.pt,vxy=events.GenEle.vxy)
+        h.fill('gen_ele_pt_vs_gen_ele_vxy1',pt=events.GenPos.pt,vxy=events.GenPos.vxy)
+
+        h.fill('pT_genElePos_GED_vs_vxy_genElePos_GED',PT_GED = pt_genele_GED,VXY_GED = vxy_genele_GED)  
+        h.fill('pT_genElePos_GED_vs_vxy_genElePos_GED',PT_GED = pt_genpos_GED,VXY_GED = vxy_genpos_GED)        
+
+
+
+        h.fill('pT_genElePos_Lpt_vs_vxy_genElePos_Lpt',PT_Lpt = pt_genele_Lpt,VXY_Lpt = vxy_genele_Lpt)        
+        h.fill('pT_genElePos_Lpt_vs_vxy_genElePos_Lpt',PT_Lpt = pt_genpos_Lpt,VXY_Lpt = vxy_genpos_Lpt)
+
+        h.fill('pT_genElePos_Lpt_Noxclean_vs_vxy_genElePos_Lpt_Noxclean',PT_Lpt_noxclean = pt_genele_Lpt_ALL,VXY_Lpt_noxclean = vxy_genele_Lpt_ALL )        
+        h.fill('pT_genElePos_Lpt_Noxclean_vs_vxy_genElePos_Lpt_Noxclean',PT_Lpt_noxclean = pt_genpos_Lpt_ALL,VXY_Lpt_noxclean = vxy_genpos_Lpt_ALL )        
+     
+
 
 ####dR cases############################
 
