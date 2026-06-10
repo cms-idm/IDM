@@ -61,46 +61,7 @@ bkg_cmap = {
 }
 '''
 
-# <<<<<<< HEAD
-# # <<<<<<< HEAD
-# # selected_signals = [
-# #     "signal_2022_Mchi-10p5_dMchi-1p0_ctau-10",
-# #     "signal_2022_Mchi-31p5_dMchi-3p0_ctau-10",
-# #     "signal_2022_Mchi-52p5_dMchi-5p0_ctau-10"    
-# # ]
-# # selected_signals_cmap = {
-# #     "signal_2022_Mchi-10p5_dMchi-1p0_ctau-10":"r",
-# #     "signal_2022_Mchi-31p5_dMchi-3p0_ctau-10":"b",
-# #     "signal_2022_Mchi-52p5_dMchi-5p0_ctau-10":"g"
-# # }
-# # =======
-# # selected_signals = [
-# #     "sig_2018_Mchi-10p5_dMchi-1p0_ctau-1",
-# #     "sig_2018_Mchi-11p0_dMchi-2p0_ctau-100",
-# #     "sig_2018_Mchi-52p5_dMchi-5p0_ctau-10",
-# #     "sig_2018_Mchi-77p0_dMchi-14p0_ctau-100"
-# # ]
-# # selected_signals_cmap = {
-# #     "sig_2018_Mchi-10p5_dMchi-1p0_ctau-1":"k",
-# #     "sig_2018_Mchi-11p0_dMchi-2p0_ctau-100":"g",
-# #     "sig_2018_Mchi-52p5_dMchi-5p0_ctau-10":"c",
-# #     "sig_2018_Mchi-77p0_dMchi-14p0_ctau-100":"b"
-# # }
-# # >>>>>>> kyungmin/main
-# =======
-# selected_signals = [
-#     "sig_2018_Mchi-10p5_dMchi-1p0_ctau-1",
-#     "sig_2018_Mchi-11p0_dMchi-2p0_ctau-100",
-#     "sig_2018_Mchi-52p5_dMchi-5p0_ctau-10",
-#     "sig_2018_Mchi-77p0_dMchi-14p0_ctau-100"
-# ]
-# selected_signals_cmap = {
-#     "sig_2018_Mchi-10p5_dMchi-1p0_ctau-1":"k",
-#     "sig_2018_Mchi-11p0_dMchi-2p0_ctau-100":"g",
-#     "sig_2018_Mchi-52p5_dMchi-5p0_ctau-10":"c",
-#     "sig_2018_Mchi-77p0_dMchi-14p0_ctau-100":"b"
-# }
-# >>>>>>> Andrew/ACR_Run3
+
 
 class histContainer:
     def __init__(self,path,noMeta=False,bkg=False):
@@ -882,7 +843,8 @@ def plot_signal_2D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
     fig = style_dict['fig']
     ax = style_dict['ax']
     
-    hep.cms.label('', data=False, year=plot_dict['year'])
+    hep.cms.label('Preliminary', data=False, year=plot_dict['year'], com='13.6')
+
     
     # get signal point info
     si = utils.get_signal_point_dict(sig_histo)
@@ -942,6 +904,7 @@ def plot_signal_2D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
     edges0 = histo.axes[0].edges
     edges1 = histo.axes[1].edges
     return count, edges0, edges1
+
 
 def plot_signal_2D_match(sig_histo, m1, delta, ctau, plot_dict, style_dict,match_type='L', passID=1):
     """
@@ -1044,9 +1007,13 @@ def plot_signal_2D_match(sig_histo, m1, delta, ctau, plot_dict, style_dict,match
         print(f"Saved: {style_dict['outDir']}/{style_dict['outName']}")
 
     count = histo.values()
-    edges0 = histo.axes[0].edges
-    edges1 = histo.axes[1].edges
-    return count, edges0, edges1
+    edges_pt = histo.axes[0].edges
+    center_pt = 0.5*(edges_pt[1:]-edges_pt[:-1])
+    edges_lxy = histo.axes[1].edges
+
+        
+
+    
 
 
 def get_bkg_histo_1d(bkg_histos, plot_dict, style_dict, processes = 'all'):
