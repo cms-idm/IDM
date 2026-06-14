@@ -1,3 +1,7 @@
+> **Run 3 setup:** This README covers the legacy Run-2 / `cmslpc-sl7` / conda setup and is
+> out of date. For the current Run 3 (electron + muon) analysis environment and how to get
+> things running, see [`../SETUP_Run3.md`](../SETUP_Run3.md).
+
 # Coffea analysis tools for iDMe
 
 This directory contains all the python-based analysis tools for iDMe. The analysis pipeline (i.e. applying cuts, filling histograms, etc.) is built using the [coffea](https://coffeateam.github.io/coffea/) framework for columnar analysis. Here's a summary of everything in this area:
