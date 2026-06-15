@@ -108,8 +108,11 @@ jupyter lab --no-browser --port 8888
 
 **First run — see the framework end to end:** open `idm/tutorials/01_workflow_walkthrough.ipynb`
 (load an ntuple → look at objects → pick named cuts/hists → run `IdmProcessor` → make a
-CMS-style plot). Sample ntuples live on EOS under `/store/group/lpcmetx/iDMe/` (muon samples
-under `…/iDMe/muonSamples/`); read them over xrootd (see §4).
+CMS-style plot). It defaults to the example ntuple
+`root://cmseos.fnal.gov//store/group/lpcmetx/IDM_Run3/examples/tutorial_DYJets_2022PostEE.root`
+(override with `$IDM_TUTORIAL_NTUPLE`). To scale this analysis out over LPC HTCondor with dask,
+see `idm/tutorials/02_lpc_dask_example.ipynb`. Run-3 samples + outputs live under
+`/store/group/lpcmetx/IDM_Run3/` — read over xrootd (see §4).
 
 ## 4. Reading ntuples / EOS
 

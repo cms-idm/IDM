@@ -26,3 +26,7 @@ CMSSW*
 ._*
 *.swp
 *.swo
+
+# local scratch from tutorials (downloaded coffea outputs, rendered demos)
+imported/
+idm/tutorials/rendered/

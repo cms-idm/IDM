@@ -18,3 +18,9 @@ correctionlib
 xgboost
 ipykernel
 distributed==2025.3.0
+
+# LPC interactive scale-out (dask over HTCondor) -- idm.tools.scaleout / tutorials/02.
+# lpcjobqueue is not on PyPI; install from the CoffeaTeam git commit (matches SIDM).
+htcondor==24.12.21
+dask_jobqueue==0.9.0
+lpcjobqueue @ git+https://github.com/CoffeaTeam/lpcjobqueue.git@fadee7edd1b8daec01f01ee998a280684d603b81
