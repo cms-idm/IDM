@@ -1,1 +1,1 @@
-"""idm.tools — pipeline helpers (scale-out, provenance, schema, processor, ...)."""
+"""idm.tools — pipeline helpers (scale-out, provenance, processor, plotting, lint)."""

@@ -7,17 +7,19 @@ analysis, modelled on the sister SIDM analysis. It targets the modern stack
 ## Why this exists
 - **Reproducible, distributed running** on LPC HTCondor from a notebook (`idm.tools.scaleout`).
 - **Provenance** on every output (`idm.tools.metadata` writes a `.meta.yaml` sidecar).
-- **Named configs, not forked code**: objects / cuts / histograms are defined once as named
-  callables (`idm/definitions/`) and selected *by name*, so each study varies *configuration*
-  instead of copying analysis code.
+- **Named configs, not forked code**: cuts / histograms (and, later, objects) are defined once
+  as named callables (`idm/definitions/`) and selected *by name*, so each study varies
+  *configuration* instead of copying analysis code. (Selection is via Python kwargs to
+  `IdmProcessor` today; a YAML config layer like SIDM's is planned, not yet built.)
 
 ## The flow in three steps
 1. **Define** analysis content once, by name, in `idm/definitions/`:
-   - `objects.py` — `obj_defs[name]` → `f(events)` returning a collection
    - `cuts.py` — `cut_defs[name]` → `f(events)` returning a per-event mask
    - `hists.py` — `hist_defs[name]` → `{"axis": <hist.axis>, "fill": f(events) → array}`
-2. **Select** which to run by name when you build the processor.
-3. **Run** the processor → it applies the cuts and fills the histograms.
+   - `objects.py` — `obj_defs[name]` → `f(events)` returning a collection *(placeholder — not
+     yet consumed by the processor; cuts/hists access collections like `e.Electron` directly)*
+2. **Select** which cuts/hists to run by name when you build the processor.
+3. **Run** the processor → it applies the cuts (in list order, cumulative cutflow) and fills the hists.
 
 ## Quick start
 
@@ -32,7 +34,8 @@ pip install -e .
 from coffea.nanoevents import NanoEventsFactory
 from idm.tools.processor import IdmProcessor
 
-# load an ntuple with the IDM schema (here the coffea-2025 schema)
+# load an ntuple with the IDM schema (the coffea-2025 schema still lives in python_analysis/,
+# so this sys.path shim is needed until it's packaged; run from the repo root)
 import sys; sys.path.insert(0, "python_analysis/analysisTools")
 from mySchema_newCoffea import MySchema
 
@@ -67,13 +70,16 @@ idm/
     plotting.py    CMS-style plotting helpers (figsize/style/exp_label/save pdf+png)
     lint_plots.py  mechanical CMS/mplhep plotting linter (python -m idm.tools.lint_plots)
   definitions/  the named-config DSL (example defs included; filled in as logic is ported)
-    objects.py     obj_defs:  name -> f(events) -> collection
-    cuts.py        cut_defs:   name -> f(events) -> mask
+    cuts.py        cut_defs:   name -> f(events) -> mask          (wired into IdmProcessor)
     hists.py       hist_defs:  name -> {"axis": <hist.axis>, "fill": f(events) -> array}
-  configs/      YAML configs that select definitions by name (samples, selections, hists)
+    objects.py     obj_defs:  name -> f(events) -> collection     (placeholder; not yet wired)
+  configs/      (planned) YAML configs to select definitions by name — not present yet;
+                today you pass cut/hist names directly to IdmProcessor(...)
 ```
 
 ## Status
-Done: package + `scaleout` + `metadata` + the `IdmProcessor` skeleton with worked example defs.
-Next: port real object/cut/hist definitions from `python_analysis/`, add the condor per-job-venv
-harness, a studies/notebook scaffold, and shared plotting helpers.
+Done: the package + `scaleout` + `metadata` + `IdmProcessor` (with example defs) + CMS plotting
+helpers (`plotting.py` / `lint_plots.py`) + the condor per-job-venv harness (`condor/`) + the
+runnable tutorial notebook.
+Next: port the real object/cut/hist definitions from `python_analysis/`; wire `obj_defs` into the
+engine (or drop it); build the YAML config layer; add a studies/notebook scaffold.

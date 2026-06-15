@@ -1,11 +1,24 @@
 # IDM Run 3 — setup & getting started
 
-This branch (`MS_Run3`, based on `ACR_Run3_dev`) is the working line for the Run 3
-inelastic-dark-matter analysis with **electrons and muons**. This document is the current,
-verified setup for the coffea analysis environment on the Fermilab LPC.
+`Run3_core` is the clean, pushed Run-3 line for the inelastic-dark-matter analysis with
+**electrons and muons**. This document is the current, verified setup for the coffea analysis
+environment on the Fermilab LPC.
 
 > The older `python_analysis/README.md` describes the Run-2 / `cmslpc-sl7` / conda setup
 > and is **out of date** — use this file for Run 3.
+
+## 0. Prerequisites (one time)
+
+- A Fermilab LPC account with a valid **Kerberos ticket** (`kinit <user>@FNAL.GOV`) — needed
+  both to `ssh` to LPC and to read ntuples from EOS.
+- Work on a **cmslpc el9** node (`cmslpc-el9.fnal.gov`).
+- Clone the repo and check out the Run-3 line:
+
+```bash
+git clone https://github.com/cms-idm/IDM.git
+cd IDM
+git checkout Run3_core
+```
 
 ## 1. The analysis chain (orientation)
 
@@ -33,6 +46,7 @@ unset PYTHONPATH                 # keep the venv isolated from the LCG view (imp
 source idm_venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
+python -m pip install -e .       # register the idm package, so `import idm` works
 ```
 
 Notes:
@@ -60,13 +74,25 @@ Register the kernel once:
 python -m ipykernel install --user --name idm_venv --display-name "IDM (LCG_107 Py3.11)"
 ```
 
-Then, with `idm_venv` active on LPC:
+Then, each session — open the SSH tunnel from your laptop **first** (it just forwards the
+port; the actual connection is made when your browser connects), then start the server on
+LPC. Use the **same port on both ends**:
 
 ```bash
-jupyter lab --no-browser --port 8888     # on LPC
-ssh -N -L 8888:localhost:8888 <user>@cmslpc-el9.fnal.gov   # on your laptop
-# open the printed http://localhost:8888/?token=… URL and pick the "IDM (LCG_107 Py3.11)" kernel
+# 1) on your laptop — forward local 8888 to the LPC login node (leave this running):
+ssh -N -L 8888:localhost:8888 <user>@cmslpc-el9.fnal.gov
+
+# 2) in a separate LPC session, with idm_venv active:
+jupyter lab --no-browser --port 8888
+
+# 3) open the printed http://localhost:8888/?token=… URL on your laptop and pick the
+#    "IDM (LCG_107 Py3.11)" kernel
 ```
+
+**First run — see the framework end to end:** open `idm/tutorials/01_workflow_walkthrough.ipynb`
+(load an ntuple → look at objects → pick named cuts/hists → run `IdmProcessor` → make a
+CMS-style plot). Sample ntuples live on EOS under `/store/group/lpcmetx/iDMe/` (muon samples
+under `…/iDMe/muonSamples/`); read them over xrootd (see §4).
 
 ## 4. Reading ntuples / EOS
 
@@ -78,14 +104,3 @@ root://cmseos.fnal.gov//store/group/lpcmetx/iDMe/<…>
 
 Reads need a valid Kerberos ticket; writing to EOS needs a VOMS proxy
 (`voms-proxy-init --valid 192:00 -voms cms`).
-
-## 5. Status & known issues (Run 3 migration in progress)
-
-- The coffea analysis code is currently **coffea-0.7-era** (`mySchema.py`,
-  `processor.Runner`) and is mid-migration to the coffea-2025 API this venv provides;
-  expect to port the Analyzer/processor + schema (a partial start is in
-  `mySchema_newCoffea.py`). The venv is the migration target.
-- The Condor submission JDLs reference an older singularity image and an absolute path from
-  the original author's home area; these need repointing before batch submission works.
-- Muon support (gen muons, PF + displaced-standalone muons, vertexing, IDs) is being added;
-  coordinate on the collaborator branches before duplicating work.
