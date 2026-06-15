@@ -1,21 +1,17 @@
 """Cut / selection definitions (named-config DSL).
 
-Each entry maps a NAME to a pure function of ``events`` returning a boolean mask
-(event-level) or a per-object mask. A YAML selection config composes cuts by name
-into named selections (mirroring SIDM's ``configs/selections.yaml``).
+Each entry maps a NAME to a pure function of ``events`` returning a per-event boolean mask.
+The processor (``idm.tools.processor.IdmProcessor``) AND-s the selected cuts into one event
+selection. A YAML config can later compose named cuts into named selections (as SIDM does).
 
-Additive scaffolding; the authoritative selection logic currently lives in
-``python_analysis/`` (cut configs + ``analysisSubroutines.py``) and is ported here
-incrementally. The published SR selections (ISR jet + MET + displaced di-lepton
-vertex, etc.) are documented in ``ANALYSIS_ROADMAP.md`` and ``OBJECTS_Run3.md``.
-
-Example shape:
-
-    cut_defs = {
-        "met_200":     lambda evts: evts.PFMET.pt > 200,
-        "lead_jet_80": lambda evts: ak.firsts(evts.PFJet.pt) > 80,
-    }
+Channel-specific selections (electron ID, muon DSA ID, displaced-vertex cuts, ...) are added
+by the channel owners as that logic is ported from ``python_analysis/``.
 """
 
-# Add cut definitions here. Keep each a pure function of `events`.
-cut_defs = {}
+import awkward as ak
+
+# --- EXAMPLE cuts (basic, for the framework demo / tutorial; replace with real ones) ---
+cut_defs = {
+    "has_electron": lambda e: ak.num(e.Electron, axis=1) >= 1,  # >= 1 PF electron
+    "has_muon":     lambda e: ak.num(e.Muon, axis=1) >= 1,      # >= 1 PF muon
+}

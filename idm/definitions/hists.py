@@ -1,21 +1,29 @@
 """Histogram definitions (named-config DSL).
 
-Each entry maps a NAME to a spec describing a ``hist.Hist`` axis (or axes) and the
-quantity to fill from ``events``. A YAML hist-collection config (mirroring SIDM's
-``configs/hist_collections.yaml``) groups named histograms into collections selected
-per study, so plotting/booking is configured by name rather than by editing code.
+Each entry maps a NAME to ``{"axis": <hist.axis>, "fill": f(events) -> array}``. The processor
+builds a ``hist.Hist`` from ``axis`` and fills it with ``fill(selected_events)``. The fill may
+return a per-event OR a per-object array — the processor flattens it — so a definition does not
+have to worry about jaggedness.
 
-Additive scaffolding; ``python_analysis/configs/histo_configs`` remains the source of
-truth until ported. Plots produced from these should follow the shared CMS plotting
-conventions in ``conventions/plotting.md`` (lint via ``conventions/lint_plots.py``).
-
-Example shape:
-
-    hist_defs = {
-        "dimuon_mass": {"axis": ("m", 100, 0, 10, "m(mumu) [GeV]"),
-                         "fill": lambda evts: ...},
-    }
+Plots produced from these should follow CMS plotting conventions (a shared plotting helper /
+linter is planned). Per-study histograms are added as the analysis is ported.
 """
 
-# Add histogram definitions here.
-hist_defs = {}
+import awkward as ak
+import hist
+
+# --- EXAMPLE histograms (basic kinematics, for the framework demo / tutorial) ----------
+hist_defs = {
+    "n_electron": {
+        "axis": hist.axis.Regular(8, 0, 8, name="n", label="N(electrons)"),
+        "fill": lambda e: ak.num(e.Electron, axis=1),          # per-event count
+    },
+    "electron_pt": {
+        "axis": hist.axis.Regular(50, 0, 100, name="pt", label=r"electron $p_{T}$ [GeV]"),
+        "fill": lambda e: e.Electron.pt,                       # per-object (jagged), auto-flattened
+    },
+    "muon_pt": {
+        "axis": hist.axis.Regular(50, 0, 100, name="pt", label=r"PF muon $p_{T}$ [GeV]"),
+        "fill": lambda e: e.Muon.pt,                           # per-object (jagged), auto-flattened
+    },
+}
