@@ -6,7 +6,6 @@ wrapper that makes you pass ``yerr`` explicitly for derived (non-count) quantiti
 otherwise draws bogus sqrt(N) bars), a CMS ``exp_label``, and a save helper that writes both
 PDF and PNG with ``bbox_inches='tight'`` and ``dpi=200``.
 
-Lint plotting scripts against these conventions with the local ``conventions/lint_plots.py``.
 Conventions adapted from the JFC framework (violatingcp/jfc).
 """
 
