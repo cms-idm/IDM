@@ -20,6 +20,8 @@ analysis, modelled on the sister SIDM analysis. It targets the modern stack
 3. **Run** the processor → it applies the cuts and fills the histograms.
 
 ## Quick start
+
+> 📓 **New here?** Start with the runnable walkthrough: `idm/tutorials/01_workflow_walkthrough.ipynb`.
 ```bash
 # from the repo root, in idm_venv (see SETUP_Run3.md):
 pip install -e .
