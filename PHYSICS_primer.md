@@ -1,9 +1,9 @@
 # IDM — physics primer (on-ramp)
 
 A short, plain-language introduction to the physics of the inelastic-dark-matter (iDM)
-analysis, for anyone joining the team. For the analysis *steps*, see `ANALYSIS_ROADMAP.md`;
-for object recipes, `OBJECTS_Run3.md`. Primary reference: the CMS displaced-dimuon iDM
-search, [arXiv:2305.11649](https://arxiv.org/abs/2305.11649) (PRL 132, 041802).
+analysis, for anyone joining the team. For how to set up and run the analysis, see
+`SETUP_Run3.md`. Primary reference: the CMS displaced-dimuon iDM search,
+[arXiv:2305.11649](https://arxiv.org/abs/2305.11649) (PRL 132, 041802).
 
 ## The model
 We look for a **dark sector** with its own force: a broken `U(1)_D` gauge symmetry whose
