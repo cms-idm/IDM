@@ -5,8 +5,9 @@ builds a ``hist.Hist`` from ``axis`` and fills it with ``fill(selected_events)``
 return a per-event OR a per-object array — the processor flattens it — so a definition does not
 have to worry about jaggedness.
 
-Plots produced from these should follow CMS plotting conventions (a shared plotting helper /
-linter is planned). Per-study histograms are added as the analysis is ported.
+Plots produced from these should follow CMS plotting conventions: build them with the
+``idm.tools.plotting`` helpers and lint plotting scripts with ``python -m idm.tools.lint_plots``.
+Per-study histograms are added as the analysis is ported.
 """
 
 import awkward as ak

@@ -64,6 +64,8 @@ idm/
     scaleout.py    LPCCondorCluster + dask Client (+ VOMS-proxy check); ships local idm/ to workers
     metadata.py    write/load .meta.yaml provenance sidecars for .coffea outputs
     processor.py   IdmProcessor: the named-config engine (apply named cuts, fill named hists)
+    plotting.py    CMS-style plotting helpers (figsize/style/exp_label/save pdf+png)
+    lint_plots.py  mechanical CMS/mplhep plotting linter (python -m idm.tools.lint_plots)
   definitions/  the named-config DSL (example defs included; filled in as logic is ported)
     objects.py     obj_defs:  name -> f(events) -> collection
     cuts.py        cut_defs:   name -> f(events) -> mask
