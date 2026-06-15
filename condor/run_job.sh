@@ -32,7 +32,7 @@ import coffea, awkward, uproot, hist, yaml
 print("coffea", coffea.__version__, "- imports OK")
 PY
 
-# 4. unpack the analysis code (idm/ + condor/run_idm_chunk.py + the schema) and run the chunk
+# 4. unpack the analysis code (idm/ incl. schema.py + condor/run_idm_chunk.py) and run the chunk
 tar -xzf idm_code.tar.gz
 export PYTHONPATH="${_CONDOR_SCRATCH_DIR}:${PYTHONPATH:-}"
 FILELIST_BASENAME=$(basename "${FILELIST}")

@@ -6,7 +6,7 @@ return a per-event OR a per-object array — the processor flattens it — so a 
 have to worry about jaggedness.
 
 Plots produced from these should follow CMS plotting conventions: build them with the
-``idm.tools.plotting`` helpers and lint plotting scripts with ``python -m idm.tools.lint_plots``.
+``idm.tools.plotting`` helpers and lint plotting scripts with the local ``conventions/lint_plots.py``.
 Per-study histograms are added as the analysis is ported.
 """
 

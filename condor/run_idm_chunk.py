@@ -9,21 +9,13 @@ Used by condor/run_job.sh on the batch workers, and runnable locally for testing
 
 import argparse
 import os
-import sys
-from pathlib import Path
 
 import coffea.util
 from coffea import processor
 
-# Make idm importable and locate the ntuple schema (lives in python_analysis until packaged).
-sys.path.insert(0, str(Path.cwd()))
-for _p in ("python_analysis/analysisTools",):
-    if os.path.isdir(_p):
-        sys.path.insert(0, _p)
-
 from idm.tools.processor import IdmProcessor
 from idm.tools import metadata
-from mySchema_newCoffea import MySchema
+from idm.schema import MySchema
 
 
 def read_filelist(path):

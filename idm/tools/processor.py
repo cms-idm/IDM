@@ -8,7 +8,7 @@ How the flow works, end to end
      - ``hists.py``:   ``hist_defs[name]``  → ``{"axis": <hist.axis>, "fill": f(events) → array}``
 2. You SELECT which ones to run **by name** (here, or later from a YAML config), e.g.::
 
-       p = IdmProcessor(cuts=["has_muon"], hists=["muon_pt", "n_dsamuon"])
+       p = IdmProcessor(cuts=["has_muon"], hists=["muon_pt", "n_electron"])
 
 3. ``process(events)`` AND-s the chosen cuts into one event selection, fills the chosen
    histograms from the selected events, and returns ``{"hists": {...}, "cutflow": {...}}``.

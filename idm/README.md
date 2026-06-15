@@ -34,12 +34,8 @@ pip install -e .
 ### Runnable example (end-to-end, ~10 lines)
 ```python
 from coffea.nanoevents import NanoEventsFactory
+from idm.schema import MySchema          # the coffea-2025 ntuple schema, packaged under idm/
 from idm.tools.processor import IdmProcessor
-
-# load an ntuple with the IDM schema (the coffea-2025 schema still lives in python_analysis/,
-# so this sys.path shim is needed until it's packaged; run from the repo root)
-import sys; sys.path.insert(0, "python_analysis/analysisTools")
-from mySchema_newCoffea import MySchema
 
 events = NanoEventsFactory.from_root(
     {"my_ntuple.root": "ntuples/outT"}, schemaclass=MySchema,
@@ -65,12 +61,12 @@ ported, so no one's in-progress work is disrupted.
 ## Layout
 ```
 idm/
+  schema.py     MySchema: coffea-2025 ntuple schema (ships to dask workers; see its docstring for the Run3_core muon gap)
   tools/        pipeline helpers
     scaleout.py    LPCCondorCluster + dask Client (+ VOMS-proxy check); ships local idm/ to workers
     metadata.py    write/load .meta.yaml provenance sidecars for .coffea outputs
     processor.py   IdmProcessor: the named-config engine (apply named cuts, fill named hists)
     plotting.py    CMS-style plotting helpers (figsize/style/exp_label/save pdf+png)
-    lint_plots.py  mechanical CMS/mplhep plotting linter (python -m idm.tools.lint_plots)
   definitions/  the named-config DSL (example defs included; filled in as logic is ported)
     cuts.py        cut_defs:   name -> f(events) -> mask          (wired into IdmProcessor)
     hists.py       hist_defs:  name -> {"axis": <hist.axis>, "fill": f(events) -> array}
@@ -81,7 +77,8 @@ idm/
 
 ## Status
 Done: the package + `scaleout` + `metadata` + `IdmProcessor` (with example defs) + CMS plotting
-helpers (`plotting.py` / `lint_plots.py`) + the condor per-job-venv harness (`condor/`) + the
+helpers (`plotting.py`) + the condor per-job-venv harness (`condor/`) + the
 runnable tutorial notebook.
 Next: port the real object/cut/hist definitions from `python_analysis/`; wire `obj_defs` into the
-engine (or drop it); build the YAML config layer; add a studies/notebook scaffold.
+engine (or drop it); build the YAML config layer; add a studies/notebook scaffold; port the MS_Run3 muon schema
+(IDMMuon mixin + DSAMuon rename) before muon-channel work.

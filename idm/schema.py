@@ -1,18 +1,19 @@
-# DUPLICATE of idm/schema.py (the canonical copy). Kept only for legacy coffea-0.7 code in
-# python_analysis (analysisTools.py) that imports it. Edit idm/schema.py and keep this in
-# sync, or retire this file when python_analysis is retired.
+"""Canonical coffea-2025 ntuple schema (MySchema) for the IDM analysis.
+
+CANONICAL copy, packaged under idm/ so it ships to dask workers with the idm/ tree
+(via idm.tools.scaleout UploadDirectory). python_analysis/analysisTools/mySchema_newCoffea.py
+is a byte-identical legacy duplicate kept only for the coffea-0.7 python_analysis code that
+still imports it -- edit BOTH (or retire the legacy one) to avoid silent drift.
+
+MUON GAP (Run3_core): this schema is electron-leaning. Muon is exposed only as a raw
+NanoCollection (no Lorentz behavior: no .mass / invariant mass / delta_r), and NO DSAMuon
+collection is formed (recoDSAMuon* branches are not renamed to DSAMuon_*). The IDMMuon mixin
+and the DSA rename live on the MS_Run3 branch; port them (coordinated, tested) before any
+di-muon / DSA analysis. Count-only muon use -- ak.num(Muon), Muon.pt -- works today.
+"""
 import warnings
 from coffea.nanoevents import transforms
 from coffea.nanoevents.schemas.base import BaseSchema, zip_forms
-
-
-def _key_formatter(prefix, form_key, form, attribute):
-    if attribute == "offsets":
-        form_key += "%2C%21offsets"
-    return prefix + f"/{attribute}/{form_key}"
-
-
-# REMOVE ABOVE
 
 
 class MySchema(BaseSchema):

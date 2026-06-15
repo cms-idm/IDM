@@ -9,7 +9,7 @@ arguments = $(sample) $(chunk) $(filelist) root://cmseos.fnal.gov//store/group/l
 should_transfer_files = YES
 when_to_transfer_output = ON_EXIT
 
-# idm_code.tar.gz holds idm/ + condor/run_idm_chunk.py + the schema (see condor/README.md)
+# idm_code.tar.gz holds idm/ (incl. schema.py) + condor/run_idm_chunk.py (see condor/README.md)
 transfer_input_files = idm_code.tar.gz, requirements.txt, $(filelist)
 
 output = logs/$(sample)_$(chunk)_$(Cluster)_$(Process).out

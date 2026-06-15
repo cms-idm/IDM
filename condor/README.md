@@ -23,9 +23,8 @@ voms-proxy-init --valid 192:00 -voms cms
 # 2) make the per-chunk job args:
 python condor/make_job_args.py --filelists-dir condor/filelists_in --files-per-job 5
 
-# 3) tar the analysis code the workers need (idm/ + the chunk runner + the schema):
-tar -czf condor/idm_code.tar.gz idm condor/run_idm_chunk.py \
-    python_analysis/analysisTools/mySchema_newCoffea.py
+# 3) tar the analysis code the workers need (idm/ incl. schema.py + the chunk runner):
+tar -czf condor/idm_code.tar.gz idm condor/run_idm_chunk.py
 
 # 4) edit the EOS output dir in submit.sub, then submit from inside condor/:
 cd condor && mkdir -p logs && condor_submit submit.sub
