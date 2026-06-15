@@ -2,6 +2,7 @@
 # plus correctionlib + xgboost which IDM analysisTools use. Built into idm_venv on LCG_107.
 awkward==2.8.7
 coffea==2025.5.0rc2
+bokeh==3.9.1
 dask==2025.3.0
 fastjet==3.4.3.1
 hist==2.9.0

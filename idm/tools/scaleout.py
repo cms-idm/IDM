@@ -10,14 +10,20 @@ import os
 import subprocess
 from pathlib import Path
 
+import dask
 from dask.distributed import Client, PipInstall
 
 
-def make_dask_client(address):
-    """Create a dask client with a pip-install plugin (coffea-casa style)."""
-    dependencies = [
-        "git+https://github.com/cms-idm/IDM.git",
-    ]
+def make_dask_client(address, ref="Run3_core"):
+    """Create a dask client for an existing scheduler, pip-installing the IDM package on
+    workers from a git ref (coffea-casa style).
+
+    ``ref`` defaults to ``Run3_core`` (the pushed Run-3 line) and is pinned explicitly: with
+    no ref, pip pulls the GitHub *default* branch (``main``, which is Run-2 electron-only), so
+    workers would silently run the wrong code. For uncommitted local edits, prefer
+    ``make_lpc_client`` — it ships the local ``idm/`` to workers via ``UploadDirectory`` (no push).
+    """
+    dependencies = [f"git+https://github.com/cms-idm/IDM.git@{ref}"]
     client = Client(address)
     client.register_plugin(
         PipInstall(packages=dependencies, pip_options=["--upgrade", "--no-cache-dir"])
@@ -31,7 +37,7 @@ _DEFAULT_LPC_IMAGE = (
     "coffea-dask-almalinux9:2025.5.0.rc2-py3.11"  # matches idm_venv (coffea 2025.5.0rc2, py3.11)
 )
 _DEFAULT_IDM_LOCAL_DIR = _REPO_ROOT / "idm"
-_DEFAULT_LPC_CONFIG = _REPO_ROOT / "condor" / "lpc_condor_config"  # optional; see make_lpc_client
+_DEFAULT_LPC_CONFIG = _REPO_ROOT / "condor" / "lpc_condor_config"  # minimal LPC interactive config
 _PROXY_RENEW_CMD = "voms-proxy-init --valid 192:00 -voms cms"
 
 
@@ -79,7 +85,7 @@ def make_lpc_client(
     death_timeout=600,
     image=_DEFAULT_LPC_IMAGE,
     idm_local_dir=_DEFAULT_IDM_LOCAL_DIR,
-    condor_config=None,
+    condor_config=_DEFAULT_LPC_CONFIG,
     **cluster_kwargs,
 ):
     """Create an LPCCondorCluster + Client to scale IDM jobs from a notebook on cmslpc.
@@ -98,8 +104,10 @@ def make_lpc_client(
             Other coffea versions live under
             ``/cvmfs/unpacked.cern.ch/registry.hub.docker.com/coffeateam/``.
         idm_local_dir: local ``idm/`` source uploaded to workers (None to skip).
-        condor_config: optional path to a CONDOR_CONFIG file. If None, the node default
-            is used. A tuned LPC interactive config can be added under ``condor/`` later.
+        condor_config: path to a CONDOR_CONFIG file. Defaults to ``condor/lpc_condor_config``,
+            a minimal LPC interactive config that omits the ``cmslpc-local-conf.py`` include
+            directive (it points at a per-user file absent on some cmslpc-el9 nodes). Set None
+            to fall back to the node default.
         **cluster_kwargs: forwarded to ``LPCCondorCluster``.
 
     Returns:
@@ -113,6 +121,15 @@ def make_lpc_client(
 
     from lpcjobqueue import LPCCondorCluster
     from distributed.diagnostics.plugin import UploadDirectory
+
+    # Point the dask dashboard link at localhost so it matches the documented SSH tunnel
+    # (``ssh -L 8787:localhost:8787``). Importing lpcjobqueue above sets
+    # distributed.dashboard.link to the relative "/proxy/{port}/status" jupyter-server-proxy
+    # route, which does not exist on a plain SSH-forwarded LPC scheduler (the dashboard serves
+    # /status at the root), so that link 404s over the tunnel. Rewrite it unless we are genuinely
+    # under JupyterHub, where the proxy route is real. Must run AFTER the import (it clobbers this).
+    if "JUPYTERHUB_SERVICE_PREFIX" not in os.environ:
+        dask.config.set({"distributed.dashboard.link": "{scheme}://localhost:{port}/status"})
 
     cluster = LPCCondorCluster(
         memory=memory,
