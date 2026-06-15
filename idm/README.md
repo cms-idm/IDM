@@ -11,6 +11,8 @@ analysis, modelled on the sister SIDM analysis. It targets the modern stack
   as named callables (`idm/definitions/`) and selected *by name*, so each study varies
   *configuration* instead of copying analysis code. (Selection is via Python kwargs to
   `IdmProcessor` today; a YAML config layer like SIDM's is planned, not yet built.)
+- **No separate skim stage**: the Run-2 RDataFrame pre-skim is replaced by named cuts run over
+  the full ntuples via dask/condor — see `SETUP_Run3.md` §1.
 
 ## The flow in three steps
 1. **Define** analysis content once, by name, in `idm/definitions/`:

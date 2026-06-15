@@ -34,6 +34,23 @@ gridpack ──▶ UL_MCProduction ──▶ AOD ──▶ AODSkimmer (ElectronS
 - **Production / ntuplizing** (CMSSW): top-level `README.md`, `UL_MCProduction/`, `AODSkimmer/`.
 - **Analysis** (coffea / Python): `python_analysis/` — this is what the venv below is for.
 
+### Old vs. new analysis workflow
+
+**Old (Run-2):** AOD → `AODSkimmer` (C++) → flat ntuples → an **RDataFrame pre-skim**
+(`python_analysis/condor/skimming_rdf/`) that applies the major iDM preselection (MET, ≥1 jet)
+to produce *small* "skimmed" ntuples → coffea analysis run **locally** in a notebook (feasible
+only because the skim shrank the event yield).
+
+**New (Run-3, this framework):** AOD → `AODSkimmer` (C++) → flat ntuples → **coffea
+`IdmProcessor` run distributed over LPC HTCondor (dask)** directly on the full ntuples. The
+preselection that used to live in the RDataFrame skim becomes **named cuts**
+(`idm/definitions/cuts.py`) applied in the processor — so there is **no separate skim stage**.
+
+Distributed compute (`idm.tools.scaleout` / the `condor/` harness) makes running over full
+statistics tractable, the selection lives in one place (config, not a forked C++ skim), and
+every output carries provenance. Only the intermediate RDataFrame skim goes away — the C++
+`AODSkimmer` ntuplization is unchanged.
+
 ## 2. Build the analysis environment (one time, on LPC)
 
 The analysis runs in a Python 3.11 virtualenv built on the cvmfs `LCG_107` view. On a
