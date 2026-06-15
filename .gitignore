@@ -20,3 +20,9 @@ CMSSW*
 *.csv
 *.txt
 *.json
+# OS / editor junk (repo-hygiene cleanup)
+.DS_Store
+**/.DS_Store
+._*
+*.swp
+*.swo
