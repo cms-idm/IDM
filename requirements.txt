@@ -16,3 +16,4 @@ xrootd==6.0.3
 correctionlib
 xgboost
 ipykernel
+distributed==2025.3.0
