@@ -1,0 +1,15 @@
+# Per-job throwaway-venv requirements for IDM condor workers (built fresh in condor scratch
+# by run_job.sh). Keep the coffea/awkward/hist/uproot pins identical to the repo-root
+# requirements.txt so batch and notebook results match.
+awkward==2.8.7
+coffea==2025.5.0rc2
+hist==2.9.0
+uproot==5.7.4
+numpy==2.3.2
+vector==1.6.3
+fastjet==3.4.3.1
+correctionlib
+xgboost
+PyYAML==6.0.2
+setuptools==80.1.0
+xrootd==6.0.3
