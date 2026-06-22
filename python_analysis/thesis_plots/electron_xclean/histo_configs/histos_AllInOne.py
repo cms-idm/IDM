@@ -28,6 +28,9 @@ class myHisto:
         self.mindR = self.parse_axis(('mindR',60,0,0.06)) 
         
         #For eff studies
+        self.Res_LPT = self.parse_axis(('Res_LPT',[-1,1])) 
+        self.Res_GED = self.parse_axis(('Res_GED',[-1,1])) 
+
         self.vxy1 = self.parse_axis(('vxy',[0,1,2,3,4,5,6,8,10,12,14,16,18,20]))  #Lxy 10, 100
         # self.ele_pt = self.parse_axis(("pt",[0,5,10,20,30])) 
         self.ele_pt = self.parse_axis(("pt",[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25])) 
@@ -95,39 +98,17 @@ class myHisto:
 def make_histograms():
     h = myHisto()
     
-    h.make('gen_dR', 'dR')
-    h.make('dR_gen_GED_GED', 'dRgenGEDGED')
-    h.make('dR_gen_Lpt_Lpt', 'dRgenLptLpt')
-    h.make('dR_gen_GED_Lpt', 'dRgenGEDLpt')
-    h.make('dR_gen_Lpt_GED', 'dRgenLptGED')
-
+   
            
     h.make('gen_ele_pt','ele_pt')
     h.make('gen_ele_vxy1','vxy1')
 
+    #Resolution studies
+    h.make('res_lowpT_gen','Res_LPT')
     
-    h.make('pT_genElePos_GED', 'PT_GED')
-    h.make('pT_genElePos_Lpt', 'PT_Lpt')
-
-    h.make('vxy_genElePos_GED', 'VXY_GED')
-    h.make('vxy_genElePos_Lpt', 'VXY_Lpt')
     
-
-
-    #No xclean
-    h.make("pT_genElePos_Lpt_Noxclean", 'PT_Lpt_noxclean')
-    h.make("vxy_genElePos_Lpt_Noxclean", 'VXY_Lpt_noxclean')
-
-    #2D plots
-    h.make("gen_ele_pt_vs_gen_ele_vxy1",'ele_pt','vxy1')
-
-    h.make("pT_genElePos_GED_vs_vxy_genElePos_GED",'PT_GED','VXY_GED')
+    h.make('res_GED_gen','Res_GED')
     
-    h.make("pT_genElePos_Lpt_vs_vxy_genElePos_Lpt",'PT_Lpt','VXY_Lpt')
-    h.make("pT_genElePos_Lpt_Noxclean_vs_vxy_genElePos_Lpt_Noxclean",'PT_Lpt_noxclean','VXY_Lpt_noxclean') #when you remove x-cleaning
-
-    
-
     return h
 
 subroutines = []
@@ -139,129 +120,78 @@ def fillHistos(events,h,samp,cut,info,sum_wgt=1):
     wgt = events.eventWgt/sum_wgt
     
     if info["type"] == "signal":
+
+
+        #Resolution STUDY:
+
+        mask = (events.GenEle.matchedAllLowPt) & (events.GenPos.matchedAllLowPt)
+        events_new = events[mask]
+
+        mask_dr = events_new.AllLptElectron.minDRtoReg < 0.05
+
+        mask_dr_event = ak.any(mask_dr, axis=1)
+
+        events_new_very = events_new[mask_dr_event] #We have now chosen events that have atleast a mindr<0.05
+
+        Gen_Ele_pt = events_new_very.GenEle.pt
+        print ("Gen_Ele_pt=", Gen_Ele_pt)
+        Gen_Pos_pt = events_new_very.GenPos.pt
+        print ("Gen_Pos_pt=", Gen_Pos_pt)
+
+        Lpt_dr = events_new_very.AllLptElectron.minDRtoReg
+        print (Lpt_dr)
+
+        Lpt_mask_dr = events_new_very.AllLptElectron.minDRtoReg < 0.05
+        print (events_new_very.AllLptElectron.minDRtoReg[Lpt_mask_dr])
+
+        Lpt_pt = events_new_very.AllLptElectron.pt[Lpt_mask_dr] #These are the Lpt Electrons that have a nearby GED
+        print ("Lpt_pt=", Lpt_pt)
+        print (len(Lpt_pt))
+
+        # GED_pt = events_new_very.Electron.pt[(events_new_very.Electron.genMatched) & (events_new_very.Electron.hasAllLptMatch)]
+        # print ("GED_pt=", GED_pt)
+        # mask = ak.num(GED_pt, axis=1) == ak.num(Lpt_pt, axis=1)
+        # print(mask)
+        # n_bad = ak.sum(~mask)
+        # print(n_bad)
+        
         
 
-        #When no lpt ele with GED match (with-xclean)
+        # mask_GED = events_new_very.Electron.genMatched
+        # GED_pt = events_new_very.Electron.pt[mask_GED]
+        # print ("GED_pt=", GED_pt)
+        # print (len(GED_pt))
 
-        #GenEle########################
-        mask_genele = events.GenEle.matched
-        events_with_genEle_matched = events[mask_genele]
+        print(ak.all(ak.num(GED_pt, axis=1) == ak.num(Lpt_pt, axis=1)))
+
+
+        # mask = (events.AllLptElectron.genMatched) & (events.AllLptElectron.minDRtoReg < 0.05) #Select events where low-pt ele are all gen matched and they have a nearby GED.
+        # Lpt_pt = events.AllLptElectron.pt[mask]
+        # print (Lpt_pt)
+        # GED_pt = events.Electron.pt[mask]
+        # events_new = events[mask] #We have events where low-pT electrons are gen matched
+
+        # #Now, let us choose events with mindr<0.05
+        # mask_dr = events_new.AllLptElectron.minDRtoReg < 0.05
+        # mask_dr_event = ak.any(mask_dr, axis=1)
+
+        # events_new_very = events_new[mask_dr_event] 
+        # dr = events_new_very.AllLptElectron.minDRtoReg
+        # print ("dr=", dr)
+
+
+
         
-        mask_R = (events_with_genEle_matched.GenEle.matchType == 'R')  
-        mask_L = (events_with_genEle_matched.GenEle.matchType == 'L')        
-
-        #pT cases
-        pt_genele_GED = events_with_genEle_matched.GenEle.pt[mask_R] 
-        pt_genele_Lpt = events_with_genEle_matched.GenEle.pt[mask_L]
-        
-        #vxy cases
-        vxy_genele_GED = events_with_genEle_matched.GenEle.vxy[mask_R] 
-        vxy_genele_Lpt = events_with_genEle_matched.GenEle.vxy[mask_L]
-
-       
-        
-        #GenPos###########################
-        mask_genpos = events.GenPos.matched        
-        events_with_genpos_matched = events[mask_genpos]
-        
-        mask_R_pos = (events_with_genpos_matched.GenPos.matchType == 'R')   
-        mask_L_pos = (events_with_genpos_matched.GenPos.matchType == 'L')        
-
-        #pT cases
-        pt_genpos_GED = events_with_genpos_matched.GenPos.pt[mask_R_pos] 
-        pt_genpos_Lpt = events_with_genpos_matched.GenPos.pt[mask_L_pos] 
-
-                
-        #vxy cases
-        vxy_genpos_GED = events_with_genpos_matched.GenPos.vxy[mask_R_pos] 
-        vxy_genpos_Lpt = events_with_genpos_matched.GenPos.vxy[mask_L_pos] 
-
-
-        #dR cases: Only x-cleaned ele
-        MASK = (mask_genele) & (mask_genpos)
-        events_mask = events[MASK]
-
-        mask_GED_GED = (events_mask.GenEle.matchType == 'R') &  (events_mask.GenPos.matchType == 'R')
-        mask_Lpt_Lpt = (events_mask.GenEle.matchType == 'L') &  (events_mask.GenPos.matchType == 'L')
-        mask_GED_Lpt = (events_mask.GenEle.matchType == 'R') &  (events_mask.GenPos.matchType == 'L')
-        mask_Lpt_GED = (events_mask.GenEle.matchType == 'L') &  (events_mask.GenPos.matchType == 'R')
-       
-        
-        dR_gen_GED_GED = events_mask.genEE.dr[mask_GED_GED]
-        dR_gen_Lpt_Lpt = events_mask.genEE.dr[mask_Lpt_Lpt]
-        dR_gen_GED_Lpt = events_mask.genEE.dr[mask_GED_Lpt]
-        dR_gen_Lpt_GED = events_mask.genEE.dr[mask_Lpt_GED]
       
        
-
         
 
-        #All Lpt ele (No xclean)
-        mask_allLpt_e = events.GenEle.matchedAllLowPt 
-        
-        pt_genele_Lpt_ALL = events.GenEle.pt[mask_allLpt_e]
-        vxy_genele_Lpt_ALL = events.GenEle.vxy[mask_allLpt_e]
 
 
-        mask_allLpt_p = events.GenPos.matchedAllLowPt
-        
-        pt_genpos_Lpt_ALL = events.GenPos.pt[mask_allLpt_p]
-        vxy_genpos_Lpt_ALL = events.GenPos.vxy[mask_allLpt_p]
-
-    
-        h.fill("gen_ele_pt",pt=events.GenEle.pt)
-        h.fill("gen_ele_pt",pt=events.GenPos.pt)
 
 
-        h.fill("pT_genElePos_GED", PT_GED = pt_genele_GED)
-        h.fill("pT_genElePos_GED", PT_GED = pt_genpos_GED)
 
-        h.fill("pT_genElePos_Lpt", PT_Lpt = pt_genele_Lpt)
-        h.fill("pT_genElePos_Lpt", PT_Lpt = pt_genpos_Lpt)   
+
+
 
                 
-
-        h.fill("pT_genElePos_Lpt_Noxclean", PT_Lpt_noxclean = pt_genele_Lpt_ALL)
-        h.fill("pT_genElePos_Lpt_Noxclean", PT_Lpt_noxclean = pt_genpos_Lpt_ALL)
-
-###################################vxy cases##############
-
-        h.fill("gen_ele_vxy1",vxy=events.GenEle.vxy)
-        h.fill("gen_ele_vxy1",vxy=events.GenPos.vxy)
-        
-        h.fill("vxy_genElePos_GED", VXY_GED = vxy_genele_GED)
-        h.fill("vxy_genElePos_GED", VXY_GED = vxy_genpos_GED)
-
-        h.fill("vxy_genElePos_Lpt", VXY_Lpt = vxy_genele_Lpt)
-        h.fill("vxy_genElePos_Lpt", VXY_Lpt = vxy_genpos_Lpt)
-
-
-        h.fill("vxy_genElePos_Lpt_Noxclean", VXY_Lpt_noxclean = vxy_genele_Lpt_ALL)
-        h.fill("vxy_genElePos_Lpt_Noxclean", VXY_Lpt_noxclean = vxy_genpos_Lpt_ALL)
-                
-        #2D fill
-        h.fill('gen_ele_pt_vs_gen_ele_vxy1',pt=events.GenEle.pt,vxy=events.GenEle.vxy)
-        h.fill('gen_ele_pt_vs_gen_ele_vxy1',pt=events.GenPos.pt,vxy=events.GenPos.vxy)
-
-        h.fill('pT_genElePos_GED_vs_vxy_genElePos_GED',PT_GED = pt_genele_GED,VXY_GED = vxy_genele_GED)  
-        h.fill('pT_genElePos_GED_vs_vxy_genElePos_GED',PT_GED = pt_genpos_GED,VXY_GED = vxy_genpos_GED)        
-
-
-
-        h.fill('pT_genElePos_Lpt_vs_vxy_genElePos_Lpt',PT_Lpt = pt_genele_Lpt,VXY_Lpt = vxy_genele_Lpt)        
-        h.fill('pT_genElePos_Lpt_vs_vxy_genElePos_Lpt',PT_Lpt = pt_genpos_Lpt,VXY_Lpt = vxy_genpos_Lpt)
-
-        h.fill('pT_genElePos_Lpt_Noxclean_vs_vxy_genElePos_Lpt_Noxclean',PT_Lpt_noxclean = pt_genele_Lpt_ALL,VXY_Lpt_noxclean = vxy_genele_Lpt_ALL )        
-        h.fill('pT_genElePos_Lpt_Noxclean_vs_vxy_genElePos_Lpt_Noxclean',PT_Lpt_noxclean = pt_genpos_Lpt_ALL,VXY_Lpt_noxclean = vxy_genpos_Lpt_ALL )        
-     
-
-
-####dR cases############################
-
-        h.fill("gen_dR",dR=events.genEE.dr)
-        
-        h.fill("dR_gen_GED_GED", dRgenGEDGED=dR_gen_GED_GED)
-        h.fill("dR_gen_Lpt_Lpt", dRgenLptLpt=dR_gen_Lpt_Lpt)
-        h.fill("dR_gen_GED_Lpt", dRgenGEDLpt=dR_gen_GED_Lpt)
-        h.fill("dR_gen_Lpt_GED", dRgenLptGED=dR_gen_Lpt_GED)
-     
