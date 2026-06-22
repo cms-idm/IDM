@@ -5,7 +5,7 @@ from analysisTools.analysisSubroutines import getBtagWPs, hasGoodVertex, selectB
 def cut1(events,info):
     name = "cut1"
     desc = r"Pass $\vec{p}_T^{miss}$ Filters"
-    plots = False
+    plots = True
     cut = events.METFiltersFailBits == 0
     return events[cut], name, desc, plots
 
@@ -133,85 +133,59 @@ def defineGoodVertices(events,version='v9',ele_id='dR'):
 #    plots = True 
 #    return events, name, desc, plots
 
-def cut9(events, info):
+def cut9(events,info):
     name = "cut9"
+    desc = r"N GED/Lpt Electron >= 2"
+    plots = True
+    cut = (ak.num(events.Electron) + ak.num(events.LptElectron)) >= 2
+    return events[cut], name, desc, plots
+
+def cut10(events,info):
+    name = "cut10"
+    desc = r"N Gen-Matched Ele >= 2"
+    plots = True
+    ged_matched = events.Electron[events.Electron.genMatched]
+    lpt_matched = events.LptElectron[events.LptElectron.genMatched]
+    cut = (ak.num(ged_matched) + ak.num(lpt_matched)) >= 2
+    return events[cut], name, desc, plots
+
+def cut11(events, info):
+    name = "cut11"
+    desc = "Vertex N Gen-Matched Ele >= 1"
+    plots = True
+    cut = ak.any((events.vtx.e1_isMatched | events.vtx.e2_isMatched), axis=1)
+    return events[cut], name, desc, plots
+
+def cut12(events, info):
+    name = "cut12"
     desc = "Vertex is gen-matched"
     plots = True
     cut = ak.any(events.vtx.isMatched, axis=1)
     return events[cut], name, desc, plots
 
-def cut10(events, info):
-    name = "cut10"
-    desc = "Vtx: Ele ID Cut"
-    plots = True
-    cut = ak.any(events.vtx.e1.passID & events.vtx.e2.passID, axis=1)
-    return events[cut], name, desc, plots
-
-def cut11(events, info):
-    name = "cut11"
-    desc = "Vtx: maxMiniIso < 0.9"
-    plots = True
-    cut = ak.any(np.maximum(events.vtx.e1.miniRelIsoEleCorr, events.vtx.e2.miniRelIsoEleCorr) < 0.9, axis=1)
-    return events[cut], name, desc, plots
-
-def cut12(events, info):
-    name = "cut12"
-    desc = "Vtx: reduced chi^2 < 15"
-    plots = True
-    cut = ak.any(events.vtx.reduced_chi2 < 15, axis=1)
-    return events[cut], name, desc, plots
-
 def cut13(events, info):
-    name = "cut13"
-    desc = "Vtx: min dxy > 0.001"
-    plots = True
-    cut = ak.any(np.minimum(np.abs(events.vtx.e1.refit_dxy), np.abs(events.vtx.e2.refit_dxy)) > 0.001, axis=1)
-    return events[cut], name, desc, plots
-
-def cut14(events, info):
-    name = "cut14"
-    desc = "Vtx: pass conversion veto"
-    plots = True
-    cut = ak.any(events.vtx.e1.conversionVeto & events.vtx.e2.conversionVeto, axis=1)
-    return events[cut], name, desc, plots
-
-def cut15(events, info):
-    name = "cut15"
-    desc = "Vtx: refitted mass > 0.1 GeV"
-    plots = True
-    cut = ak.any(events.vtx.refit_m > 0.1, axis=1)
-    return events[cut], name, desc, plots
-
-def cut16(events, info):
-    name = "cut16"
-    desc = "Vtx: min log(dxy/dz) > -2"
-    plots = True
-    cut = ak.any(np.minimum(np.log10(np.abs(events.vtx.e1.dxy/events.vtx.e1.dz)), np.log10(np.abs(events.vtx.e2.dxy/events.vtx.e2.dz))) > -2, axis=1)
-    return events[cut], name, desc, plots
-
-def cut17(events, info):
     events = hasGoodVertex(events, info)
-    name = 'cut17' 
+    name = 'cut13' 
     desc = 'Has Good ee Vertex' 
     plots = True 
     return events, name, desc, plots
 
-def cut18(events,info):
-    name = "cut18"
+def cut14(events,info):
+    name = "cut14"
     desc = "SV(ee) OSSF"
     plots = True
     cut = events.sel_vtx.sign == -1
     return events[cut], name, desc, plots
 
-def cut19(events,info):
-    name = "cut19"
+def cut15(events,info):
+    name = "cut15"
     desc = r"SV(ee) $cos(\theta_{coll}) > 0.4$"
     plots = True
     cut = events.sel_vtx.cos_collinear > 0.4
     return events[cut], name, desc, plots
 
-def cut20(events,info):
-    name = "cut20"
+def cut16(events,info):
+    name = "cut16"
     desc = r"SV(ee) $\chi^2/ndf < 3$"
     plots = True
     cut = events.sel_vtx.reduced_chi2 < 3.

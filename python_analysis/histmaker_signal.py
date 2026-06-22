@@ -18,9 +18,9 @@ import os
 import glob
 
 # ---- SETTINGS ----
-vers = 'May2026'
-cuts = 'ansplitvtx'
-hists = 'recores'
+vers = 'Jun2026noID'
+cuts = 'anmatchvtx'
+hists = 'mergedmatch'
 
 
 # ---- FILES ----

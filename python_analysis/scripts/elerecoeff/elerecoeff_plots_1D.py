@@ -28,15 +28,15 @@ import mplhep as hep
 #hists_config = "configs/hists/genstudy.py"
 #sample_config = "configs/samples/signal_2024_Apr2026_aEM.json"
 outdir = 'workarea'
-saved_signal_hists = f"{outdir}/hists_sigMay2026_recoeff-sel_elerecoeff.coffea"
+saved_signal_hists = f"{outdir}/hists_sigMay2026_an-sel_elerecoeff.coffea"
 
 title = 'Electron Reco'
-seltag = 'hlt2eles'
+seltag = 'nocuts'
 # Plot settings
 plot_dict = {
     'variable': ['ele_reco_lpt_pt_lxy', 'ele_reco_ged_pt_lxy', 'ele_reco_none_pt_lxy'], 
     'year': 2024,
-    'cut': 'cut3',
+    'cut': 'cut1',
 }
 _pt_edges  = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 6, 7, 8, 9, 10, 12.5, 15, 17.5, 20, 22.5, 25, 30, 40, 50]
 _lxy_edges = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 7.5, 10, 12.5, 15, 20, 25, 30, 40]
@@ -316,12 +316,13 @@ for cfg in proj_configs:
         plt.close(fig)
 
 # ── Comparison plots ──────────────────────────────────────────────────────────
-_comp_pt_edges  = list(range(0, 51))   # 50 × 1-GeV bins
-_comp_lxy_edges = list(range(0, 41))   # 40 × 1-cm bins
+cmap = ["#3f90da", "#ffa90e", "#bd1f01", "#94a4a2", "#832db6", "#a96b59", "#e76300", "#b9ac70", "#717581", "#92dadd"]
+_comp_pt_edges  = list(range(0, 31))   # 30 × 1-GeV bins
+_comp_lxy_edges = list(range(0, 21))   # 20 × 1-cm bins
 _comp_pt_vars     = ['ele_reco_lpt_pt_lxy', 'ele_reco_ged_pt_lxy', 'ele_reco_none_pt_lxy']
 _comp_alllpt_vars = ['ele_reco_alllpt_pt_lxy', 'ele_reco_noalllpt_pt_lxy']
 _comp_eff_labels  = ['LowPt', 'GED', 'Both', 'AllLowPt']
-_comp_colors      = ['C0', 'C1', 'C2', 'C3']
+_comp_colors      = cmap[0:4] #['C0', 'C1', 'C2', 'C3']
 _cut = plot_dict['cut']
 
 def _comp_effhists(hists_rb, alllpt_rb):

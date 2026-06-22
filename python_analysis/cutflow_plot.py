@@ -22,9 +22,9 @@ import glob
 #hists_config = "configs/hists/genstudy.py"
 #sample_config = "configs/samples/signal_2024_May2026_aEM.json"
 outdir = 'workarea'
-vers = 'May2026'
+vers = 'Jun2026noID'
 selection = 'anmatchvtx'
-hists = 'vtxvars'
+hists = 'mergedmatch'
 saved_signal_hists = f"{outdir}/hists_sig{vers}_{selection}-sel_{hists}.coffea"
 plottag = f'sig{vers}_{selection}-sel'
 
@@ -76,7 +76,7 @@ ctaus = [10]
 
 plot_dict_sig_eff['m1s'] = m1s; plot_dict_sig_eff['deltas'] = deltas; plot_dict_sig_eff['ctaus'] = ctaus
 plot_dict_sig_eff['title'] = rf"Signal Cutflow [AN Selection]: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm"
-plot_dict_sig_eff['outName'] = f'cutflow/cutflow__{plottag}_ctau-{utils.stringfy_friendly(ctaus[0])}_delta-{utils.stringfy_friendly(deltas[0])}_m1-wide.png'
+plot_dict_sig_eff['outName'] = f'cutflow/cutflow_{plottag}_ctau-{utils.stringfy_friendly(ctaus[0])}_delta-{utils.stringfy_friendly(deltas[0])}_m1-wide.png'
 
 ptools.plot_signal_efficiency(s_hists, df, plot_dict_sig_eff, df_wts=df_wts)
 

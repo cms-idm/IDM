@@ -148,9 +148,24 @@ ele_lxy_special = Variable(edges, name="lxy", label="$L_{xy}$ [cm]")
 
 # resolution axes
 edges = np.concatenate([
-    np.linspace(-2.0, -1.0, 21),         # 20 bins  × 0.05 width
-    np.linspace(-0.98, 1.0, 100),      # 100 bins × 0.02 width
-    np.linspace( 1.05, 2.0, 20),        # 20 bins  × 0.05 width
+    np.linspace(-1.0, -0.2, 9),       # 8 bins  × 0.1 width
+    np.linspace(-0.19, -0.02, 18),    # 18 bins × 0.01 width
+    np.linspace(-0.018, 0.02, 20),    # 20 bins × 0.002 width
+    np.linspace(0.03, 0.2, 18),       # 18 bins × 0.01 width
+    np.linspace(0.3, 1.0, 8),         # 8 bins  × 0.1 width
 ])
 res_pt = Variable(edges, name="res", label=r"$\Delta p_T/p_T^\mathrm{gen}$")
 res_e = Variable(edges, name="res", label=r"$\Delta E/E^\mathrm{gen}$")
+res_dxy = Variable(edges, name="res", label=r"$\Delta d_{xy}/d_{xy}^\mathrm{gen}$")
+
+ele_pt_res = Variable(np.concatenate([np.arange(0, 21, dtype=float), np.arange(22, 51, 2, dtype=float)]), name="pt", label="$p_{T}$ [GeV]")
+ele_lxy_res = Variable([0, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.7, 1, 1.5, 2, 3, 4, 5, 7, 10, 15, 20, 30, 40], name="lxy", label="$L_{xy}$ [cm]")
+ele_eta_res = Variable([-3, -2.4, -2., -1.8, -1.6, -1.4, -1.2, -1., -0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.2, 1.4, 1.6, 1.8, 2., 2.4, 3.], name="eta", label="$\eta$")
+
+# Coarse axes for 3D mean-resolution histograms (match elerecoeff_plots_2D.py binning)
+_pt_edges_coarse  = [0, 1, 2, 5, 10, 20, 50]
+_lxy_edges_coarse = [0, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 40]
+_eta_edges_coarse = list(np.linspace(-3, 3, 9))
+genpt_coarse  = Variable(_pt_edges_coarse,  name='pt',  label=r'$p_T^\mathrm{gen}$ [GeV]')
+genlxy_coarse = Variable(_lxy_edges_coarse, name='lxy', label=r'$L_{xy}$ [cm]')
+geneta_coarse = Variable(_eta_edges_coarse, name='eta', label=r'$\eta^\mathrm{gen}$')

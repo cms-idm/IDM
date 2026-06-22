@@ -239,12 +239,14 @@ class iDMeProcessor(processor.ProcessorABC):
             cutList = [c for c in dir(self.cutLib) if "cut" in c]
             cutList = sorted(cutList,key=lambda x: int(x[3:])) # make sure cuts are ordered as they are in the file
             self.cuts = [getattr(self.cutLib,c) for c in cutList]
+            self.cutNames = cutList
         else: # cut file is in the same directory (e.g. running on condor)
             cutFileName = self.cutFile.split(".")[0]
             self.cutLib = importlib.import_module(cutFileName)
             cutList = [c for c in dir(self.cutLib) if "cut" in c]
             cutList = sorted(cutList,key=lambda x: int(x[3:])) # make sure cuts are ordered as they are in the file
             self.cuts = [getattr(self.cutLib,c) for c in cutList]
+            self.cutNames = cutList
 
         self.extraStuff = {}
         for k,v in kwargs.items():
@@ -461,6 +463,7 @@ class iDMeProcessor(processor.ProcessorABC):
                 cutflow_counts[k] = sum_wgt*cutflow[k]
         
         histos = histObj
+        #histos = histObj.histograms
         histos['cutDesc'] = cutDesc
         histos['cutflow'] = {samp:cutflow}
         histos['cutflow_cts'] = {samp:cutflow_counts}
@@ -774,12 +777,14 @@ class fileSkimmer:
             cutList = [c for c in dir(self.cutLib) if "cut" in c]
             cutList = sorted(cutList,key=lambda x: int(x[3:])) # make sure cuts are ordered as they are in the file
             self.cuts = [getattr(self.cutLib,c) for c in cutList]
+            self.cutNames = cutList
         else: # cut file is in the same directory (e.g. running on condor)
             cutFileName = self.cutFile.split(".")[0]
             self.cutLib = importlib.import_module(cutFileName)
             cutList = [c for c in dir(self.cutLib) if "cut" in c]
             cutList = sorted(cutList,key=lambda x: int(x[3:])) # make sure cuts are ordered as they are in the file
             self.cuts = [getattr(self.cutLib,c) for c in cutList]
+            self.cutNames = cutList
     
     def skim(self):
         with uproot.open(self.sampFile) as input_file:

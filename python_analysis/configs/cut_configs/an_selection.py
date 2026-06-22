@@ -5,7 +5,7 @@ from analysisTools.analysisSubroutines import getBtagWPs, hasGoodVertex
 def cut1(events,info):
     name = "cut1"
     desc = r"Pass $\vec{p}_T^{miss}$ Filters"
-    plots = False
+    plots = True
     cut = events.METFiltersFailBits == 0
     return events[cut], name, desc, plots
 
