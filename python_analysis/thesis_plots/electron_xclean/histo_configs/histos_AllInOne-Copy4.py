@@ -28,8 +28,8 @@ class myHisto:
         self.mindR = self.parse_axis(('mindR',60,0,0.06)) 
         
         #For eff studies
-        self.Res_LPT = self.parse_axis(('Res_LPT',100,-1,1)) 
-        self.Res_GED = self.parse_axis(('Res_GED',100,-1,1)) 
+        self.Res_LPT = self.parse_axis(('Res_LPT',[-1,1])) 
+        self.Res_GED = self.parse_axis(('Res_GED',[-1,1])) 
 
         self.vxy1 = self.parse_axis(('vxy',[0,1,2,3,4,5,6,8,10,12,14,16,18,20]))  #Lxy 10, 100
         # self.ele_pt = self.parse_axis(("pt",[0,5,10,20,30])) 
@@ -49,6 +49,12 @@ class myHisto:
         ############################################
         self.IDScore = self.parse_axis(('id',100,-1,3))
         self.ele_passID = self.parse_axis(('passID',[0,1]))
+
+        self.dRgenGEDGED = self.parse_axis(("dRgenGEDGED",50,0,5)) 
+        self.dRgenGEDLpt = self.parse_axis(("dRgenGEDLpt",50,0,5)) 
+        self.dRgenLptLpt = self.parse_axis(("dRgenLptLpt",50,0,5)) 
+        self.dRgenLptGED = self.parse_axis(("dRgenLptGED",50,0,5)) 
+
 
 
       
@@ -98,12 +104,10 @@ def make_histograms():
     h.make('gen_ele_vxy1','vxy1')
 
     #Resolution studies
-    # h.make('res_lowpT_gen','Res_LPT')
+    h.make('res_lowpT_gen','Res_LPT')
     
     
     h.make('res_GED_gen','Res_GED')
-    h.make('res_LPT_gen','Res_LPT')
-
     
     return h
 
@@ -120,63 +124,66 @@ def fillHistos(events,h,samp,cut,info,sum_wgt=1):
 
         #Resolution STUDY:
 
-        mask = ((events.GenEle.matchedAllLowPt) & (events.GenEle.matchType == 'R')) & ((events.GenPos.matchedAllLowPt) & (events.GenPos.matchType == 'R'))
+        mask = (events.GenEle.matchedAllLowPt) & (events.GenPos.matchedAllLowPt)
         events_new = events[mask]
 
-        GenEle_pt = events_new.GenEle.pt
-        print ("len(GenEle_pt)=", len(GenEle_pt))
-        GenPos_pt = events_new.GenPos.pt
-        print ("len(GenPos_pt)=", len(GenPos_pt))
+        mask_dr = events_new.AllLptElectron.minDRtoReg < 0.05
+
+        mask_dr_event = ak.any(mask_dr, axis=1)
+
+        events_new_very = events_new[mask_dr_event] #We have now chosen events that have atleast a mindr<0.05
+
+        Gen_Ele_pt = events_new_very.GenEle.pt
+        print ("Gen_Ele_pt=", Gen_Ele_pt)
+        Gen_Pos_pt = events_new_very.GenPos.pt
+        print ("Gen_Pos_pt=", Gen_Pos_pt)
+
+        Lpt_dr = events_new_very.AllLptElectron.minDRtoReg
+        print (Lpt_dr)
+
+        Lpt_mask_dr = events_new_very.AllLptElectron.minDRtoReg < 0.05
+        print (events_new_very.AllLptElectron.minDRtoReg[Lpt_mask_dr])
+
+        Lpt_pt = events_new_very.AllLptElectron.pt[Lpt_mask_dr] #These are the Lpt Electrons that have a nearby GED
+        print ("Lpt_pt=", Lpt_pt)
+        print (len(Lpt_pt))
+
+        # GED_pt = events_new_very.Electron.pt[(events_new_very.Electron.genMatched) & (events_new_very.Electron.hasAllLptMatch)]
+        # print ("GED_pt=", GED_pt)
+        # mask = ak.num(GED_pt, axis=1) == ak.num(Lpt_pt, axis=1)
+        # print(mask)
+        # n_bad = ak.sum(~mask)
+        # print(n_bad)
+        
+        
+
+        # mask_GED = events_new_very.Electron.genMatched
+        # GED_pt = events_new_very.Electron.pt[mask_GED]
+        # print ("GED_pt=", GED_pt)
+        # print (len(GED_pt))
+
+        print(ak.all(ak.num(GED_pt, axis=1) == ak.num(Lpt_pt, axis=1)))
+
+
+        # mask = (events.AllLptElectron.genMatched) & (events.AllLptElectron.minDRtoReg < 0.05) #Select events where low-pt ele are all gen matched and they have a nearby GED.
+        # Lpt_pt = events.AllLptElectron.pt[mask]
+        # print (Lpt_pt)
+        # GED_pt = events.Electron.pt[mask]
+        # events_new = events[mask] #We have events where low-pT electrons are gen matched
+
+        # #Now, let us choose events with mindr<0.05
+        # mask_dr = events_new.AllLptElectron.minDRtoReg < 0.05
+        # mask_dr_event = ak.any(mask_dr, axis=1)
+
+        # events_new_very = events_new[mask_dr_event] 
+        # dr = events_new_very.AllLptElectron.minDRtoReg
+        # print ("dr=", dr)
+
+
 
         
-        Gen_pt = ak.concatenate([events_new.GenEle.pt[:, None],events_new.GenPos.pt[:, None]],  axis=1) #IMP
-        Gen_pt_flat = ak.flatten(Gen_pt)
-        
-        print ("len(Gen_pt_flat)=", len(Gen_pt_flat))
+      
        
-
-        dr = events_new.AllLptElectron.minDRtoReg        
-
-
-        Lpt_pt = events_new.AllLptElectron.pt[(events_new.AllLptElectron.genMatched) ] #IMP
-        print ("len(Lpt_pt)=", len(Lpt_pt))
-        print ("dr_lpt=", events_new.AllLptElectron.minDRtoReg[(events_new.AllLptElectron.genMatched) ])
-        # trial = ak.any(events_new.AllLptElectron.minDRtoReg[(events_new.AllLptElectron.genMatched)] >0.05)
-        # print ("Trial True/False?", trial)
-
-        Lpt_pt_flat = ak.flatten(Lpt_pt)
-        print ("len(Lpt_pt_flat)=", len(Lpt_pt_flat))
-
-        # mask_Lpt_pt = (Lpt_pt_flat> 5) & (Lpt_pt_flat < 6)
-        
-        
-        
-
-        GED_pt  = events_new.Electron.pt[(events_new.Electron.genMatched)] 
-        print (len(GED_pt))
-
-        GED_pt_flat = ak.flatten(GED_pt)  
-        print ("len(GED_pt_flat)=", len(GED_pt_flat))
-        
-
-        res_GED = (GED_pt_flat - Gen_pt_flat)/(Gen_pt_flat) 
-        print ("Res_GED=", res_GED)
-
-        res_LPT = (Lpt_pt_flat - Gen_pt_flat)/(Gen_pt_flat) 
-        print ("Res_LPT=", res_LPT)
-
-
-        #Resolution plots
-       
-        h.fill("res_GED_gen", Res_GED = res_GED)
-        h.fill("res_LPT_gen", Res_LPT = res_LPT)
-
-
-        
-
-
-        
-
         
 
 

@@ -777,7 +777,8 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    int ilpt = 0; // track index (in output tree) of lpt electrons for x-cleaning purposes
    vector<int> iSaved_lpt;
    int ilpt_all = 0;
-   for (auto & ele : *lowPtNanoElectronHandle_) {
+   for (auto & ele : *lowPtNanoElectronHandle_) 
+   {
       // basic cut (should be applied by default in miniAOD stage, but repeating here)
       // Run3 syntax updated - below cuts are legacy sanity check from Run2, likely will change later
       if (ele.pt() < 1 || ele.electronID("ID") < -0.25) 

@@ -555,7 +555,11 @@ def plot_signal_1D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
         ax.set_yscale('log')
     
     count = histo.values()
+    Counts = np.array(count)
+    yerror =np.sqrt(Counts)
+    
     edges = histo.axes[0].edges
+    
     
 
 
@@ -568,7 +572,7 @@ def plot_signal_1D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
         plt.tight_layout()
         plt.savefig(f"{style_dict['outDir']}/{style_dict['outName']}")
         print(f"Saved: {style_dict['outDir']}/{style_dict['outName']}")
-    return count, edges
+    return count, edges, yerror
 
 #Used for Electron Reconstruction Efficiency when projecting pT
 def plot_signal_1D_match(sig_histo, m1, delta, ctau, plot_dict, style_dict, match_type='R', passID='1'):
