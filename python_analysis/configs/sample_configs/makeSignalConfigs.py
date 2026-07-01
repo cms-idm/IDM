@@ -43,34 +43,6 @@ if mode != "sig" and mode != "bkg" and mode != "data":
 
 xrdClient = client.FileSystem("root://cmseos.fnal.gov")
 
-# if mode == "sig":
-#     output = []
-#     if prefix.endswith(".root"):
-#         # Local file case
-#         fname = os.path.basename(prefix)
-#         mchi = float(fname.split("_")[1].split("-")[1].replace("p","."))
-#         dmchi = float(fname.split("_")[2].split("-")[1].replace("p","."))
-#         ctau = int(fname.split("_")[3].split("-")[1].replace("p","."))
-        
-#         info = {
-#             "location": prefix,
-#             "Mchi": mchi,
-#             "dMchi": dmchi,
-#             "ctau": ctau,
-#             "name": name,
-#             "sum_wgt": 0.0,
-#             "type": "signal",
-#             "year": int(year),
-#             "alphaD": alpha,
-#             "xsec": 0.0,
-#             "nFiles": 1
-#         }
-#         output.append(info)
-#         out_json = f"signal_{year}_{name}_{alpha}.json"
-#         with open(out_json, "w") as outfile:
-#             json.dump(output, outfile, indent=4)
-#         print(f"Wrote output to {out_json} with {len(output)} entries.")
-
 if mode == "sig":
     output=[]
     if os.path.isdir(prefix):
@@ -103,127 +75,8 @@ if mode == "sig":
         json.dump(output, outfile, indent=4)
     print(f"Wrote output to {out_json} with {len(output)} entries.")
             
-            
-    
-    
-    # points = [item.name for item in points]
-    # output = []
-    # for p in points:
-    #     if skimmed:
-    #         mchi = float(p.split("_")[2].split("-")[1].replace("p","."))
-    #         dmchi = float(p.split("_")[3].split("-")[1].replace("p","."))
-    #         ctau = int(p.split("_")[4].split("-")[1].replace("p","."))
-    #         for ref_pt in ref_json:
-    #             if ref_pt['Mchi'] == mchi and ref_pt['dMchi'] == dmchi and ref_pt['ctau'] == ctau:
-    #                 entry = ref_pt
-    #                 entry['location'] = f"{prefix}/{p}/"
-    #                 output.append(entry)
-    #     else:
-    #         mchi = float(p.split("_")[0].split("-")[1].replace("p","."))
-    #         dmchi = float(p.split("_")[1].split("-")[1].replace("p","."))
-    #         if 'mZD' in p:
-    #             mzd = p.split("_")[2]
-    #         else:
-    #             mzd = ""
-    #         status, lifetimes = xrdClient.dirlist(f"{prefix}/{year}/{p}")
-    #         lifetimes = [l.name for l in lifetimes]
-            
-    #         for l in lifetimes:
-    #             ct = int(l.split("-")[1])
-    #             info = {}
-    #             info["location"] = f"{prefix}/{year}/{p}/{l}/"
-    #             info["Mchi"] = mchi
-    #             info["dMchi"] = dmchi
-    #             info["ctau"] = ct
-    #             if mzd != "":
-    #                 info["name"] = "sig_Mchi-{0}_dMchi-{1}_ct-{2}_{3}".format(info["Mchi"],info["dMchi"],info["ctau"],mzd)
-    #             else:
-    #                 info["name"] = "sig_Mchi-{0}_dMchi-{1}_ct-{2}".format(info["Mchi"],info["dMchi"],info["ctau"])
-    #             info["sum_wgt"] = 0.0
-    #             info["type"] = "signal"
-    #             info["year"] = int(year)
-    #             info["alphaD"] = alpha
-    #             info["xsec"] = 0.0
-    #             rootFiles = [rf.name for rf in xrdClient.dirlist(info["location"])[1] if '.root' in rf.name]
-    #             info["nFiles"] = len(rootFiles)
-    #             output.append(info)
-
-    # if skimmed:
-
-    #     out_json = "skimmed_signal_{0}_{1}_{2}.json".format(year,name,alpha)
-    # else:
-    #     out_json = "signal_{0}_{1}_{2}.json".format(year,name,alpha)
-    # with open(out_json,"w") as outfile:
-    #     json.dump(output,outfile,indent=4)
 
 
-
-
-
-
-
-
-
-#ONLY WHEN FILES ARE ON EOS (submitted through condor jobs)
-# if mode == "sig":    
-    # if skimmed:
-    #     status, points = xrdClient.dirlist(f"{prefix}/")
-    # else:
-    #     status, points = xrdClient.dirlist(f"{prefix}/{year}/")
-    
-    # if points is None:
-    #     print(f"ERROR: Failed to list directory!")
-    # sys.exit(1)  # or handle gracefully
-    
-    # points = [item.name for item in points]
-    # output = []
-    # for p in points:
-    #     if skimmed:
-    #         mchi = float(p.split("_")[2].split("-")[1].replace("p","."))
-    #         dmchi = float(p.split("_")[3].split("-")[1].replace("p","."))
-    #         ctau = int(p.split("_")[4].split("-")[1].replace("p","."))
-    #         for ref_pt in ref_json:
-    #             if ref_pt['Mchi'] == mchi and ref_pt['dMchi'] == dmchi and ref_pt['ctau'] == ctau:
-    #                 entry = ref_pt
-    #                 entry['location'] = f"{prefix}/{p}/"
-    #                 output.append(entry)
-    #     else:
-    #         mchi = float(p.split("_")[0].split("-")[1].replace("p","."))
-    #         dmchi = float(p.split("_")[1].split("-")[1].replace("p","."))
-    #         if 'mZD' in p:
-    #             mzd = p.split("_")[2]
-    #         else:
-    #             mzd = ""
-    #         status, lifetimes = xrdClient.dirlist(f"{prefix}/{year}/{p}")
-    #         lifetimes = [l.name for l in lifetimes]
-            
-    #         for l in lifetimes:
-    #             ct = int(l.split("-")[1])
-    #             info = {}
-    #             info["location"] = f"{prefix}/{year}/{p}/{l}/"
-    #             info["Mchi"] = mchi
-    #             info["dMchi"] = dmchi
-    #             info["ctau"] = ct
-    #             if mzd != "":
-    #                 info["name"] = "sig_Mchi-{0}_dMchi-{1}_ct-{2}_{3}".format(info["Mchi"],info["dMchi"],info["ctau"],mzd)
-    #             else:
-    #                 info["name"] = "sig_Mchi-{0}_dMchi-{1}_ct-{2}".format(info["Mchi"],info["dMchi"],info["ctau"])
-    #             info["sum_wgt"] = 0.0
-    #             info["type"] = "signal"
-    #             info["year"] = int(year)
-    #             info["alphaD"] = alpha
-    #             info["xsec"] = 0.0
-    #             rootFiles = [rf.name for rf in xrdClient.dirlist(info["location"])[1] if '.root' in rf.name]
-    #             info["nFiles"] = len(rootFiles)
-    #             output.append(info)
-
-    # if skimmed:
-
-    #     out_json = "skimmed_signal_{0}_{1}_{2}.json".format(year,name,alpha)
-    # else:
-    #     out_json = "signal_{0}_{1}_{2}.json".format(year,name,alpha)
-    # with open(out_json,"w") as outfile:
-    #     json.dump(output,outfile,indent=4)
 elif mode == "bkg":
     print ("Hello")
     
@@ -318,74 +171,8 @@ elif mode == "data":
             subsamples = [samp]
         else:
             base_dir = f"{prefix}/{year}/{samp}"
-# =======
-# if mode == "sig":
-#     if skimmed:
-#         status, points = xrdClient.dirlist(f"{prefix}/")
-#     else:
-#         status, points = xrdClient.dirlist(f"{prefix}/{year}/")
-#     points = [item.name for item in points]
-#     output = []
-#     for p in points:
-#         if skimmed:
-#             mchi = float(p.split("_")[2].split("-")[1].replace("p","."))
-#             dmchi = float(p.split("_")[3].split("-")[1].replace("p","."))
-#             ctau = int(p.split("_")[4].split("-")[1].replace("p","."))
-#             for ref_pt in ref_json:
-#                 if ref_pt['Mchi'] == mchi and ref_pt['dMchi'] == dmchi and ref_pt['ctau'] == ctau:
-#                     entry = ref_pt
-#                     entry['location'] = f"{prefix}/{p}/"
-#                     output.append(entry)
-#         else:
-#             mchi = float(p.split("_")[0].split("-")[1].replace("p","."))
-#             dmchi = float(p.split("_")[1].split("-")[1].replace("p","."))
-#             if 'mZD' in p:
-#                 mzd = p.split("_")[2]
-#             else:
-#                 mzd = ""
-#             status, lifetimes = xrdClient.dirlist(f"{prefix}/{year}/{p}")
-#             lifetimes = [l.name for l in lifetimes]
-            
-#             for l in lifetimes:
-#                 ct = int(l.split("-")[1])
-#                 info = {}
-#                 info["location"] = f"{prefix}/{year}/{p}/{l}/"
-#                 info["Mchi"] = mchi
-#                 info["dMchi"] = dmchi
-#                 info["ctau"] = ct
-#                 if mzd != "":
-#                     info["name"] = "sig_Mchi-{0}_dMchi-{1}_ct-{2}_{3}".format(info["Mchi"],info["dMchi"],info["ctau"],mzd)
-#                 else:
-#                     info["name"] = "sig_Mchi-{0}_dMchi-{1}_ct-{2}".format(info["Mchi"],info["dMchi"],info["ctau"])
-#                 info["sum_wgt"] = 0.0
-#                 info["type"] = "signal"
-#                 info["year"] = int(year)
-#                 info["alphaD"] = alpha
-#                 info["xsec"] = 0.0
-#                 rootFiles = [rf.name for rf in xrdClient.dirlist(info["location"])[1] if '.root' in rf.name]
-#                 info["nFiles"] = len(rootFiles)
-#                 output.append(info)
 
-#     if skimmed:
-#         out_json = "skimmed_signal_{0}_{1}.json".format(year,name)
-#     else:
-#         out_json = "signal_{0}_{1}_{2}.json".format(year,name,alpha)
-#     with open(out_json,"w") as outfile:
-#         json.dump(output,outfile,indent=4)
-# elif mode == "bkg":
-#     if skimmed:
-#         status,bkgs = xrdClient.dirlist(f"{prefix}/")
-#     else:
-#         status, bkgs = xrdClient.dirlist(f"{prefix}/{year}/")
-#     bkgs = [bkg.name for bkg in bkgs]
-#     output = []
-#     for bkg in bkgs:
-#         if skimmed:
-#             base_dir = f"{prefix}/{bkg}"
-#             subsamples = [bkg]
-#         else:
-#             base_dir = f"{prefix}/{year}/{bkg}"
-# >>>>>>> Andrew/ACR_Run3
+
             subsamples = [d.name for d in xrdClient.dirlist(base_dir)[1]]
         for subsample in subsamples:
             if skimmed:
@@ -396,13 +183,7 @@ elif mode == "data":
             rootFiles = subprocess.run(['eos','root://cmseos.fnal.gov/','find','-name','*.root','-f',target_dir],stdout=subprocess.PIPE).stdout.decode('utf-8').splitlines()
             rootFiles = [r for r in rootFiles if '.root' in r]
             fileDirs = ["/".join(f.split("/")[:-1])+"/" for f in rootFiles]
-# =======
-#             #rootFiles = subprocess.run(['eos','root://cmseos.fnal.gov/','find','-name','*.root','-f',target_dir],stdout=subprocess.PIPE).stdout.decode('utf-8').splitlines()
-#             #rootFiles = [r for r in rootFiles if '.root' in r]
-#             rootFiles = [ f for f in glob.glob(f"/eos/uscms/{target_dir}/**/*.root", recursive=True) ]
-#             fileDirs = ["/".join(f.split("/")[:-1])+"/" for f in rootFiles]
-#             fileDirs = [ d.split("/eos/uscms/")[-1] for d in fileDirs]
-# >>>>>>> Andrew/ACR_Run3
+
             fileDirs = list(set(fileDirs)) # list of unique file directories
             
             info = {}
@@ -414,11 +195,7 @@ elif mode == "data":
             info["location"] = fileDirs[0] if len(fileDirs) == 1 else fileDirs
             info["sum_wgt"] = 0.0
             info["type"] = "data"
-# =======
-#                 info["name"] = f"{bkg}_{subsample}"
-#             info["location"] = fileDirs[0] if len(fileDirs) == 1 else fileDirs
-#             info["type"] = "bkg"
-# >>>>>>> Andrew/ACR_Run3
+
             info["year"] = int(year)
             nFiles=0
             for fdir in fileDirs:
