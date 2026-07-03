@@ -28,8 +28,8 @@ class myHisto:
         self.mindR = self.parse_axis(('mindR',60,0,0.06)) 
         
         #For Resolution studies
-        self.Res_LPT = self.parse_axis(('Res_LPT',100,-1,1)) 
-        self.Res_GED = self.parse_axis(('Res_GED',100,-1,1)) 
+        self.Res_LPT = self.parse_axis(('Res_LPT',100,-0.5,0.5))  #-0.5-0.5
+        self.Res_GED = self.parse_axis(('Res_GED',100,-0.5,0.5)) 
         
         #For Eff studies
         self.vxy1 = self.parse_axis(('vxy',[0,1,2,3,4,5,6,8,10,12,14,16,18,20]))  #Lxy 10, 100
