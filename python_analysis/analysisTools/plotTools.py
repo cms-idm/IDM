@@ -511,6 +511,7 @@ def plot_signal_1D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
     # get signal point info
     si = utils.get_signal_point_dict(sig_histo)
     samp_df = si[(si.m1 == m1) & (si.delta == delta) & (si.ctau == ctau)]
+    print (samp_df)
     
     samp = samp_df.name[0]
 
@@ -573,6 +574,109 @@ def plot_signal_1D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
         plt.savefig(f"{style_dict['outDir']}/{style_dict['outName']}")
         print(f"Saved: {style_dict['outDir']}/{style_dict['outName']}")
     return count, edges, yerror
+
+def plot_signal_1D_return_histo(sig_histo, m1, delta, ctau, plot_dict, style_dict):
+    """
+    Example:
+
+    plot_dict = {
+    'variable': 'sel_vtx_vxy10',
+    'cut': 'cut7',
+    'year': 2018
+    }
+    
+    style_dict = {
+        'fig': fig,
+        'ax': ax,
+        'rebin': 1j,
+        'xlim': None,     # if None, the default will show up; otherwise give as a list, i.e. [0, 10]
+        'doLogy': True, 
+        'doLogx': False,
+        'doDensity': False,
+        'doYerr': False, 
+        'xlabel': r"$L_{xy}$ [cm]",   # if None, the default will show up; otherwise give as a string, i.e. 'Electron dxy'
+        'ylabel': 'Events/0.1cm',   # if None, the default will show up; otherwise give as a string, i.e. 'Efficiency'
+        'label': None,    # if None, the default will show up; otherwise give as a string, i.e. 'Highest ctau signal samples'
+        'flow': None,     # overflow
+        'doSave': False,
+        'outDir': './plots/',
+        'outName': f'background_cut7_Lxy_max10.png'
+    }
+
+    """
+
+    fig = style_dict['fig']
+    ax = style_dict['ax']
+
+    hep.cms.label('Private Work', data=False, year=plot_dict['year'], com='13.6')
+  
+    
+    # get signal point info
+    si = utils.get_signal_point_dict(sig_histo)
+    samp_df = si[(si.m1 == m1) & (si.delta == delta) & (si.ctau == ctau)]
+    print (samp_df)
+    
+    samp = samp_df.name[0]
+
+    m1 = samp_df.m1[0]
+    dmchi = samp_df.dmchi[0]
+    ctau = samp_df.ctau[0]
+    label = rf"$(m_\chi, \Delta m_\chi) = ({m1:.0f}, {dmchi:.0f})$ GeV"
+
+
+    if style_dict['label'] != None:
+        label = style_dict['label']
+    
+    # get histogram from coffea output
+    histo = sig_histo[plot_dict['variable']][{"samp":samp, "cut": plot_dict['cut']}]
+
+    # rebinning
+    histo = histo[::style_dict['rebin']]
+
+    # set x range manually
+    if style_dict['xlim'] != None:
+        xlim = style_dict['xlim']
+        xbin_range = np.where((histo.axes.edges[0] > xlim[0]) & (histo.axes.edges[0] < xlim[1]))[0]
+        histo = histo[ int(xbin_range[0])-1:int(xbin_range[-1]+1) ]
+
+    # x and y labels
+    if style_dict['xlabel'] != None:
+        ax.set_xlabel(style_dict['xlabel'])
+
+    if style_dict['ylabel'] != None:
+        ax.set_ylabel(style_dict['ylabel'])
+    else:   
+        binwidth = histo.axes.widths[0][0]
+        if style_dict['doDensity']:
+            ax.set_ylabel(f'A.U./{binwidth:.3f}')
+        else:
+            ax.set_ylabel(f'Events/{binwidth:.3f}')
+
+    # x,y scale
+    if style_dict['doLogx']:
+        ax.set_xscale('log')
+    if style_dict['doLogy']:
+        ax.set_yscale('log')
+    
+    count = histo.values()
+    Counts = np.array(count)
+    yerror =np.sqrt(Counts)
+    
+    edges = histo.axes[0].edges
+    
+    
+
+
+    hep.histplot(histo, yerr=style_dict['doYerr'], density=style_dict['doDensity'], ax=ax, histtype='step', flow=style_dict['flow'], label = label)
+
+    plt.legend()
+    
+    if style_dict['doSave']:
+        os.makedirs(style_dict['outDir'], exist_ok=True)
+        plt.tight_layout()
+        plt.savefig(f"{style_dict['outDir']}/{style_dict['outName']}")
+        print(f"Saved: {style_dict['outDir']}/{style_dict['outName']}")
+    return histo
 
 #Used for Electron Reconstruction Efficiency when projecting pT
 def plot_signal_1D_match(sig_histo, m1, delta, ctau, plot_dict, style_dict, match_type='R', passID='1'):
