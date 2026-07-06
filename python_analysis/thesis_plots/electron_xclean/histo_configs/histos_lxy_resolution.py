@@ -28,8 +28,10 @@ class myHisto:
         self.mindR = self.parse_axis(('mindR',60,0,0.06)) 
         
         #For Resolution studies
-        self.Res_LPT = self.parse_axis(('Res_LPT',100,-0.3,0.3))  #-0.5-0.5
-        self.Res_GED = self.parse_axis(('Res_GED',100,-0.3,0.3)) 
+       
+
+        self.Res_LPT_lxy = self.parse_axis(('Res_LPT_vxy',100,-0.5,0.5))  #-0.5-0.5
+        self.Res_GED_lxy = self.parse_axis(('Res_GED_vxy',100,-0.5,0.5)) 
         
         #For Eff studies
         self.vxy1 = self.parse_axis(('vxy',[0,1,2,3,4,5,6,8,10,12,14,16,18,20]))  #Lxy 10, 100
@@ -97,10 +99,10 @@ def make_histograms():
     h.make('gen_ele_pt','ele_pt')
     h.make('gen_ele_vxy1','vxy1')
 
+  
 
-    
-    h.make('res_GED_gen','Res_GED')
-    h.make('res_LPT_gen','Res_LPT')
+    h.make('res_GED_gen_lxy','Res_GED_lxy')
+    h.make('res_LPT_gen_lxy','Res_LPT_lxy')
 
     
     return h
@@ -121,54 +123,54 @@ def fillHistos(events,h,samp,cut,info,sum_wgt=1):
         mask = ((events.GenEle.matchedAllLowPt) & (events.GenEle.matchType == 'R')) & ((events.GenPos.matchedAllLowPt) & (events.GenPos.matchType == 'R'))
         events_new = events[mask]
 
-        mask_56 = ((events_new.GenEle.pt > 5) & (events_new.GenEle.pt < 6)) & ((events_new.GenPos.pt > 5) & (events_new.GenPos.pt < 6))
+        mask_56 = ((events_new.GenEle.vxy > 1) & (events_new.GenEle.vxy < 2)) & ((events_new.GenPos.vxy > 1) & (events_new.GenPos.vxy < 2))
         events_new_very = events_new[mask_56]
 
-        GenEle_pt = events_new_very.GenEle.pt
-        print ("GenEle_pt=", GenEle_pt)
-        print (len(GenEle_pt))
+        GenEle_vxy = events_new_very.GenEle.vxy
+        print ("GenEle_vxy=", GenEle_vxy)
+        print (len(GenEle_vxy))
         
         
-        GenPos_pt = events_new_very.GenPos.pt
-        print ("GenPos_pt=", GenPos_pt)
-        print (len(GenPos_pt))
+        GenPos_vxy = events_new_very.GenPos.vxy
+        print ("GenPos_vxy=", GenPos_vxy)
+        print (len(GenPos_vxy))
         
 
         
-        Gen_pt = ak.concatenate([GenEle_pt[:, None],GenPos_pt[:, None]],  axis=1) #IMP
-        print ("Gen_pt=", Gen_pt)
+        Gen_vxy = ak.concatenate([GenEle_vxy[:, None],GenPos_vxy[:, None]],  axis=1) #IMP
+        print ("Gen_vxy=", Gen_vxy)
         
         
-        Gen_pt_FLAT = ak.flatten(Gen_pt)
-        print ("len(Gen_pt_FLAT)=", len(Gen_pt_FLAT))
+        Gen_vxy_FLAT = ak.flatten(Gen_vxy)
+        print ("len(Gen_vxyt_FLAT)=", len(Gen_vxy_FLAT))
 
 
 
-        Lpt_pt = events_new_very.AllLptElectron.pt[(events_new_very.AllLptElectron.genMatched) ] #IMP
-        print ("Lpt_pt=", Lpt_pt)
+        Lpt_vxy = events_new_very.AllLptElectron.vxy[(events_new_very.AllLptElectron.genMatched) ] #IMP
+        print ("Lpt_vxy=", Lpt_vxy)
 
-        Lpt_pt_flat = ak.flatten(Lpt_pt)        
-        print ("len(Lpt_pt_flat)=", len(Lpt_pt_flat)) 
+        Lpt_vxy_flat = ak.flatten(Lpt_vxy)        
+        print ("len(Lpt_vxy_flat)=", len(Lpt_vxy_flat)) 
         
-        GED_pt  = events_new_very.Electron.pt[(events_new_very.Electron.genMatched)] 
-        print ("GED_pt=", GED_pt)
+        GED_vxy  = events_new_very.Electron.vxy[(events_new_very.Electron.genMatched)] 
+        print ("GED_vxy=", GED_vxy)
 
-        GED_pt_flat = ak.flatten(GED_pt)  
-        print ("len(GED_pt_flat)=", len(GED_pt_flat))
+        GED_vxy_flat = ak.flatten(GED_vxy)  
+        print ("len(GED_vxy_flat)=", len(GED_vxy_flat))
 
         
         
         #Residual calculation:
-        res_GED = (GED_pt_flat - Gen_pt_FLAT)/(Gen_pt_FLAT) 
-        print ("Res_GED=", res_GED)
+        res_GED_vxy = (GED_vxy_flat - Gen_vxy_FLAT)/(Gen_vxy_FLAT) 
+        print ("Res_GED=", res_GED_vxy)
 
-        res_LPT = (Lpt_pt_flat - Gen_pt_FLAT)/(Gen_pt_FLAT) 
-        print("Res_LPT=", res_LPT)
+        res_LPT_vxy = (Lpt_vxy_flat - Gen_vxy_FLAT)/(Gen_vxy_FLAT) 
+        print("Res_LPT=", res_LPT_vxy)
 
 
         #Resolution plots
        
-        h.fill("res_GED_gen", Res_GED = res_GED)
-        h.fill("res_LPT_gen", Res_LPT = res_LPT)
+        h.fill("res_GED_gen_lxy", Res_GED_vxy = res_GED_vxy)
+        h.fill("res_LPT_gen_lxy", Res_LPT_vxy = res_LPT_vxy)
 
       
