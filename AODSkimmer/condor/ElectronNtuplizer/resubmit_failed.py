@@ -18,7 +18,7 @@ try:
 except ImportError:
     sys.exit("uproot not found — run inside a CMSSW environment or pip install uproot")
 
-VERS     = 'May2026'
+VERS     = 'Jun2026noID'
 YEAR     = '2024'
 NTHREADS = 4
 IS_DATA  = 'False'
@@ -45,7 +45,10 @@ def tree_ok(xrd_url):
         with uproot.open(xrd_url) as f:
             if TREE not in f:
                 return False
-            return REQUIRED_BRANCH in f[TREE].keys()
+            t = f[TREE]
+            if t.num_entries == 0:
+                return False
+            return REQUIRED_BRANCH in t.keys()
     except Exception:
         return False
 

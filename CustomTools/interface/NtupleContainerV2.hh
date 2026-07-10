@@ -273,6 +273,22 @@ public:
     vector<int> recoLowPtElectronExpMissingInnerHits_;
     vector<bool> recoLowPtElectronConversionVeto_;
     vector<bool> recoLowPtElectronIsEE_;
+    // supercluster
+    vector<float> recoLowPtElectronScRawE_;
+    vector<float> recoLowPtElectronScEnergy_;
+    vector<float> recoLowPtElectronScEta_;
+    vector<float> recoLowPtElectronScPhi_;
+    vector<float> recoLowPtElectronScEtaWidth_;
+    vector<float> recoLowPtElectronScPhiWidth_;
+    vector<int> recoLowPtElectronScClustersSize_;
+    // additional shower shapes
+    vector<float> recoLowPtElectronFull5x5R9_;
+    vector<float> recoLowPtElectronFull5x5E5x5_;
+    vector<float> recoLowPtElectronFull5x5E1x5_;
+    vector<float> recoLowPtElectronFull5x5E2x5Max_;
+    vector<float> recoLowPtElectronFull5x5SigmaIphiIphi_;
+    vector<float> recoLowPtElectronFull5x5HcalDepth1OverEcal_;
+    vector<float> recoLowPtElectronFull5x5HcalDepth2OverEcal_;
     // special variables for the x-cleaning study
     vector<bool> recoLowPtElectronIsXCleaned_;
     vector<int> recoLowPtElectronGEDidx_;
@@ -330,6 +346,22 @@ public:
     vector<int> recoAllLowPtElectronExpMissingInnerHits_;
     vector<bool> recoAllLowPtElectronConversionVeto_;
     vector<bool> recoAllLowPtElectronIsEE_;
+    // supercluster
+    vector<float> recoAllLowPtElectronScRawE_;
+    vector<float> recoAllLowPtElectronScEnergy_;
+    vector<float> recoAllLowPtElectronScEta_;
+    vector<float> recoAllLowPtElectronScPhi_;
+    vector<float> recoAllLowPtElectronScEtaWidth_;
+    vector<float> recoAllLowPtElectronScPhiWidth_;
+    vector<int> recoAllLowPtElectronScClustersSize_;
+    // additional shower shapes
+    vector<float> recoAllLowPtElectronFull5x5R9_;
+    vector<float> recoAllLowPtElectronFull5x5E5x5_;
+    vector<float> recoAllLowPtElectronFull5x5E1x5_;
+    vector<float> recoAllLowPtElectronFull5x5E2x5Max_;
+    vector<float> recoAllLowPtElectronFull5x5SigmaIphiIphi_;
+    vector<float> recoAllLowPtElectronFull5x5HcalDepth1OverEcal_;
+    vector<float> recoAllLowPtElectronFull5x5HcalDepth2OverEcal_;
     // x-cleaning status and GED match info
     vector<bool> recoAllLowPtElectronIsXCleaned_;
     vector<int> recoAllLowPtElectronGEDidx_;
@@ -373,12 +405,229 @@ public:
     vector<float> PhotonEt_;
     vector<float> PhotonEta_;
     vector<float> PhotonPhi_;
+    vector<float> PhotonPt_;
+    vector<float> PhotonEnergy_;
+    // supercluster
+    vector<float> PhotonScRawE_;
+    vector<float> PhotonScEta_;
+    vector<float> PhotonScPhi_;
+    vector<float> PhotonScEtaWidth_;
+    vector<float> PhotonScPhiWidth_;
+    // shower shapes
+    vector<float> PhotonR9_;
+    vector<float> PhotonFull5x5R9_;
+    vector<float> PhotonSIeIe_;
+    vector<float> PhotonFull5x5SIeIe_;
+    vector<float> PhotonHoE_;
+    vector<float> PhotonFull5x5HoE_;
+    vector<float> PhotonE1x5_;
+    vector<float> PhotonE2x5_;
+    vector<float> PhotonE5x5_;
+    vector<float> PhotonFull5x5E1x5_;
+    vector<float> PhotonFull5x5E2x5_;
+    vector<float> PhotonFull5x5E5x5_;
+    // regression inputs (pat-level)
+    vector<float> PhotonSeedE_;
+    vector<float> PhotonEMax_;
+    vector<float> PhotonE2nd_;
+    vector<float> PhotonE3x3_;
+    vector<float> PhotonETop_;
+    vector<float> PhotonEBottom_;
+    vector<float> PhotonELeft_;
+    vector<float> PhotonERight_;
+    // PF isolation
+    vector<float> PhotonChIso_;
+    vector<float> PhotonNhIso_;
+    vector<float> PhotonPhIso_;
+    vector<float> PhotonPuChIso_;
+    // PUPPI isolation
+    vector<float> PhotonPuppiChIso_;
+    vector<float> PhotonPuppiNhIso_;
+    vector<float> PhotonPuppiPhIso_;
+    // detector-based isolation
+    vector<float> PhotonTrkIso_;
+    vector<float> PhotonEcalIso_;
+    vector<float> PhotonHcalIso_;
+    // flags
+    vector<int> PhotonPassElectronVeto_;
+    vector<int> PhotonHasPixelSeed_;
+    vector<int> PhotonIsEB_;
+    vector<int> PhotonIsEE_;
+    vector<int> PhotonIsEBEEGap_;
 
     // OOT Photons
     int nOOTPhotons_;
     vector<float> ootPhotonEt_;
     vector<float> ootPhotonEta_;
     vector<float> ootPhotonPhi_;
+    vector<float> ootPhotonPt_;
+    vector<float> ootPhotonEnergy_;
+    // supercluster
+    vector<float> ootPhotonScRawE_;
+    vector<float> ootPhotonScEta_;
+    vector<float> ootPhotonScPhi_;
+    vector<float> ootPhotonScEtaWidth_;
+    vector<float> ootPhotonScPhiWidth_;
+    // shower shapes
+    vector<float> ootPhotonR9_;
+    vector<float> ootPhotonFull5x5R9_;
+    vector<float> ootPhotonSIeIe_;
+    vector<float> ootPhotonFull5x5SIeIe_;
+    vector<float> ootPhotonHoE_;
+    vector<float> ootPhotonFull5x5HoE_;
+    vector<float> ootPhotonE1x5_;
+    vector<float> ootPhotonE2x5_;
+    vector<float> ootPhotonE5x5_;
+    vector<float> ootPhotonFull5x5E1x5_;
+    vector<float> ootPhotonFull5x5E2x5_;
+    vector<float> ootPhotonFull5x5E5x5_;
+    // regression inputs (pat-level)
+    vector<float> ootPhotonSeedE_;
+    vector<float> ootPhotonEMax_;
+    vector<float> ootPhotonE2nd_;
+    vector<float> ootPhotonE3x3_;
+    vector<float> ootPhotonETop_;
+    vector<float> ootPhotonEBottom_;
+    vector<float> ootPhotonELeft_;
+    vector<float> ootPhotonERight_;
+    // PF isolation
+    vector<float> ootPhotonChIso_;
+    vector<float> ootPhotonNhIso_;
+    vector<float> ootPhotonPhIso_;
+    vector<float> ootPhotonPuChIso_;
+    // PUPPI isolation
+    vector<float> ootPhotonPuppiChIso_;
+    vector<float> ootPhotonPuppiNhIso_;
+    vector<float> ootPhotonPuppiPhIso_;
+    // detector-based isolation
+    vector<float> ootPhotonTrkIso_;
+    vector<float> ootPhotonEcalIso_;
+    vector<float> ootPhotonHcalIso_;
+    // flags
+    vector<int> ootPhotonPassElectronVeto_;
+    vector<int> ootPhotonHasPixelSeed_;
+    vector<int> ootPhotonIsEB_;
+    vector<int> ootPhotonIsEE_;
+    vector<int> ootPhotonIsEBEEGap_;
+
+    // Isolated Tracks
+    int nIsoTrack_;
+    vector<float> isoTrackPt_;
+    vector<float> isoTrackEta_;
+    vector<float> isoTrackPhi_;
+    vector<float> isoTrackP_;
+    vector<int>   isoTrackCharge_;
+    vector<float> isoTrackDxy_;
+    vector<float> isoTrackDz_;
+    vector<float> isoTrackDxyErr_;
+    vector<float> isoTrackDzErr_;
+    // PF isolation DR03
+    vector<float> isoTrackPfIso03ChHad_;
+    vector<float> isoTrackPfIso03NhHad_;
+    vector<float> isoTrackPfIso03Pho_;
+    vector<float> isoTrackPfIso03Pu_;
+    // mini PF isolation
+    vector<float> isoTrackMiniIsoChHad_;
+    vector<float> isoTrackMiniIsoNhHad_;
+    vector<float> isoTrackMiniIsoPho_;
+    vector<float> isoTrackMiniIsoPu_;
+    // calo matching
+    vector<float> isoTrackMatchedCaloJetEmE_;
+    vector<float> isoTrackMatchedCaloJetHadE_;
+    // track quality
+    vector<int>   isoTrackIsHighPurity_;
+    vector<int>   isoTrackIsTight_;
+    vector<int>   isoTrackIsLoose_;
+    // hit pattern
+    vector<int>   isoTrackNValidHits_;
+    vector<int>   isoTrackNValidPixHits_;
+    vector<int>   isoTrackNValidStripHits_;
+    vector<int>   isoTrackLostInnerLayers_;
+    vector<int>   isoTrackLostLayers_;
+    vector<int>   isoTrackLostOuterLayers_;
+    // dEdx
+    vector<float> isoTrackDEdxStrip_;
+    vector<float> isoTrackDEdxPixel_;
+    // other
+    vector<int>   isoTrackFromPV_;
+    vector<float> isoTrackDeltaEta_;
+    vector<float> isoTrackDeltaPhi_;
+    vector<int>   isoTrackPfLepOverlap_;
+    vector<float> isoTrackPfNeutralSum_;
+
+    // PF Candidates (charged only, cross-cleaned against electrons)
+    int nPFCand_;
+    vector<float> pfCandPt_;
+    vector<float> pfCandEta_;
+    vector<float> pfCandPhi_;
+    vector<float> pfCandEnergy_;
+    vector<int>   pfCandCharge_;
+    vector<int>   pfCandPdgId_;
+    vector<bool>  pfCandHasTrackDetails_;
+    // impact parameter / track quality (only meaningful if HasTrackDetails)
+    vector<float> pfCandDxy_;
+    vector<float> pfCandDxyErr_;
+    vector<float> pfCandDz_;
+    vector<float> pfCandDzErr_;
+    vector<float> pfCandTrkChi2_;
+    vector<int>   pfCandNumHits_;
+    vector<int>   pfCandNumPixHits_;
+    vector<int>   pfCandPixelLayers_;
+    vector<int>   pfCandStripLayers_;
+    vector<int>   pfCandTrackerLayers_;
+    vector<int>   pfCandLostInnerHits_;
+    vector<bool>  pfCandTrkHighPurity_;
+    vector<int>   pfCandTrkAlgo_;
+    // vertex association
+    vector<int>   pfCandFromPV_;
+    vector<int>   pfCandPvAssocQuality_;
+    vector<float> pfCandDzAssocPV_;
+    // PF-specific (calo/puppi/egamma) info
+    vector<float> pfCandCaloFrac_;
+    vector<float> pfCandHcalFrac_;
+    vector<float> pfCandRawCaloFrac_;
+    vector<float> pfCandRawHcalFrac_;
+    vector<float> pfCandPuppiWeight_;
+    vector<float> pfCandPuppiWeightNoLep_;
+    vector<bool>  pfCandIsGoodEgamma_;
+    vector<bool>  pfCandIsIsolatedChHad_;
+
+    // Lost Tracks (charged pat::PackedCandidates not promoted to PF candidates;
+    // cross-cleaned against electrons). Same schema as PFCand; the PF-specific
+    // calo/puppi/egamma fields are never set by particle flow for these and are
+    // filled with their PackedCandidate defaults (0/false).
+    int nLostTrack_;
+    vector<float> lostTrackPt_;
+    vector<float> lostTrackEta_;
+    vector<float> lostTrackPhi_;
+    vector<float> lostTrackEnergy_;
+    vector<int>   lostTrackCharge_;
+    vector<int>   lostTrackPdgId_;
+    vector<bool>  lostTrackHasTrackDetails_;
+    vector<float> lostTrackDxy_;
+    vector<float> lostTrackDxyErr_;
+    vector<float> lostTrackDz_;
+    vector<float> lostTrackDzErr_;
+    vector<float> lostTrackTrkChi2_;
+    vector<int>   lostTrackNumHits_;
+    vector<int>   lostTrackNumPixHits_;
+    vector<int>   lostTrackPixelLayers_;
+    vector<int>   lostTrackStripLayers_;
+    vector<int>   lostTrackTrackerLayers_;
+    vector<int>   lostTrackLostInnerHits_;
+    vector<bool>  lostTrackTrkHighPurity_;
+    vector<int>   lostTrackTrkAlgo_;
+    vector<int>   lostTrackFromPV_;
+    vector<int>   lostTrackPvAssocQuality_;
+    vector<float> lostTrackDzAssocPV_;
+    vector<float> lostTrackCaloFrac_;
+    vector<float> lostTrackHcalFrac_;
+    vector<float> lostTrackRawCaloFrac_;
+    vector<float> lostTrackRawHcalFrac_;
+    vector<float> lostTrackPuppiWeight_;
+    vector<float> lostTrackPuppiWeightNoLep_;
+    vector<bool>  lostTrackIsGoodEgamma_;
+    vector<bool>  lostTrackIsIsolatedChHad_;
 
     // Photon conversions
     int nConversions_;
@@ -562,6 +811,58 @@ public:
     vector<float> vtx_e2_refitDz_;
     vector<float> vtx_e2_refitDzErr_;
     vector<float> vtx_e2_refitChi2_;
+
+    // LowPt-only Electron-positron vertices
+    int nlptvtx_;
+    vector<std::string> lptvtx_type_;
+    vector<float> lptvtx_recoVtxVxy_;
+    vector<float> lptvtx_recoVtxSigmaVxy_;
+    vector<float> lptvtx_recoVtxVx_;
+    vector<float> lptvtx_recoVtxVy_;
+    vector<float> lptvtx_recoVtxVz_;
+    vector<float> lptvtx_recoVtxReducedChi2_;
+    vector<float> lptvtx_prob_;
+    vector<float> lptvtx_recoVtxDr_;
+    vector<int> lptvtx_recoVtxSign_;
+    vector<float> lptvtx_minDxy_;
+    vector<float> lptvtx_METdPhi_;
+    vector<float> lptvtx_ll_pt_;
+    vector<float> lptvtx_ll_eta_;
+    vector<float> lptvtx_ll_phi_;
+    vector<float> lptvtx_ll_e_;
+    vector<float> lptvtx_ll_m_;
+    vector<float> lptvtx_ll_px_;
+    vector<float> lptvtx_ll_py_;
+    vector<float> lptvtx_ll_pz_;
+    vector<float> lptvtx_refit_m_;
+    vector<float> lptvtx_refit_pt_;
+    vector<float> lptvtx_refit_eta_;
+    vector<float> lptvtx_refit_phi_;
+    vector<float> lptvtx_refit_dr_;
+    vector<bool> lptvtx_isMatched_;
+    vector<int> lptvtx_matchSign_;
+    vector<vector<float> > lptvtx_dRtoJets_;
+    vector<vector<float> > lptvtx_dPhiToJets_;
+
+    vector<std::string> lptvtx_e1_type_;
+    vector<int> lptvtx_e1_idx_;
+    vector<bool> lptvtx_e1_isMatched_;
+    vector<int> lptvtx_e1_matchType_;
+    vector<float> lptvtx_e1_refitDxy_;
+    vector<float> lptvtx_e1_refitDxyErr_;
+    vector<float> lptvtx_e1_refitDz_;
+    vector<float> lptvtx_e1_refitDzErr_;
+    vector<float> lptvtx_e1_refitChi2_;
+
+    vector<std::string> lptvtx_e2_type_;
+    vector<int> lptvtx_e2_idx_;
+    vector<bool> lptvtx_e2_isMatched_;
+    vector<int> lptvtx_e2_matchType_;
+    vector<float> lptvtx_e2_refitDxy_;
+    vector<float> lptvtx_e2_refitDxyErr_;
+    vector<float> lptvtx_e2_refitDz_;
+    vector<float> lptvtx_e2_refitDzErr_;
+    vector<float> lptvtx_e2_refitChi2_;
 
 protected:
     // Reco and gen TTrees
