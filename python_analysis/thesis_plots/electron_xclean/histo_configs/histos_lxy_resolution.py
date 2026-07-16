@@ -30,8 +30,8 @@ class myHisto:
         #For Resolution studies
        
 
-        self.Res_LPT_lxy = self.parse_axis(('Res_LPT_vxy',100,-0.5,0.5))  #-0.5-0.5
-        self.Res_GED_lxy = self.parse_axis(('Res_GED_vxy',100,-0.5,0.5)) 
+        self.Res_LPT_lxy = self.parse_axis(('Res_LPT_vxy',200,-0.7,0.7))  #-0.5-0.5
+        self.Res_GED_lxy = self.parse_axis(('Res_GED_vxy',200,-0.7,0.7)) 
         
         #For Eff studies
         self.vxy1 = self.parse_axis(('vxy',[0,1,2,3,4,5,6,8,10,12,14,16,18,20]))  #Lxy 10, 100
