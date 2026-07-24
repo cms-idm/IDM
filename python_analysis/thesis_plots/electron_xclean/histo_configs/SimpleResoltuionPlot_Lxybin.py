@@ -28,11 +28,10 @@ class myHisto:
         self.mindR = self.parse_axis(('mindR',60,0,0.06)) 
         
         #For Resolution studies
-        self.Res_LPT = self.parse_axis(('Res_LPT',200,-0.5,0.5))  #-0.5-0.5
-        self.Res_GED = self.parse_axis(('Res_GED',200,-0.5,0.5)) 
+        self.Res_LPT = self.parse_axis(('Res_LPT',600,-0.7,0.7))  #-0.5-0.5
+        self.Res_GED = self.parse_axis(('Res_GED',600,-0.7,0.7)) 
 
-        self.Res_LPT_lxy = self.parse_axis(('Res_LPT_lxy',200,-1,1))  #-0.5-0.5
-        self.Res_GED_lxy = self.parse_axis(('Res_GED_lxy',200,-1,1)) 
+       
         
         #For Eff studies
         self.vxy1 = self.parse_axis(('vxy',[0,1,2,3,4,5,6,8,10,12,14,16,18,20]))  #Lxy 10, 100
@@ -103,8 +102,8 @@ def make_histograms():
     h.make('res_GED_gen','Res_GED')
     h.make('res_LPT_gen','Res_LPT')
 
-    h.make('res_GED_gen_lxy','Res_GED_lxy')
-    h.make('res_LPT_gen_lxy','Res_LPT_lxy')
+    # h.make('res_GED_gen_lxy','Res_GED_lxy')
+    # h.make('res_LPT_gen_lxy','Res_LPT_lxy')
 
     
     return h

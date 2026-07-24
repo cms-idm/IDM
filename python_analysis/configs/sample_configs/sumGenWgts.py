@@ -49,12 +49,15 @@ for samp in samples:
         tree = uproot.open(loc)['ntuples/outT']
         if tree.num_entries == 0:
             sum_wgt = 0
+            print ("Are you there")
         else:
             if not isData:
                 sum_wgt = np.sum(tree['genWgt'].array())
             else:
                 sum_wgt = 0
             sum_evt = tree.num_entries
+            print ("Hello")
+            print ("sum_evt=",sum_evt)
     else:
         xrdClient = client.FileSystem("root://cmseos.fnal.gov")
         if type(loc) != list:

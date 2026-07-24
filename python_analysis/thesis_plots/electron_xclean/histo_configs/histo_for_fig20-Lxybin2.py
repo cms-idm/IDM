@@ -28,28 +28,27 @@ class myHisto:
         self.mindR = self.parse_axis(('mindR',60,0,0.06)) 
         
         #For Resolution studies
-        self.Res_LPT = self.parse_axis(('Res_LPT',100,-1,1)) 
-        self.Res_GED = self.parse_axis(('Res_GED',100,-1,1)) 
+        self.Res_LPT = self.parse_axis(('Res_LPT',700,-1,1))  #-0.5-0.5
+        self.Res_GED = self.parse_axis(('Res_GED',700,-1,1)) 
+        
+        self.Gen_pt = self.parse_axis(('Gen_pt',[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,25])) 
+        self.Gen_vxy = self.parse_axis(('Gen_vxy',[6,10,15,20])) 
+
+
+        self.Res_LPT_lxy = self.parse_axis(('Res_LPT_lxy',200,-1,1))  #-0.5-0.5
+        self.Res_GED_lxy = self.parse_axis(('Res_GED_lxy',200,-1,1)) 
         
         #For Eff studies
-        self.vxy1 = self.parse_axis(('vxy',[0,1,2,3,4,5,6,8,10,12,14,16,18,20]))  #Lxy 10, 100
+        self.vxy1 = self.parse_axis(('vxy',[6,10,15,20]))  #Lxy 10, 100
         # self.ele_pt = self.parse_axis(("pt",[0,5,10,20,30])) 
-        self.ele_pt = self.parse_axis(("pt",[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25])) 
+        self.ele_pt = self.parse_axis(("pt",[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,25])) 
         
-        self.PT_GED = self.parse_axis(("PT_GED",[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25]))
-        self.PT_Lpt = self.parse_axis(("PT_Lpt",[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25])) 
-        self.PT_Lpt_noxclean = self.parse_axis(("PT_Lpt_noxclean",[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25]))
+        self.PT_GED = self.parse_axis(("PT_GED",[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,25]))
+        self.PT_Lpt = self.parse_axis(("PT_Lpt",[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,25])) 
+        self.PT_Lpt_noxclean = self.parse_axis(("PT_Lpt_noxclean",[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,25]))
 
 
-        self.VXY_GED = self.parse_axis(("VXY_GED",[0,1,2,3,4,5,6,8,10,12,14,16,18,20]))  
-        self.VXY_Lpt = self.parse_axis(("VXY_Lpt",[0,1,2,3,4,5,6,8,10,12,14,16,18,20]))  
-
-        self.VXY_Lpt_noxclean = self.parse_axis(("VXY_Lpt_noxclean",[0,1,2,3,4,5,6,8,10,12,14,16,18,20]))  
-
-
-        self.IDScore = self.parse_axis(('id',100,-1,3))
-        self.ele_passID = self.parse_axis(('passID',[0,1]))
-
+        
 
       
 
@@ -97,10 +96,17 @@ def make_histograms():
     h.make('gen_ele_pt','ele_pt')
     h.make('gen_ele_vxy1','vxy1')
 
+    h.make("Gen_ElePos_pt", 'Gen_pt')
+    h.make("Gen_ElePos_vxy", 'Gen_vxy')
 
-    
     h.make('res_GED_gen','Res_GED')
     h.make('res_LPT_gen','Res_LPT')
+
+    h.make('res_GED_gen_lxy','Res_GED_lxy')
+    h.make('res_LPT_gen_lxy','Res_LPT_lxy')
+
+    h.make('res_GED_gen_ptbin', 'Gen_vxy', 'Res_GED')
+    h.make('res_LPT_gen_ptbin', 'Gen_vxy', 'Res_LPT')
 
     
     return h
@@ -120,26 +126,38 @@ def fillHistos(events,h,samp,cut,info,sum_wgt=1):
 
         mask = ((events.GenEle.matchedAllLowPt) & (events.GenEle.matchType == 'R')) & ((events.GenPos.matchedAllLowPt) & (events.GenPos.matchType == 'R'))
         events_new = events[mask]
+        
 
-        GenEle_pt = events_new.GenEle.pt          
-        GenPos_pt = events_new.GenPos.pt
+        # mask_56 = ((events_new.GenEle.pt > 5) & (events_new.GenEle.pt < 6)) & ((events_new.GenPos.pt > 5) & (events_new.GenPos.pt < 6))
+        events_new_very = events_new
+
+        GenEle_pt = events_new_very.GenEle.pt
+        GenEle_vxy = events_new_very.GenEle.vxy
+        
+        
+        
+        GenPos_pt = events_new_very.GenPos.pt
+        GenPos_vxy = events_new_very.GenPos.vxy
+        
+
         
         Gen_pt = ak.concatenate([GenEle_pt[:, None],GenPos_pt[:, None]],  axis=1) #IMP
-        print ("Gen_pt=", Gen_pt)
+        Gen_vxy = ak.concatenate([GenEle_vxy[:, None],GenPos_vxy[:, None]],  axis=1) #IMP
+                
         
-        Gen_pt_flat = ak.flatten(Gen_pt)
-        print (len(Gen_pt_flat))
-        
+        Gen_pt_FLAT = ak.flatten(Gen_pt)
+        Gen_vxy_FLAT = ak.flatten(Gen_vxy)
 
 
-        Lpt_pt = events_new.AllLptElectron.pt[(events_new.AllLptElectron.genMatched) ] #IMP       
 
-        Lpt_pt_flat = ak.flatten(Lpt_pt)
-        
-        print ("len(Lpt_pt_flat)=", len(Lpt_pt_flat))       
-        
+        Lpt_pt = events_new_very.AllLptElectron.pt[(events_new_very.AllLptElectron.genMatched) ] #IMP
+        print ("Lpt_pt=", Lpt_pt)
 
-        GED_pt  = events_new.Electron.pt[(events_new.Electron.genMatched)] 
+        Lpt_pt_flat = ak.flatten(Lpt_pt)        
+        print ("len(Lpt_pt_flat)=", len(Lpt_pt_flat)) 
+        
+        GED_pt  = events_new_very.Electron.pt[(events_new_very.Electron.genMatched)] 
+        print ("GED_pt=", GED_pt)
 
         GED_pt_flat = ak.flatten(GED_pt)  
         print ("len(GED_pt_flat)=", len(GED_pt_flat))
@@ -147,16 +165,25 @@ def fillHistos(events,h,samp,cut,info,sum_wgt=1):
         
         
         #Residual calculation:
-        res_GED = (GED_pt_flat - Gen_pt_flat)/(Gen_pt_flat) 
+        res_GED = (GED_pt_flat - Gen_pt_FLAT)/(Gen_pt_FLAT) 
         print ("Res_GED=", res_GED)
 
-        res_LPT = (Lpt_pt_flat - Gen_pt_flat)/(Gen_pt_flat) 
-        print ("Res_LPT=", res_LPT)
+        res_LPT = (Lpt_pt_flat - Gen_pt_FLAT)/(Gen_pt_FLAT) 
+        print("Res_LPT=", res_LPT)
 
 
         #Resolution plots
        
         h.fill("res_GED_gen", Res_GED = res_GED)
         h.fill("res_LPT_gen", Res_LPT = res_LPT)
+
+        h.fill("Gen_ElePos_pt", Gen_pt = GenEle_pt)
+        h.fill("Gen_ElePos_pt", Gen_pt = GenPos_pt)
+
+        h.fill("res_GED_gen_ptbin", Gen_vxy=Gen_vxy_FLAT, Res_GED=res_GED)
+
+        h.fill("res_LPT_gen_ptbin",    Gen_vxy=Gen_vxy_FLAT,    Res_LPT=res_LPT)
+        
+
 
       

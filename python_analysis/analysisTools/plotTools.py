@@ -1008,10 +1008,11 @@ def plot_signal_2D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
         plt.tight_layout()
         plt.savefig(f"{style_dict['outDir']}/{style_dict['outName']}")
         print(f"Saved: {style_dict['outDir']}/{style_dict['outName']}")
-    count = histo.values()
-    edges0 = histo.axes[0].edges
-    edges1 = histo.axes[1].edges
-    return count, edges0, edges1
+    # count = histo.values()
+    # edges0 = histo.axes[0].edges
+    # edges1 = histo.axes[1].edges
+    # return count, edges0, edges1
+    return histo
 
 
 def plot_signal_2D_match(sig_histo, m1, delta, ctau, plot_dict, style_dict,match_type='L', passID=1):
