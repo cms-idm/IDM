@@ -11,6 +11,9 @@
 // Original Author:  Samuel Bright-Thonney
 //         Created:  Tue, 21 Sep 2021 17:00:38 GMT
 //
+// Muon modifications by:  Alaa Adel Abdelhamid
+//         Last Modified:  Fri, 17 Jul 2026 (station-3/4 propagation)
+//
 
 #include <algorithm>
 #include <cmath> 
@@ -113,6 +116,21 @@
 
 #include "DataFormats/MuonReco/interface/Muon.h"  // for SF computation, add prompt muon channels
 
+// Gen-muon propagation to the muon system
+#include "MagneticField/Engine/interface/MagneticField.h"
+#include "MagneticField/Records/interface/IdealMagneticFieldRecord.h"
+#include "MuonAnalysis/MuonAssociators/interface/PropagateToMuonSetup.h"
+#include "DataFormats/GeometrySurface/interface/BoundCylinder.h"
+#include "DataFormats/GeometrySurface/interface/BoundDisk.h"
+#include "RecoMuon/DetLayers/interface/MuonDetLayerGeometry.h"
+#include "RecoMuon/Records/interface/MuonRecoGeometryRecord.h"
+#include "TrackingTools/DetLayers/interface/DetLayer.h"
+#include "TrackingTools/GeomPropagators/interface/Propagator.h"
+#include "TrackingTools/Records/interface/TrackingComponentsRecord.h"
+#include "TrackingTools/TrajectoryState/interface/FreeTrajectoryState.h"
+#include "TrackingTools/TrajectoryState/interface/TrajectoryStateOnSurface.h"
+#include "DataFormats/TrajectoryState/interface/TrackCharge.h"
+
 #include "TTree.h"
 #include "TMath.h"
 
@@ -178,6 +196,19 @@ class ElectronSkimmer : public edm::one::EDAnalyzer<edm::one::WatchRuns, edm::on
       const edm::EDGetTokenT<vector<pat::Muon> > pfRecoMuToken_;
       // Run3 additions
       const edm::ESGetToken<TransientTrackBuilder, TransientTrackRecord> ttkToken_;
+
+      // Real CMSSW propagation for signal gen muons and DSA tracks.
+      // Stations 1 and 2 use the standard PropagateToMuon helper. Stations 3
+      // and 4 use the same magnetic field, stepping-helix propagator, and
+      // MuonDetLayerGeometry through the generic surface helper below.
+      const edm::ESGetToken<MagneticField, IdealMagneticFieldRecord> magneticFieldToken_;
+      const PropagateToMuonSetup genMuonPropagatorSetupSt1_;
+      const PropagateToMuonSetup genMuonPropagatorSetupSt2_;
+      PropagateToMuon genMuonPropagatorSt1_;
+      PropagateToMuon genMuonPropagatorSt2_;
+      const edm::ESGetToken<MuonDetLayerGeometry, MuonRecoGeometryRecord> muonGeometryToken_;
+      const edm::ESGetToken<Propagator, TrackingComponentsRecord> stationPropagatorAlongToken_;
+
       const edm::EDGetTokenT<vector<reco::Track> > dsaMuonToken_;
       // Added to allow "RECO" or "PAT" tags
       edm::EDGetTokenT<vector<reco::Conversion> > conversionsAltToken_;
@@ -272,6 +303,202 @@ bool isFinalSignalMuonFromChi2(const reco::GenParticle& p, int chi2PdgId = 10000
    return std::abs(mom->pdgId()) == std::abs(chi2PdgId);
 }
 
+struct PropagatedMuonAtStation {
+   bool valid = false;
+
+   // Position of the propagated state at the muon-station surface.
+   // This matches the L1AnalysisRecoMuon2.cc convention: eta/phi from globalPosition().
+   float eta = -999.0;
+   float phi = -999.0;
+
+   // Momentum direction at the same surface. Keep this as a diagnostic because
+   // for truth/reco matching the momentum-direction dR may be more meaningful
+   // than the position eta/phi.
+   float momEta = -999.0;
+   float momPhi = -999.0;
+};
+
+PropagatedMuonAtStation invalidPropagatedMuonAtStation() {
+   return PropagatedMuonAtStation{};
+}
+
+PropagatedMuonAtStation tsosToPropagatedMuonAtStation(const TrajectoryStateOnSurface& tsos) {
+   PropagatedMuonAtStation out;
+   if (!tsos.isValid()) return out;
+
+   out.valid = true;
+   out.eta = tsos.globalPosition().eta();
+   out.phi = tsos.globalPosition().phi();
+   out.momEta = tsos.globalMomentum().eta();
+   out.momPhi = tsos.globalMomentum().phi();
+   return out;
+}
+
+PropagatedMuonAtStation propagateGenMuonToStation(
+   const reco::GenParticle& genMuon,
+   const MagneticField* magneticField,
+   const PropagateToMuon& propagator
+) {
+   if (!magneticField) return invalidPropagatedMuonAtStation();
+   if (std::abs(genMuon.pdgId()) != 13) return invalidPropagatedMuonAtStation();
+   if (genMuon.charge() == 0) return invalidPropagatedMuonAtStation();
+
+   const GlobalPoint startPos(genMuon.vx(), genMuon.vy(), genMuon.vz());
+   const GlobalVector startMom(genMuon.px(), genMuon.py(), genMuon.pz());
+
+   const FreeTrajectoryState startState(
+      startPos,
+      startMom,
+      TrackCharge(genMuon.charge()),
+      magneticField
+   );
+
+   return tsosToPropagatedMuonAtStation(propagator.extrapolate(startState));
+}
+
+PropagatedMuonAtStation propagateRecoTrackToStation(
+   const reco::Track& track,
+   const PropagateToMuon& propagator
+) {
+   return tsosToPropagatedMuonAtStation(propagator.extrapolate(track));
+}
+
+// Propagate to the physical station-3 or station-4 surface. CMSSW's
+// PropagateToMuon helper exposes only station 1/2 through useStation2, so the
+// two outer stations are handled explicitly from MuonDetLayerGeometry.
+//
+// DT layers are ordered MB1..MB4. CSC layers contain two ME1 surfaces, so
+// ME2, ME3, and ME4 have indices 2, 3, and 4, respectively.
+PropagatedMuonAtStation propagateFreeStateToOuterMuonStation(
+   const FreeTrajectoryState& startState,
+   int station,
+   const MuonDetLayerGeometry& muonGeometry,
+   const Propagator& propagatorAlong
+) {
+   if (station < 3 || station > 4) return invalidPropagatedMuonAtStation();
+   if (startState.momentum().mag() == 0.0) return invalidPropagatedMuonAtStation();
+
+   const size_t dtIndex = static_cast<size_t>(station - 1);
+   const size_t cscIndex = static_cast<size_t>(station);
+
+   const auto& dtLayers = muonGeometry.allDTLayers();
+   const auto& forwardCSCLayers = muonGeometry.forwardCSCLayers();
+   const auto& backwardCSCLayers = muonGeometry.backwardCSCLayers();
+   if (dtIndex >= dtLayers.size() ||
+       cscIndex >= forwardCSCLayers.size() ||
+       cscIndex >= backwardCSCLayers.size()) {
+      return invalidPropagatedMuonAtStation();
+   }
+
+   const auto* barrelCylinder =
+      dynamic_cast<const BoundCylinder*>(&dtLayers[dtIndex]->surface());
+   const auto* endcapDisk = dynamic_cast<const BoundDisk*>(
+      &(startState.momentum().eta() > 0.0
+           ? forwardCSCLayers[cscIndex]->surface()
+           : backwardCSCLayers[cscIndex]->surface())
+   );
+   if (!barrelCylinder || !endcapDisk) return invalidPropagatedMuonAtStation();
+
+   // Match PropagateToMuon's simple-geometry behavior: accept the barrel
+   // intersection only inside the actual DT cylinder length; otherwise test
+   // the corresponding positive/negative CSC disk and its radial bounds.
+   auto tsos = propagatorAlong.propagate(startState, *barrelCylinder);
+   if (tsos.isValid() &&
+       std::abs(tsos.globalPosition().z()) <= barrelCylinder->bounds().length() / 2.0) {
+      return tsosToPropagatedMuonAtStation(tsos);
+   }
+
+   tsos = propagatorAlong.propagate(startState, *endcapDisk);
+   if (tsos.isValid()) {
+      const double rho = tsos.globalPosition().perp();
+      if (rho >= endcapDisk->innerRadius() && rho <= endcapDisk->outerRadius()) {
+         return tsosToPropagatedMuonAtStation(tsos);
+      }
+   }
+
+   return invalidPropagatedMuonAtStation();
+}
+
+PropagatedMuonAtStation propagateGenMuonToOuterStation(
+   const reco::GenParticle& genMuon,
+   const MagneticField* magneticField,
+   int station,
+   const MuonDetLayerGeometry& muonGeometry,
+   const Propagator& propagatorAlong
+) {
+   if (!magneticField) return invalidPropagatedMuonAtStation();
+   if (std::abs(genMuon.pdgId()) != 13 || genMuon.charge() == 0) {
+      return invalidPropagatedMuonAtStation();
+   }
+
+   const FreeTrajectoryState startState(
+      GlobalPoint(genMuon.vx(), genMuon.vy(), genMuon.vz()),
+      GlobalVector(genMuon.px(), genMuon.py(), genMuon.pz()),
+      TrackCharge(genMuon.charge()),
+      magneticField
+   );
+   return propagateFreeStateToOuterMuonStation(
+      startState, station, muonGeometry, propagatorAlong
+   );
+}
+
+PropagatedMuonAtStation propagateRecoTrackToOuterStation(
+   const reco::Track& track,
+   const MagneticField* magneticField,
+   int station,
+   const MuonDetLayerGeometry& muonGeometry,
+   const Propagator& propagatorAlong
+) {
+   if (!magneticField || track.charge() == 0) {
+      return invalidPropagatedMuonAtStation();
+   }
+
+   const FreeTrajectoryState startState(
+      GlobalPoint(track.vx(), track.vy(), track.vz()),
+      GlobalVector(track.px(), track.py(), track.pz()),
+      TrackCharge(track.charge()),
+      magneticField
+   );
+   return propagateFreeStateToOuterMuonStation(
+      startState, station, muonGeometry, propagatorAlong
+   );
+}
+
+
+float nearestPropagatedMatchSameSign(
+   const PropagatedMuonAtStation& genProp,
+   int genCharge,
+   const std::vector<PropagatedMuonAtStation>& recoProps,
+   const std::vector<int>& recoCharges,
+   int& bestIdx,
+   bool useMomentumDirection = false
+) {
+   float bestDR = 999.0;
+   bestIdx = -1;
+
+   if (!genProp.valid) return bestDR;
+   if (recoProps.size() != recoCharges.size()) return bestDR;
+
+   const float genEta = useMomentumDirection ? genProp.momEta : genProp.eta;
+   const float genPhi = useMomentumDirection ? genProp.momPhi : genProp.phi;
+
+   for (size_t i = 0; i < recoProps.size(); i++) {
+      if (recoCharges[i] != genCharge) continue;
+      if (!recoProps[i].valid) continue;
+
+      const float recoEta = useMomentumDirection ? recoProps[i].momEta : recoProps[i].eta;
+      const float recoPhi = useMomentumDirection ? recoProps[i].momPhi : recoProps[i].phi;
+
+      const float dR = reco::deltaR(genEta, genPhi, recoEta, recoPhi);
+      if (dR < bestDR) {
+         bestDR = dR;
+         bestIdx = static_cast<int>(i);
+      }
+   }
+
+   return bestDR;
+}
+
 }  // namespace
 
 
@@ -317,6 +544,12 @@ ElectronSkimmer::ElectronSkimmer(const edm::ParameterSet& ps)
    pfRecoMuToken_(consumes<vector<pat::Muon> >(ps.getParameter<edm::InputTag>("pfRecoMu"))),
    // Run3 additions
    ttkToken_(esConsumes(edm::ESInputTag{"", "TransientTrackBuilder"})),
+   magneticFieldToken_(esConsumes<MagneticField, IdealMagneticFieldRecord>()),
+   genMuonPropagatorSetupSt1_(ps.getParameter<edm::ParameterSet>("genMuonPropagatorSt1"), consumesCollector()),
+   genMuonPropagatorSetupSt2_(ps.getParameter<edm::ParameterSet>("genMuonPropagatorSt2"), consumesCollector()),
+   muonGeometryToken_(esConsumes<MuonDetLayerGeometry, MuonRecoGeometryRecord>()),
+   stationPropagatorAlongToken_(esConsumes<Propagator, TrackingComponentsRecord>(
+      ps.getParameter<edm::ESInputTag>("stationPropagatorAlong"))),
    dsaMuonToken_(consumes<vector<reco::Track> >(ps.getParameter<edm::InputTag>("displacedStandAloneMuons"))),
    // Added to allow "RECO" or "PAT" tags
    conversionsAltToken_(mayConsume<vector<reco::Conversion> >(edm::InputTag("reducedEgamma","reducedConversions",
@@ -408,6 +641,12 @@ ElectronSkimmer::beginRun(edm::Run const& iRun, edm::EventSetup const& iSetup)
          }
       }
    }
+
+   // Do NOT initialize PropagateToMuonSetup here.
+   // The PropagateToMuonSetup objects were constructed with consumesCollector(),
+   // whose ESGetTokens are for the Event transition. Initializing them in
+   // beginRun would cause ESGetTokenWrongTransition. They are initialized
+   // inside analyze(), where the EventSetup transition matches those tokens.
 }
 
 
@@ -486,6 +725,22 @@ ElectronSkimmer::fillDescriptions(edm::ConfigurationDescriptions& descriptions) 
    // Run3 additions
    desc.add<edm::InputTag>("displacedStandAloneMuons",edm::InputTag("displacedStandAloneMuons"));
 
+   // Propagators used for signal gen-muon/DSA matching at the muon stations.
+   // genMuonPropagatorSt1 should use useStation2 = false.
+   // genMuonPropagatorSt2 should use useStation2 = true.
+   edm::ParameterSetDescription genMuonPropagatorSt1Desc;
+   PropagateToMuonSetup::fillPSetDescription(genMuonPropagatorSt1Desc);
+   desc.add<edm::ParameterSetDescription>("genMuonPropagatorSt1", genMuonPropagatorSt1Desc);
+
+   edm::ParameterSetDescription genMuonPropagatorSt2Desc;
+   PropagateToMuonSetup::fillPSetDescription(genMuonPropagatorSt2Desc);
+   desc.add<edm::ParameterSetDescription>("genMuonPropagatorSt2", genMuonPropagatorSt2Desc);
+
+   desc.add<edm::ESInputTag>(
+      "stationPropagatorAlong",
+      edm::ESInputTag("", "SteppingHelixPropagatorAlong")
+   );
+
    descriptions.add("ElectronSkimmer", desc);
 }
 
@@ -560,6 +815,17 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    auto beamspot = *beamspotHandle_;
    // Set up objects for vertex reco - different for Run3
    const TransientTrackBuilder* theB = &iSetup.getData(ttkToken_);
+   const MagneticField* magneticField = &iSetup.getData(magneticFieldToken_);
+   const auto& muonGeometry = iSetup.getData(muonGeometryToken_);
+   const auto& stationPropagatorAlong = iSetup.getData(stationPropagatorAlongToken_);
+
+   // Initialize the CMSSW muon-station propagators in the Event transition.
+   // PropagateToMuonSetup was constructed with consumesCollector(), whose
+   // default ESGetToken transition is Event, so init(iSetup) must be called
+   // here rather than in beginRun().
+   genMuonPropagatorSt1_ = genMuonPropagatorSetupSt1_.init(iSetup);
+   genMuonPropagatorSt2_ = genMuonPropagatorSetupSt2_.init(iSetup);
+
    KalmanVertexFitter kvf(true);
 
    // MET Filters (as recommended here https://twiki.cern.ch/twiki/bin/view/CMS/MissingETOptionalFiltersRun2#UL_data)
@@ -1045,8 +1311,13 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    std::vector<reco::Track> dsa_muonTracks{};
    std::vector<math::XYZTLorentzVector> dsa_muon_p4s;
    std::vector<int> dsa_muon_charges;
+   std::vector<PropagatedMuonAtStation> dsa_muon_prop_st1;
+   std::vector<PropagatedMuonAtStation> dsa_muon_prop_st2;
+   std::vector<PropagatedMuonAtStation> dsa_muon_prop_st3;
+   std::vector<PropagatedMuonAtStation> dsa_muon_prop_st4;
 
-   for (const auto & track : *dsaMuonHandle_) {
+   for (size_t iDSA = 0; iDSA < dsaMuonHandle_->size(); ++iDSA) {
+      const auto& track = dsaMuonHandle_->at(iDSA);
       dsa_muonTracks.push_back(track);
       nt.nDSAMuon_++;
 
@@ -1059,10 +1330,60 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       dsa_muon_p4s.push_back(p4);
       dsa_muon_charges.push_back(track.charge());
 
+      const auto dsaPropSt1 = propagateRecoTrackToStation(track, genMuonPropagatorSt1_);
+      const auto dsaPropSt2 = propagateRecoTrackToStation(track, genMuonPropagatorSt2_);
+      const auto dsaPropSt3 = propagateRecoTrackToOuterStation(
+         track, magneticField, 3, muonGeometry, stationPropagatorAlong
+      );
+      const auto dsaPropSt4 = propagateRecoTrackToOuterStation(
+         track, magneticField, 4, muonGeometry, stationPropagatorAlong
+      );
+      dsa_muon_prop_st1.push_back(dsaPropSt1);
+      dsa_muon_prop_st2.push_back(dsaPropSt2);
+      dsa_muon_prop_st3.push_back(dsaPropSt3);
+      dsa_muon_prop_st4.push_back(dsaPropSt4);
+
+      // These output branches need to be added to NtupleContainerV2.
+      nt.recoDSAMuonPropSt1Valid_.push_back(dsaPropSt1.valid);
+      nt.recoDSAMuonPropSt1Eta_.push_back(dsaPropSt1.eta);
+      nt.recoDSAMuonPropSt1Phi_.push_back(dsaPropSt1.phi);
+      nt.recoDSAMuonPropSt1MomEta_.push_back(dsaPropSt1.momEta);
+      nt.recoDSAMuonPropSt1MomPhi_.push_back(dsaPropSt1.momPhi);
+
+      nt.recoDSAMuonPropSt2Valid_.push_back(dsaPropSt2.valid);
+      nt.recoDSAMuonPropSt2Eta_.push_back(dsaPropSt2.eta);
+      nt.recoDSAMuonPropSt2Phi_.push_back(dsaPropSt2.phi);
+      nt.recoDSAMuonPropSt2MomEta_.push_back(dsaPropSt2.momEta);
+      nt.recoDSAMuonPropSt2MomPhi_.push_back(dsaPropSt2.momPhi);
+
+      nt.recoDSAMuonPropSt3Valid_.push_back(dsaPropSt3.valid);
+      nt.recoDSAMuonPropSt3Eta_.push_back(dsaPropSt3.eta);
+      nt.recoDSAMuonPropSt3Phi_.push_back(dsaPropSt3.phi);
+      nt.recoDSAMuonPropSt3MomEta_.push_back(dsaPropSt3.momEta);
+      nt.recoDSAMuonPropSt3MomPhi_.push_back(dsaPropSt3.momPhi);
+
+      nt.recoDSAMuonPropSt4Valid_.push_back(dsaPropSt4.valid);
+      nt.recoDSAMuonPropSt4Eta_.push_back(dsaPropSt4.eta);
+      nt.recoDSAMuonPropSt4Phi_.push_back(dsaPropSt4.phi);
+      nt.recoDSAMuonPropSt4MomEta_.push_back(dsaPropSt4.momEta);
+      nt.recoDSAMuonPropSt4MomPhi_.push_back(dsaPropSt4.momPhi);
+
       // Basic kinematics
+      nt.recoDSAMuonIdx_.push_back(static_cast<int>(iDSA));
       nt.recoDSAMuonPt_.push_back(track.pt());
+      nt.recoDSAMuonPtErr_.push_back(track.ptError());
       nt.recoDSAMuonEta_.push_back(track.eta());
+      nt.recoDSAMuonEtaErr_.push_back(track.etaError());
       nt.recoDSAMuonPhi_.push_back(track.phi());
+      nt.recoDSAMuonPhiErr_.push_back(track.phiError());
+
+      // Standard reco::Track outer-state coordinates, as used by SIDM.
+      // These are read from the associated TrackExtra rather than from a
+      // separately defined "outermost hit" algorithm.
+      const bool hasTrackExtra = track.extra().isNonnull() && track.extra().isAvailable();
+      nt.recoDSAMuonOuterEta_.push_back(hasTrackExtra ? track.outerEta() : -999.0);
+      nt.recoDSAMuonOuterPhi_.push_back(hasTrackExtra ? track.outerPhi() : -999.0);
+
       nt.recoDSAMuonE_.push_back(energy);
       nt.recoDSAMuonPx_.push_back(track.px());
       nt.recoDSAMuonPy_.push_back(track.py());
@@ -1535,6 +1856,14 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       // GenSigMuon/GenSigAntiMuon are status-1 last-copy muons whose first non-muon ancestor is chi2.
       math::XYZTLorentzVector gen_sig_muon_p4;
       math::XYZTLorentzVector gen_sig_antimuon_p4;
+      PropagatedMuonAtStation gen_sig_muon_prop_st1;
+      PropagatedMuonAtStation gen_sig_muon_prop_st2;
+      PropagatedMuonAtStation gen_sig_muon_prop_st3;
+      PropagatedMuonAtStation gen_sig_muon_prop_st4;
+      PropagatedMuonAtStation gen_sig_antimuon_prop_st1;
+      PropagatedMuonAtStation gen_sig_antimuon_prop_st2;
+      PropagatedMuonAtStation gen_sig_antimuon_prop_st3;
+      PropagatedMuonAtStation gen_sig_antimuon_prop_st4;
       bool foundGenSigMuon = false;
       bool foundGenSigAntiMuon = false;
       std::vector<const reco::GenParticle*> sigFinalMuons;
@@ -1611,6 +1940,40 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
                nt.genSigMuonFromHardProcessFinalState_ = p->fromHardProcessFinalState();
                nt.genSigMuonFromHardProcessBeforeFSR_ = p->fromHardProcessBeforeFSR();
                nt.genSigMuonIsPromptFinalState_ = p->isPromptFinalState();
+
+               gen_sig_muon_prop_st1 = propagateGenMuonToStation(*p, magneticField, genMuonPropagatorSt1_);
+               gen_sig_muon_prop_st2 = propagateGenMuonToStation(*p, magneticField, genMuonPropagatorSt2_);
+               gen_sig_muon_prop_st3 = propagateGenMuonToOuterStation(
+                  *p, magneticField, 3, muonGeometry, stationPropagatorAlong
+               );
+               gen_sig_muon_prop_st4 = propagateGenMuonToOuterStation(
+                  *p, magneticField, 4, muonGeometry, stationPropagatorAlong
+               );
+
+               // These output branches need to be added to NtupleContainerV2.
+               nt.genSigMuonPropSt1Valid_ = gen_sig_muon_prop_st1.valid;
+               nt.genSigMuonPropSt1Eta_ = gen_sig_muon_prop_st1.eta;
+               nt.genSigMuonPropSt1Phi_ = gen_sig_muon_prop_st1.phi;
+               nt.genSigMuonPropSt1MomEta_ = gen_sig_muon_prop_st1.momEta;
+               nt.genSigMuonPropSt1MomPhi_ = gen_sig_muon_prop_st1.momPhi;
+
+               nt.genSigMuonPropSt2Valid_ = gen_sig_muon_prop_st2.valid;
+               nt.genSigMuonPropSt2Eta_ = gen_sig_muon_prop_st2.eta;
+               nt.genSigMuonPropSt2Phi_ = gen_sig_muon_prop_st2.phi;
+               nt.genSigMuonPropSt2MomEta_ = gen_sig_muon_prop_st2.momEta;
+               nt.genSigMuonPropSt2MomPhi_ = gen_sig_muon_prop_st2.momPhi;
+
+               nt.genSigMuonPropSt3Valid_ = gen_sig_muon_prop_st3.valid;
+               nt.genSigMuonPropSt3Eta_ = gen_sig_muon_prop_st3.eta;
+               nt.genSigMuonPropSt3Phi_ = gen_sig_muon_prop_st3.phi;
+               nt.genSigMuonPropSt3MomEta_ = gen_sig_muon_prop_st3.momEta;
+               nt.genSigMuonPropSt3MomPhi_ = gen_sig_muon_prop_st3.momPhi;
+
+               nt.genSigMuonPropSt4Valid_ = gen_sig_muon_prop_st4.valid;
+               nt.genSigMuonPropSt4Eta_ = gen_sig_muon_prop_st4.eta;
+               nt.genSigMuonPropSt4Phi_ = gen_sig_muon_prop_st4.phi;
+               nt.genSigMuonPropSt4MomEta_ = gen_sig_muon_prop_st4.momEta;
+               nt.genSigMuonPropSt4MomPhi_ = gen_sig_muon_prop_st4.momPhi;
             }
             else if (p->pdgId() == -13) {
                foundGenSigAntiMuon = true;
@@ -1641,6 +2004,40 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
                nt.genSigAntiMuonFromHardProcessFinalState_ = p->fromHardProcessFinalState();
                nt.genSigAntiMuonFromHardProcessBeforeFSR_ = p->fromHardProcessBeforeFSR();
                nt.genSigAntiMuonIsPromptFinalState_ = p->isPromptFinalState();
+
+               gen_sig_antimuon_prop_st1 = propagateGenMuonToStation(*p, magneticField, genMuonPropagatorSt1_);
+               gen_sig_antimuon_prop_st2 = propagateGenMuonToStation(*p, magneticField, genMuonPropagatorSt2_);
+               gen_sig_antimuon_prop_st3 = propagateGenMuonToOuterStation(
+                  *p, magneticField, 3, muonGeometry, stationPropagatorAlong
+               );
+               gen_sig_antimuon_prop_st4 = propagateGenMuonToOuterStation(
+                  *p, magneticField, 4, muonGeometry, stationPropagatorAlong
+               );
+
+               // These output branches need to be added to NtupleContainerV2.
+               nt.genSigAntiMuonPropSt1Valid_ = gen_sig_antimuon_prop_st1.valid;
+               nt.genSigAntiMuonPropSt1Eta_ = gen_sig_antimuon_prop_st1.eta;
+               nt.genSigAntiMuonPropSt1Phi_ = gen_sig_antimuon_prop_st1.phi;
+               nt.genSigAntiMuonPropSt1MomEta_ = gen_sig_antimuon_prop_st1.momEta;
+               nt.genSigAntiMuonPropSt1MomPhi_ = gen_sig_antimuon_prop_st1.momPhi;
+
+               nt.genSigAntiMuonPropSt2Valid_ = gen_sig_antimuon_prop_st2.valid;
+               nt.genSigAntiMuonPropSt2Eta_ = gen_sig_antimuon_prop_st2.eta;
+               nt.genSigAntiMuonPropSt2Phi_ = gen_sig_antimuon_prop_st2.phi;
+               nt.genSigAntiMuonPropSt2MomEta_ = gen_sig_antimuon_prop_st2.momEta;
+               nt.genSigAntiMuonPropSt2MomPhi_ = gen_sig_antimuon_prop_st2.momPhi;
+
+               nt.genSigAntiMuonPropSt3Valid_ = gen_sig_antimuon_prop_st3.valid;
+               nt.genSigAntiMuonPropSt3Eta_ = gen_sig_antimuon_prop_st3.eta;
+               nt.genSigAntiMuonPropSt3Phi_ = gen_sig_antimuon_prop_st3.phi;
+               nt.genSigAntiMuonPropSt3MomEta_ = gen_sig_antimuon_prop_st3.momEta;
+               nt.genSigAntiMuonPropSt3MomPhi_ = gen_sig_antimuon_prop_st3.momPhi;
+
+               nt.genSigAntiMuonPropSt4Valid_ = gen_sig_antimuon_prop_st4.valid;
+               nt.genSigAntiMuonPropSt4Eta_ = gen_sig_antimuon_prop_st4.eta;
+               nt.genSigAntiMuonPropSt4Phi_ = gen_sig_antimuon_prop_st4.phi;
+               nt.genSigAntiMuonPropSt4MomEta_ = gen_sig_antimuon_prop_st4.momEta;
+               nt.genSigAntiMuonPropSt4MomPhi_ = gen_sig_antimuon_prop_st4.momPhi;
             }
          }
       }
@@ -1786,6 +2183,50 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
             idxDSA
          );
          nt.genSigMuonMatchDSAMuonIdx_ = idxDSA;
+
+         int idxDSAPropSt1 = -1;
+         int idxDSAPropSt2 = -1;
+         int idxDSAPropSt3 = -1;
+         int idxDSAPropSt4 = -1;
+         nt.genSigMuonMinDrToDSAMuonPropSt1_ = nearestPropagatedMatchSameSign(
+            gen_sig_muon_prop_st1,
+            nt.genSigMuonCharge_,
+            dsa_muon_prop_st1,
+            dsa_muon_charges,
+            idxDSAPropSt1,
+            false
+         );
+         nt.genSigMuonMatchDSAMuonPropSt1Idx_ = idxDSAPropSt1;
+
+         nt.genSigMuonMinDrToDSAMuonPropSt2_ = nearestPropagatedMatchSameSign(
+            gen_sig_muon_prop_st2,
+            nt.genSigMuonCharge_,
+            dsa_muon_prop_st2,
+            dsa_muon_charges,
+            idxDSAPropSt2,
+            false
+         );
+         nt.genSigMuonMatchDSAMuonPropSt2Idx_ = idxDSAPropSt2;
+
+         nt.genSigMuonMinDrToDSAMuonPropSt3_ = nearestPropagatedMatchSameSign(
+            gen_sig_muon_prop_st3,
+            nt.genSigMuonCharge_,
+            dsa_muon_prop_st3,
+            dsa_muon_charges,
+            idxDSAPropSt3,
+            false
+         );
+         nt.genSigMuonMatchDSAMuonPropSt3Idx_ = idxDSAPropSt3;
+
+         nt.genSigMuonMinDrToDSAMuonPropSt4_ = nearestPropagatedMatchSameSign(
+            gen_sig_muon_prop_st4,
+            nt.genSigMuonCharge_,
+            dsa_muon_prop_st4,
+            dsa_muon_charges,
+            idxDSAPropSt4,
+            false
+         );
+         nt.genSigMuonMatchDSAMuonPropSt4Idx_ = idxDSAPropSt4;
       }
 
       if (foundGenSigAntiMuon) {
@@ -1809,6 +2250,50 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
             idxDSA
          );
          nt.genSigAntiMuonMatchDSAMuonIdx_ = idxDSA;
+
+         int idxDSAPropSt1 = -1;
+         int idxDSAPropSt2 = -1;
+         int idxDSAPropSt3 = -1;
+         int idxDSAPropSt4 = -1;
+         nt.genSigAntiMuonMinDrToDSAMuonPropSt1_ = nearestPropagatedMatchSameSign(
+            gen_sig_antimuon_prop_st1,
+            nt.genSigAntiMuonCharge_,
+            dsa_muon_prop_st1,
+            dsa_muon_charges,
+            idxDSAPropSt1,
+            false
+         );
+         nt.genSigAntiMuonMatchDSAMuonPropSt1Idx_ = idxDSAPropSt1;
+
+         nt.genSigAntiMuonMinDrToDSAMuonPropSt2_ = nearestPropagatedMatchSameSign(
+            gen_sig_antimuon_prop_st2,
+            nt.genSigAntiMuonCharge_,
+            dsa_muon_prop_st2,
+            dsa_muon_charges,
+            idxDSAPropSt2,
+            false
+         );
+         nt.genSigAntiMuonMatchDSAMuonPropSt2Idx_ = idxDSAPropSt2;
+
+         nt.genSigAntiMuonMinDrToDSAMuonPropSt3_ = nearestPropagatedMatchSameSign(
+            gen_sig_antimuon_prop_st3,
+            nt.genSigAntiMuonCharge_,
+            dsa_muon_prop_st3,
+            dsa_muon_charges,
+            idxDSAPropSt3,
+            false
+         );
+         nt.genSigAntiMuonMatchDSAMuonPropSt3Idx_ = idxDSAPropSt3;
+
+         nt.genSigAntiMuonMinDrToDSAMuonPropSt4_ = nearestPropagatedMatchSameSign(
+            gen_sig_antimuon_prop_st4,
+            nt.genSigAntiMuonCharge_,
+            dsa_muon_prop_st4,
+            dsa_muon_charges,
+            idxDSAPropSt4,
+            false
+         );
+         nt.genSigAntiMuonMatchDSAMuonPropSt4Idx_ = idxDSAPropSt4;
       }
 
       if (isSignal) {

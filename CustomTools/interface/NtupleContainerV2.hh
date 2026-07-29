@@ -124,6 +124,45 @@ public:
     float genSigMuonMinDrToDSAMuon_;
     int genSigMuonMatchDSAMuonIdx_;
 
+    // Propagated gen signal muon to muon-station surfaces
+    int   genSigMuonPropSt1Valid_;
+    float genSigMuonPropSt1Eta_;
+    float genSigMuonPropSt1Phi_;
+    float genSigMuonPropSt1MomEta_;
+    float genSigMuonPropSt1MomPhi_;
+
+    int   genSigMuonPropSt2Valid_;
+    float genSigMuonPropSt2Eta_;
+    float genSigMuonPropSt2Phi_;
+    float genSigMuonPropSt2MomEta_;
+    float genSigMuonPropSt2MomPhi_;
+
+    int   genSigMuonPropSt3Valid_;
+    float genSigMuonPropSt3Eta_;
+    float genSigMuonPropSt3Phi_;
+    float genSigMuonPropSt3MomEta_;
+    float genSigMuonPropSt3MomPhi_;
+
+    int   genSigMuonPropSt4Valid_;
+    float genSigMuonPropSt4Eta_;
+    float genSigMuonPropSt4Phi_;
+    float genSigMuonPropSt4MomEta_;
+    float genSigMuonPropSt4MomPhi_;
+
+    // Propagated same-sign DSA matching diagnostics
+    float genSigMuonMinDrToDSAMuonPropSt1_;
+    int   genSigMuonMatchDSAMuonPropSt1Idx_;
+    float genSigMuonMinDrToDSAMuonPropSt2_;
+    int   genSigMuonMatchDSAMuonPropSt2Idx_;
+    float genSigMuonMinDrToDSAMuonPropSt3_;
+    int   genSigMuonMatchDSAMuonPropSt3Idx_;
+    float genSigMuonMinDrToDSAMuonPropSt4_;
+    int   genSigMuonMatchDSAMuonPropSt4Idx_;
+
+    // Gen signal muon propagated to each DSA muon's actual outermost valid hit surface
+    float genSigMuonMinDrToDSAMuonOuterHit_;
+    int   genSigMuonMatchDSAMuonOuterHitIdx_;
+
     // Gen Signal Anti-Muon from iDM signal only: status == 1 and motherID == 1000023
     int genSigAntiMuonCharge_;
     int genSigAntiMuonMotherID_;
@@ -159,6 +198,46 @@ public:
     int genSigAntiMuonMatchRecoMuonIdx_;
     float genSigAntiMuonMinDrToDSAMuon_;
     int genSigAntiMuonMatchDSAMuonIdx_;
+
+
+    // Propagated gen signal anti-muon to muon-station surfaces
+    int   genSigAntiMuonPropSt1Valid_;
+    float genSigAntiMuonPropSt1Eta_;
+    float genSigAntiMuonPropSt1Phi_;
+    float genSigAntiMuonPropSt1MomEta_;
+    float genSigAntiMuonPropSt1MomPhi_;
+
+    int   genSigAntiMuonPropSt2Valid_;
+    float genSigAntiMuonPropSt2Eta_;
+    float genSigAntiMuonPropSt2Phi_;
+    float genSigAntiMuonPropSt2MomEta_;
+    float genSigAntiMuonPropSt2MomPhi_;
+
+    int   genSigAntiMuonPropSt3Valid_;
+    float genSigAntiMuonPropSt3Eta_;
+    float genSigAntiMuonPropSt3Phi_;
+    float genSigAntiMuonPropSt3MomEta_;
+    float genSigAntiMuonPropSt3MomPhi_;
+
+    int   genSigAntiMuonPropSt4Valid_;
+    float genSigAntiMuonPropSt4Eta_;
+    float genSigAntiMuonPropSt4Phi_;
+    float genSigAntiMuonPropSt4MomEta_;
+    float genSigAntiMuonPropSt4MomPhi_;
+
+    // Propagated same-sign DSA matching diagnostics
+    float genSigAntiMuonMinDrToDSAMuonPropSt1_;
+    int   genSigAntiMuonMatchDSAMuonPropSt1Idx_;
+    float genSigAntiMuonMinDrToDSAMuonPropSt2_;
+    int   genSigAntiMuonMatchDSAMuonPropSt2Idx_;
+    float genSigAntiMuonMinDrToDSAMuonPropSt3_;
+    int   genSigAntiMuonMatchDSAMuonPropSt3Idx_;
+    float genSigAntiMuonMinDrToDSAMuonPropSt4_;
+    int   genSigAntiMuonMatchDSAMuonPropSt4Idx_;
+
+    // Gen signal anti-muon propagated to each DSA muon's actual outermost valid hit surface
+    float genSigAntiMuonMinDrToDSAMuonOuterHit_;
+    int   genSigAntiMuonMatchDSAMuonOuterHitIdx_;
 
     // Gen Signal Dimuon
     float genSigDimuonPt_;
@@ -498,6 +577,54 @@ public:
     std::vector<int> recoDSAMuonTrkNumPlanes_;
     std::vector<int> recoDSAMuonTrkNumDTHits_;
     std::vector<int> recoDSAMuonIdx_;
+    
+    // DSA reco tracks propagated to muon-station surfaces
+    std::vector<int>   recoDSAMuonPropSt1Valid_;
+    std::vector<float> recoDSAMuonPropSt1Eta_;
+    std::vector<float> recoDSAMuonPropSt1Phi_;
+    std::vector<float> recoDSAMuonPropSt1MomEta_;
+    std::vector<float> recoDSAMuonPropSt1MomPhi_;
+
+    std::vector<int>   recoDSAMuonPropSt2Valid_;
+    std::vector<float> recoDSAMuonPropSt2Eta_;
+    std::vector<float> recoDSAMuonPropSt2Phi_;
+    std::vector<float> recoDSAMuonPropSt2MomEta_;
+    std::vector<float> recoDSAMuonPropSt2MomPhi_;
+
+    std::vector<int>   recoDSAMuonPropSt3Valid_;
+    std::vector<float> recoDSAMuonPropSt3Eta_;
+    std::vector<float> recoDSAMuonPropSt3Phi_;
+    std::vector<float> recoDSAMuonPropSt3MomEta_;
+    std::vector<float> recoDSAMuonPropSt3MomPhi_;
+
+    std::vector<int>   recoDSAMuonPropSt4Valid_;
+    std::vector<float> recoDSAMuonPropSt4Eta_;
+    std::vector<float> recoDSAMuonPropSt4Phi_;
+    std::vector<float> recoDSAMuonPropSt4MomEta_;
+    std::vector<float> recoDSAMuonPropSt4MomPhi_;
+
+    // DSA outermost valid muon-hit diagnostics
+    std::vector<int> recoDSAMuonOuterHitValid_;
+    std::vector<int> recoDSAMuonOuterHitTrackExtraAvailable_;
+    std::vector<int> recoDSAMuonOuterHitRecHitsSize_;
+    std::vector<int> recoDSAMuonOuterHitNValidMuonHits_;
+    std::vector<unsigned int> recoDSAMuonOuterHitDetId_;
+    std::vector<float> recoDSAMuonOuterHitX_;
+    std::vector<float> recoDSAMuonOuterHitY_;
+    std::vector<float> recoDSAMuonOuterHitZ_;
+    std::vector<float> recoDSAMuonOuterHitR_;
+    std::vector<float> recoDSAMuonOuterHitEta_;
+    std::vector<float> recoDSAMuonOuterHitPhi_;
+
+    // DSA-centric closest propagated signal-gen match at that DSA outer-hit surface
+    std::vector<float> recoDSAMuonMinDrToGenSigMuonOuterHit_;
+    std::vector<int> recoDSAMuonMatchGenSigMuonOuterHitIdx_;
+    std::vector<int> recoDSAMuonMatchGenSigMuonOuterHitPdgId_;
+    std::vector<int> recoDSAMuonMatchGenSigMuonOuterHitPropValid_;
+    std::vector<float> recoDSAMuonMatchGenSigMuonOuterHitPropEta_;
+    std::vector<float> recoDSAMuonMatchGenSigMuonOuterHitPropPhi_;
+    std::vector<float> recoDSAMuonMatchGenSigMuonOuterHitPropMomEta_;
+    std::vector<float> recoDSAMuonMatchGenSigMuonOuterHitPropMomPhi_;
 
     // Photons
     int nPhotons_;

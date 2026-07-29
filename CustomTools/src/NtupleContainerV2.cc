@@ -249,6 +249,51 @@ void NtupleContainerV2::CreateTreeBranches() {
     outT->Branch("recoDSAMuonTrkNumPlanes", &recoDSAMuonTrkNumPlanes_);
     outT->Branch("recoDSAMuonTrkNumDTHits", &recoDSAMuonTrkNumDTHits_);
     outT->Branch("recoDSAMuonIdx", &recoDSAMuonIdx_);
+
+    outT->Branch("recoDSAMuonPropSt1Valid", &recoDSAMuonPropSt1Valid_);
+    outT->Branch("recoDSAMuonPropSt1Eta", &recoDSAMuonPropSt1Eta_);
+    outT->Branch("recoDSAMuonPropSt1Phi", &recoDSAMuonPropSt1Phi_);
+    outT->Branch("recoDSAMuonPropSt1MomEta", &recoDSAMuonPropSt1MomEta_);
+    outT->Branch("recoDSAMuonPropSt1MomPhi", &recoDSAMuonPropSt1MomPhi_);
+
+    outT->Branch("recoDSAMuonPropSt2Valid", &recoDSAMuonPropSt2Valid_);
+    outT->Branch("recoDSAMuonPropSt2Eta", &recoDSAMuonPropSt2Eta_);
+    outT->Branch("recoDSAMuonPropSt2Phi", &recoDSAMuonPropSt2Phi_);
+    outT->Branch("recoDSAMuonPropSt2MomEta", &recoDSAMuonPropSt2MomEta_);
+    outT->Branch("recoDSAMuonPropSt2MomPhi", &recoDSAMuonPropSt2MomPhi_);
+
+    outT->Branch("recoDSAMuonPropSt3Valid", &recoDSAMuonPropSt3Valid_);
+    outT->Branch("recoDSAMuonPropSt3Eta", &recoDSAMuonPropSt3Eta_);
+    outT->Branch("recoDSAMuonPropSt3Phi", &recoDSAMuonPropSt3Phi_);
+    outT->Branch("recoDSAMuonPropSt3MomEta", &recoDSAMuonPropSt3MomEta_);
+    outT->Branch("recoDSAMuonPropSt3MomPhi", &recoDSAMuonPropSt3MomPhi_);
+
+    outT->Branch("recoDSAMuonPropSt4Valid", &recoDSAMuonPropSt4Valid_);
+    outT->Branch("recoDSAMuonPropSt4Eta", &recoDSAMuonPropSt4Eta_);
+    outT->Branch("recoDSAMuonPropSt4Phi", &recoDSAMuonPropSt4Phi_);
+    outT->Branch("recoDSAMuonPropSt4MomEta", &recoDSAMuonPropSt4MomEta_);
+    outT->Branch("recoDSAMuonPropSt4MomPhi", &recoDSAMuonPropSt4MomPhi_);
+
+    outT->Branch("recoDSAMuonOuterHitValid", &recoDSAMuonOuterHitValid_);
+    outT->Branch("recoDSAMuonOuterHitTrackExtraAvailable", &recoDSAMuonOuterHitTrackExtraAvailable_);
+    outT->Branch("recoDSAMuonOuterHitRecHitsSize", &recoDSAMuonOuterHitRecHitsSize_);
+    outT->Branch("recoDSAMuonOuterHitNValidMuonHits", &recoDSAMuonOuterHitNValidMuonHits_);
+    outT->Branch("recoDSAMuonOuterHitDetId", &recoDSAMuonOuterHitDetId_);
+    outT->Branch("recoDSAMuonOuterHitX", &recoDSAMuonOuterHitX_);
+    outT->Branch("recoDSAMuonOuterHitY", &recoDSAMuonOuterHitY_);
+    outT->Branch("recoDSAMuonOuterHitZ", &recoDSAMuonOuterHitZ_);
+    outT->Branch("recoDSAMuonOuterHitR", &recoDSAMuonOuterHitR_);
+    outT->Branch("recoDSAMuonOuterHitEta", &recoDSAMuonOuterHitEta_);
+    outT->Branch("recoDSAMuonOuterHitPhi", &recoDSAMuonOuterHitPhi_);
+
+    outT->Branch("recoDSAMuonMinDrToGenSigMuonOuterHit", &recoDSAMuonMinDrToGenSigMuonOuterHit_);
+    outT->Branch("recoDSAMuonMatchGenSigMuonOuterHitIdx", &recoDSAMuonMatchGenSigMuonOuterHitIdx_);
+    outT->Branch("recoDSAMuonMatchGenSigMuonOuterHitPdgId", &recoDSAMuonMatchGenSigMuonOuterHitPdgId_);
+    outT->Branch("recoDSAMuonMatchGenSigMuonOuterHitPropValid", &recoDSAMuonMatchGenSigMuonOuterHitPropValid_);
+    outT->Branch("recoDSAMuonMatchGenSigMuonOuterHitPropEta", &recoDSAMuonMatchGenSigMuonOuterHitPropEta_);
+    outT->Branch("recoDSAMuonMatchGenSigMuonOuterHitPropPhi", &recoDSAMuonMatchGenSigMuonOuterHitPropPhi_);
+    outT->Branch("recoDSAMuonMatchGenSigMuonOuterHitPropMomEta", &recoDSAMuonMatchGenSigMuonOuterHitPropMomEta_);
+    outT->Branch("recoDSAMuonMatchGenSigMuonOuterHitPropMomPhi", &recoDSAMuonMatchGenSigMuonOuterHitPropMomPhi_);
     
     // Photons
     outT->Branch("nPhoton",&nPhotons_);
@@ -584,6 +629,41 @@ void NtupleContainerV2::CreateTreeBranches() {
             outT->Branch("GenSigMuon_minDrToDSAMuon",&genSigMuonMinDrToDSAMuon_);
             outT->Branch("GenSigMuon_matchDSAMuonIdx",&genSigMuonMatchDSAMuonIdx_);
 
+             outT->Branch("GenSigMuon_propSt1Valid", &genSigMuonPropSt1Valid_);
+            outT->Branch("GenSigMuon_propSt1Eta", &genSigMuonPropSt1Eta_);
+            outT->Branch("GenSigMuon_propSt1Phi", &genSigMuonPropSt1Phi_);
+            outT->Branch("GenSigMuon_propSt1MomEta", &genSigMuonPropSt1MomEta_);
+            outT->Branch("GenSigMuon_propSt1MomPhi", &genSigMuonPropSt1MomPhi_);
+
+            outT->Branch("GenSigMuon_propSt2Valid", &genSigMuonPropSt2Valid_);
+            outT->Branch("GenSigMuon_propSt2Eta", &genSigMuonPropSt2Eta_);
+            outT->Branch("GenSigMuon_propSt2Phi", &genSigMuonPropSt2Phi_);
+            outT->Branch("GenSigMuon_propSt2MomEta", &genSigMuonPropSt2MomEta_);
+            outT->Branch("GenSigMuon_propSt2MomPhi", &genSigMuonPropSt2MomPhi_);
+
+            outT->Branch("GenSigMuon_propSt3Valid", &genSigMuonPropSt3Valid_);
+            outT->Branch("GenSigMuon_propSt3Eta", &genSigMuonPropSt3Eta_);
+            outT->Branch("GenSigMuon_propSt3Phi", &genSigMuonPropSt3Phi_);
+            outT->Branch("GenSigMuon_propSt3MomEta", &genSigMuonPropSt3MomEta_);
+            outT->Branch("GenSigMuon_propSt3MomPhi", &genSigMuonPropSt3MomPhi_);
+
+            outT->Branch("GenSigMuon_propSt4Valid", &genSigMuonPropSt4Valid_);
+            outT->Branch("GenSigMuon_propSt4Eta", &genSigMuonPropSt4Eta_);
+            outT->Branch("GenSigMuon_propSt4Phi", &genSigMuonPropSt4Phi_);
+            outT->Branch("GenSigMuon_propSt4MomEta", &genSigMuonPropSt4MomEta_);
+            outT->Branch("GenSigMuon_propSt4MomPhi", &genSigMuonPropSt4MomPhi_);
+
+            outT->Branch("GenSigMuon_minDrToDSAMuonPropSt1", &genSigMuonMinDrToDSAMuonPropSt1_);
+            outT->Branch("GenSigMuon_matchDSAMuonPropSt1Idx", &genSigMuonMatchDSAMuonPropSt1Idx_);
+            outT->Branch("GenSigMuon_minDrToDSAMuonPropSt2", &genSigMuonMinDrToDSAMuonPropSt2_);
+            outT->Branch("GenSigMuon_matchDSAMuonPropSt2Idx", &genSigMuonMatchDSAMuonPropSt2Idx_);
+            outT->Branch("GenSigMuon_minDrToDSAMuonPropSt3", &genSigMuonMinDrToDSAMuonPropSt3_);
+            outT->Branch("GenSigMuon_matchDSAMuonPropSt3Idx", &genSigMuonMatchDSAMuonPropSt3Idx_);
+            outT->Branch("GenSigMuon_minDrToDSAMuonPropSt4", &genSigMuonMinDrToDSAMuonPropSt4_);
+            outT->Branch("GenSigMuon_matchDSAMuonPropSt4Idx", &genSigMuonMatchDSAMuonPropSt4Idx_);
+            outT->Branch("GenSigMuon_minDrToDSAMuonOuterHit", &genSigMuonMinDrToDSAMuonOuterHit_);
+            outT->Branch("GenSigMuon_matchDSAMuonOuterHitIdx", &genSigMuonMatchDSAMuonOuterHitIdx_);
+
             outT->Branch("GenSigAntiMuon_charge",&genSigAntiMuonCharge_);
             outT->Branch("GenSigAntiMuon_motherID",&genSigAntiMuonMotherID_);
             outT->Branch("GenSigAntiMuon_status",&genSigAntiMuonStatus_);
@@ -616,6 +696,42 @@ void NtupleContainerV2::CreateTreeBranches() {
             outT->Branch("GenSigAntiMuon_matchRecoMuonIdx",&genSigAntiMuonMatchRecoMuonIdx_);
             outT->Branch("GenSigAntiMuon_minDrToDSAMuon",&genSigAntiMuonMinDrToDSAMuon_);
             outT->Branch("GenSigAntiMuon_matchDSAMuonIdx",&genSigAntiMuonMatchDSAMuonIdx_);
+
+
+            outT->Branch("GenSigAntiMuon_propSt1Valid", &genSigAntiMuonPropSt1Valid_);
+            outT->Branch("GenSigAntiMuon_propSt1Eta", &genSigAntiMuonPropSt1Eta_);
+            outT->Branch("GenSigAntiMuon_propSt1Phi", &genSigAntiMuonPropSt1Phi_);
+            outT->Branch("GenSigAntiMuon_propSt1MomEta", &genSigAntiMuonPropSt1MomEta_);
+            outT->Branch("GenSigAntiMuon_propSt1MomPhi", &genSigAntiMuonPropSt1MomPhi_);
+
+            outT->Branch("GenSigAntiMuon_propSt2Valid", &genSigAntiMuonPropSt2Valid_);
+            outT->Branch("GenSigAntiMuon_propSt2Eta", &genSigAntiMuonPropSt2Eta_);
+            outT->Branch("GenSigAntiMuon_propSt2Phi", &genSigAntiMuonPropSt2Phi_);
+            outT->Branch("GenSigAntiMuon_propSt2MomEta", &genSigAntiMuonPropSt2MomEta_);
+            outT->Branch("GenSigAntiMuon_propSt2MomPhi", &genSigAntiMuonPropSt2MomPhi_);
+
+            outT->Branch("GenSigAntiMuon_propSt3Valid", &genSigAntiMuonPropSt3Valid_);
+            outT->Branch("GenSigAntiMuon_propSt3Eta", &genSigAntiMuonPropSt3Eta_);
+            outT->Branch("GenSigAntiMuon_propSt3Phi", &genSigAntiMuonPropSt3Phi_);
+            outT->Branch("GenSigAntiMuon_propSt3MomEta", &genSigAntiMuonPropSt3MomEta_);
+            outT->Branch("GenSigAntiMuon_propSt3MomPhi", &genSigAntiMuonPropSt3MomPhi_);
+
+            outT->Branch("GenSigAntiMuon_propSt4Valid", &genSigAntiMuonPropSt4Valid_);
+            outT->Branch("GenSigAntiMuon_propSt4Eta", &genSigAntiMuonPropSt4Eta_);
+            outT->Branch("GenSigAntiMuon_propSt4Phi", &genSigAntiMuonPropSt4Phi_);
+            outT->Branch("GenSigAntiMuon_propSt4MomEta", &genSigAntiMuonPropSt4MomEta_);
+            outT->Branch("GenSigAntiMuon_propSt4MomPhi", &genSigAntiMuonPropSt4MomPhi_);
+
+            outT->Branch("GenSigAntiMuon_minDrToDSAMuonPropSt1", &genSigAntiMuonMinDrToDSAMuonPropSt1_);
+            outT->Branch("GenSigAntiMuon_matchDSAMuonPropSt1Idx", &genSigAntiMuonMatchDSAMuonPropSt1Idx_);
+            outT->Branch("GenSigAntiMuon_minDrToDSAMuonPropSt2", &genSigAntiMuonMinDrToDSAMuonPropSt2_);
+            outT->Branch("GenSigAntiMuon_matchDSAMuonPropSt2Idx", &genSigAntiMuonMatchDSAMuonPropSt2Idx_);
+            outT->Branch("GenSigAntiMuon_minDrToDSAMuonPropSt3", &genSigAntiMuonMinDrToDSAMuonPropSt3_);
+            outT->Branch("GenSigAntiMuon_matchDSAMuonPropSt3Idx", &genSigAntiMuonMatchDSAMuonPropSt3Idx_);
+            outT->Branch("GenSigAntiMuon_minDrToDSAMuonPropSt4", &genSigAntiMuonMinDrToDSAMuonPropSt4_);
+            outT->Branch("GenSigAntiMuon_matchDSAMuonPropSt4Idx", &genSigAntiMuonMatchDSAMuonPropSt4Idx_);
+            outT->Branch("GenSigAntiMuon_minDrToDSAMuonOuterHit", &genSigAntiMuonMinDrToDSAMuonOuterHit_);
+            outT->Branch("GenSigAntiMuon_matchDSAMuonOuterHitIdx", &genSigAntiMuonMatchDSAMuonOuterHitIdx_);
 
             outT->Branch("genSigDimuon_pt",&genSigDimuonPt_);
             outT->Branch("genSigDimuon_eta",&genSigDimuonEta_);
@@ -723,6 +839,41 @@ void NtupleContainerV2::ClearTreeBranches() {
     genSigMuonMinDrToDSAMuon_ = 999.0;
     genSigMuonMatchDSAMuonIdx_ = -1;
 
+    genSigMuonPropSt1Valid_ = 0;
+    genSigMuonPropSt1Eta_ = -999;
+    genSigMuonPropSt1Phi_ = -999;
+    genSigMuonPropSt1MomEta_ = -999;
+    genSigMuonPropSt1MomPhi_ = -999;
+
+    genSigMuonPropSt2Valid_ = 0;
+    genSigMuonPropSt2Eta_ = -999;
+    genSigMuonPropSt2Phi_ = -999;
+    genSigMuonPropSt2MomEta_ = -999;
+    genSigMuonPropSt2MomPhi_ = -999;
+
+    genSigMuonPropSt3Valid_ = 0;
+    genSigMuonPropSt3Eta_ = -999;
+    genSigMuonPropSt3Phi_ = -999;
+    genSigMuonPropSt3MomEta_ = -999;
+    genSigMuonPropSt3MomPhi_ = -999;
+
+    genSigMuonPropSt4Valid_ = 0;
+    genSigMuonPropSt4Eta_ = -999;
+    genSigMuonPropSt4Phi_ = -999;
+    genSigMuonPropSt4MomEta_ = -999;
+    genSigMuonPropSt4MomPhi_ = -999;
+
+    genSigMuonMinDrToDSAMuonPropSt1_ = 999.0;
+    genSigMuonMatchDSAMuonPropSt1Idx_ = -1;
+    genSigMuonMinDrToDSAMuonPropSt2_ = 999.0;
+    genSigMuonMatchDSAMuonPropSt2Idx_ = -1;
+    genSigMuonMinDrToDSAMuonPropSt3_ = 999.0;
+    genSigMuonMatchDSAMuonPropSt3Idx_ = -1;
+    genSigMuonMinDrToDSAMuonPropSt4_ = 999.0;
+    genSigMuonMatchDSAMuonPropSt4Idx_ = -1;
+    genSigMuonMinDrToDSAMuonOuterHit_ = 999.0;
+    genSigMuonMatchDSAMuonOuterHitIdx_ = -1;
+
     // Gen Signal Anti-Muon
     genSigAntiMuonMotherID_ = 0;
     genSigAntiMuonStatus_ = 0;
@@ -756,6 +907,42 @@ void NtupleContainerV2::ClearTreeBranches() {
     genSigAntiMuonMatchRecoMuonIdx_ = -1;
     genSigAntiMuonMinDrToDSAMuon_ = 999.0;
     genSigAntiMuonMatchDSAMuonIdx_ = -1;
+
+    genSigAntiMuonPropSt1Valid_ = 0;
+    genSigAntiMuonPropSt1Eta_ = -999;
+    genSigAntiMuonPropSt1Phi_ = -999;
+    genSigAntiMuonPropSt1MomEta_ = -999;
+    genSigAntiMuonPropSt1MomPhi_ = -999;
+
+    genSigAntiMuonPropSt2Valid_ = 0;
+    genSigAntiMuonPropSt2Eta_ = -999;
+    genSigAntiMuonPropSt2Phi_ = -999;
+    genSigAntiMuonPropSt2MomEta_ = -999;
+    genSigAntiMuonPropSt2MomPhi_ = -999;
+
+    genSigAntiMuonPropSt3Valid_ = 0;
+    genSigAntiMuonPropSt3Eta_ = -999;
+    genSigAntiMuonPropSt3Phi_ = -999;
+    genSigAntiMuonPropSt3MomEta_ = -999;
+    genSigAntiMuonPropSt3MomPhi_ = -999;
+
+    genSigAntiMuonPropSt4Valid_ = 0;
+    genSigAntiMuonPropSt4Eta_ = -999;
+    genSigAntiMuonPropSt4Phi_ = -999;
+    genSigAntiMuonPropSt4MomEta_ = -999;
+    genSigAntiMuonPropSt4MomPhi_ = -999;
+
+    genSigAntiMuonMinDrToDSAMuonPropSt1_ = 999.0;
+    genSigAntiMuonMatchDSAMuonPropSt1Idx_ = -1;
+    genSigAntiMuonMinDrToDSAMuonPropSt2_ = 999.0;
+    genSigAntiMuonMatchDSAMuonPropSt2Idx_ = -1;
+    genSigAntiMuonMinDrToDSAMuonPropSt3_ = 999.0;
+    genSigAntiMuonMatchDSAMuonPropSt3Idx_ = -1;
+    genSigAntiMuonMinDrToDSAMuonPropSt4_ = 999.0;
+    genSigAntiMuonMatchDSAMuonPropSt4Idx_ = -1;
+    genSigAntiMuonMinDrToDSAMuonOuterHit_ = 999.0;
+    genSigAntiMuonMatchDSAMuonOuterHitIdx_ = -1;
+
 
     genSigDimuonPt_ = -999;
     genSigDimuonEta_ = -999;
@@ -1072,6 +1259,53 @@ void NtupleContainerV2::ClearTreeBranches() {
     recoDSAMuonTrkNumPlanes_.clear();
     recoDSAMuonTrkNumDTHits_.clear();
     recoDSAMuonIdx_.clear();
+
+
+    recoDSAMuonPropSt1Valid_.clear();
+    recoDSAMuonPropSt1Eta_.clear();
+    recoDSAMuonPropSt1Phi_.clear();
+    recoDSAMuonPropSt1MomEta_.clear();
+    recoDSAMuonPropSt1MomPhi_.clear();
+
+    recoDSAMuonPropSt2Valid_.clear();
+    recoDSAMuonPropSt2Eta_.clear();
+    recoDSAMuonPropSt2Phi_.clear();
+    recoDSAMuonPropSt2MomEta_.clear();
+    recoDSAMuonPropSt2MomPhi_.clear();
+
+    recoDSAMuonPropSt3Valid_.clear();
+    recoDSAMuonPropSt3Eta_.clear();
+    recoDSAMuonPropSt3Phi_.clear();
+    recoDSAMuonPropSt3MomEta_.clear();
+    recoDSAMuonPropSt3MomPhi_.clear();
+
+    recoDSAMuonPropSt4Valid_.clear();
+    recoDSAMuonPropSt4Eta_.clear();
+    recoDSAMuonPropSt4Phi_.clear();
+    recoDSAMuonPropSt4MomEta_.clear();
+    recoDSAMuonPropSt4MomPhi_.clear();
+
+    recoDSAMuonOuterHitValid_.clear();
+    recoDSAMuonOuterHitTrackExtraAvailable_.clear();
+    recoDSAMuonOuterHitRecHitsSize_.clear();
+    recoDSAMuonOuterHitNValidMuonHits_.clear();
+    recoDSAMuonOuterHitDetId_.clear();
+    recoDSAMuonOuterHitX_.clear();
+    recoDSAMuonOuterHitY_.clear();
+    recoDSAMuonOuterHitZ_.clear();
+    recoDSAMuonOuterHitR_.clear();
+    recoDSAMuonOuterHitEta_.clear();
+    recoDSAMuonOuterHitPhi_.clear();
+
+    recoDSAMuonMinDrToGenSigMuonOuterHit_.clear();
+    recoDSAMuonMatchGenSigMuonOuterHitIdx_.clear();
+    recoDSAMuonMatchGenSigMuonOuterHitPdgId_.clear();
+    recoDSAMuonMatchGenSigMuonOuterHitPropValid_.clear();
+    recoDSAMuonMatchGenSigMuonOuterHitPropEta_.clear();
+    recoDSAMuonMatchGenSigMuonOuterHitPropPhi_.clear();
+    recoDSAMuonMatchGenSigMuonOuterHitPropMomEta_.clear();
+    recoDSAMuonMatchGenSigMuonOuterHitPropMomPhi_.clear();
+
 
     // Photons
     nPhotons_ = 0;
