@@ -1,4 +1,5 @@
-# Inelastic Dark Matter with Electrons
+# Inelastic Dark Matter with Leptons (this README is out-of-date, needs to be modified for Run 3)
+
 This repository contains all the code I've developed for generating events, skimming AOD, and running analysis with [coffea](https://coffeateam.github.io/coffea/). Each subfolder has its own README (if it doesn't, it means I haven't gotten to it yet and you should bug me about it!).
 
 This is all designed to run in `CMSSW 10_6_26`, and ideally on the Fermilab LPC with the condor job queue. I've tried to avoid hard-coding any user-specific paths etc. into any of the code, but it's certainly not perfect. Please let me know if something is broken for you. Most things tha
