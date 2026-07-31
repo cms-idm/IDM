@@ -9,6 +9,7 @@ using std::map;
 using std::string;
 #include <iostream>
 
+#include "DataFormats/Math/interface/LorentzVector.h"
 #include <TTree.h>
 
 class NtupleContainerV2 {
@@ -87,6 +88,66 @@ public:
     vector<int> genPartFromHardProcessFinalState_;
     vector<int> genPartFromHardProcessBeforeFSR_;
     vector<int> genPartIsPromptFinalState_;
+
+    // All gen-lepton entries available in prunedGenParticles:
+    // 11 <= abs(pdgId) <= 16.
+    //
+    // This includes charged leptons and neutrinos. No kinematic, geometric,
+    // hard-process, status, or copy requirement is applied.
+    // genLeptonGenParticleIdx_ links each entry back to the authoritative
+    // GenParticle_* collection.
+    //
+    // Station-2 propagation status:
+    //   0 = not attempted because the lepton is neutral
+    //   1 = charged-lepton propagation attempted but failed
+    //   2 = propagation succeeded
+    //
+    // genLeptonPropSt2Idx_ is -1 unless status == 2; otherwise it indexes
+    // PropGenLeptonSt2_*.
+    int nGenLepton_;
+    vector<int> genLeptonGenParticleIdx_;
+    vector<int> genLeptonID_;
+    vector<int> genLeptonMotherID_;
+    vector<int> genLeptonFirstDifferentMotherID_;
+    vector<int> genLeptonStatus_;
+    vector<int> genLeptonCharge_;
+    vector<math::XYZTLorentzVector> genLeptonP4_;
+    vector<float> genLeptonVxy_;
+    vector<float> genLeptonVz_;
+    vector<float> genLeptonVx_;
+    vector<float> genLeptonVy_;
+    vector<int> genLeptonIsFirstCopy_;
+    vector<int> genLeptonIsLastCopy_;
+    vector<int> genLeptonIsLastCopyBeforeFSR_;
+    vector<int> genLeptonIsHardProcess_;
+    vector<int> genLeptonFromHardProcessFinalState_;
+    vector<int> genLeptonFromHardProcessBeforeFSR_;
+    vector<int> genLeptonIsPromptFinalState_;
+    vector<int> genLeptonIsSignal_;
+    vector<int> genLeptonPropSt2Status_;
+    vector<int> genLeptonPropSt2Idx_;
+
+    // Successfully propagated gen leptons at Station 2. The p4 is constructed
+    // from the propagated momentum and the source gen-lepton mass.
+    int nPropGenLeptonSt2_;
+    vector<int> propGenLeptonSt2GenLeptonIdx_;
+    vector<math::XYZTLorentzVector> propGenLeptonSt2P4_;
+    vector<float> propGenLeptonSt2PositionEta_;
+    vector<float> propGenLeptonSt2PositionPhi_;
+
+    // Signal-gen-lepton view: last-copy entries in GenLepton_* whose first
+    // different mother has abs(PDG ID) == 1000023. The propagated collection
+    // points both to this signal view and directly to the GenLepton entry.
+    int nGenSigLepton_;
+    vector<int> genSigLeptonGenLeptonIdx_;
+    vector<int> genSigLeptonPropSt2Idx_;
+
+    int nPropGenSigLeptonSt2_;
+    vector<int> propGenSigLeptonSt2GenSigLeptonIdx_;
+    vector<int> propGenSigLeptonSt2GenLeptonIdx_;
+    vector<math::XYZTLorentzVector> propGenSigLeptonSt2P4_;
+    vector<float> propGenSigLeptonSt2PositionEta_;
+    vector<float> propGenSigLeptonSt2PositionPhi_;
 
     // Gen Signal Muon from iDM signal only: status == 1 and motherID == 1000023
     int genSigMuonCharge_;
@@ -363,6 +424,45 @@ public:
     vector<int> recoMuonIsPFMuon_;
     vector<int> recoMuonIsGlobalMuon_;
     vector<int> recoMuonIsStandAloneMuon_;
+
+    // Complete PF-muon view of slimmedMuons, with no pT or acceptance cuts.
+    // pfMuonPatIdx_ is the index in the input slimmedMuons collection.
+    //
+    // Propagation-track type:
+    //   0 = no usable track
+    //   1 = globalTrack
+    //   2 = outerTrack / standAloneMuon
+    //   3 = innerTrack
+    //
+    // Station-2 status:
+    //   0 = no usable propagation track
+    //   1 = propagation attempted but failed
+    //   2 = propagation succeeded
+    int nPFMuon_;
+    vector<int> pfMuonPatIdx_;
+    vector<math::XYZTLorentzVector> pfMuonP4_;
+    vector<int> pfMuonCharge_;
+    vector<int> pfMuonIDcutBasedLoose_;
+    vector<int> pfMuonIDcutBasedMedium_;
+    vector<int> pfMuonIDcutBasedMediumPrompt_;
+    vector<int> pfMuonIDcutBasedTight_;
+    vector<int> pfMuonIsGlobalMuon_;
+    vector<int> pfMuonIsStandAloneMuon_;
+    vector<int> pfMuonPropagationTrackType_;
+    vector<int> pfMuonTrkNumValidMuonHits_;
+    vector<int> pfMuonTrkNumValidTrackerHits_;
+    vector<int> pfMuonTrkNumValidPixelHits_;
+    vector<int> pfMuonTrkNumValidStripHits_;
+    vector<int> pfMuonNumMatchedStations_;
+    vector<int> pfMuonPropSt2Status_;
+    vector<int> pfMuonPropSt2Idx_;
+
+    // Successfully propagated PF muons at Station 2.
+    int nPropPFMuonSt2_;
+    vector<int> propPFMuonSt2PFMuonIdx_;
+    vector<math::XYZTLorentzVector> propPFMuonSt2P4_;
+    vector<float> propPFMuonSt2PositionEta_;
+    vector<float> propPFMuonSt2PositionPhi_;
     
     // Normal Electrons
     int nElectronDefault_;
@@ -577,6 +677,7 @@ public:
     std::vector<int> recoDSAMuonTrkNumPlanes_;
     std::vector<int> recoDSAMuonTrkNumDTHits_;
     std::vector<int> recoDSAMuonIdx_;
+    std::vector<math::XYZTLorentzVector> recoDSAMuonP4_;
     
     // DSA reco tracks propagated to muon-station surfaces
     std::vector<int>   recoDSAMuonPropSt1Valid_;
@@ -590,6 +691,7 @@ public:
     std::vector<float> recoDSAMuonPropSt2Phi_;
     std::vector<float> recoDSAMuonPropSt2MomEta_;
     std::vector<float> recoDSAMuonPropSt2MomPhi_;
+    std::vector<int>   recoDSAMuonPropSt2Idx_;
 
     std::vector<int>   recoDSAMuonPropSt3Valid_;
     std::vector<float> recoDSAMuonPropSt3Eta_;
@@ -602,6 +704,13 @@ public:
     std::vector<float> recoDSAMuonPropSt4Phi_;
     std::vector<float> recoDSAMuonPropSt4MomEta_;
     std::vector<float> recoDSAMuonPropSt4MomPhi_;
+
+    // Successfully propagated DSA muons at Station 2.
+    int nPropDSAMuonSt2_;
+    std::vector<int> propDSAMuonSt2DSAMuonIdx_;
+    std::vector<math::XYZTLorentzVector> propDSAMuonSt2P4_;
+    std::vector<float> propDSAMuonSt2PositionEta_;
+    std::vector<float> propDSAMuonSt2PositionPhi_;
 
     // DSA outermost valid muon-hit diagnostics
     std::vector<int> recoDSAMuonOuterHitValid_;

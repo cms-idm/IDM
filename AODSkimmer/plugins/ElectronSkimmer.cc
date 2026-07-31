@@ -12,11 +12,12 @@
 //         Created:  Tue, 21 Sep 2021 17:00:38 GMT
 //
 // Muon modifications by:  Alaa Adel Abdelhamid
-//         Last Modified:  Fri, 17 Jul 2026 (station-3/4 propagation)
+//         Last Modified:  Thu, 30 Jul 2026 (indexed Station-2 propagated collections)
 //
 
 #include <algorithm>
 #include <cmath> 
+#include <map>
 #include <memory>
 #include <limits>
 #include <random>
@@ -56,6 +57,7 @@
 #include "DataFormats/PatCandidates/interface/Electron.h"
 #include "DataFormats/PatCandidates/interface/MET.h"
 #include "DataFormats/PatCandidates/interface/Jet.h"
+#include "DataFormats/PatCandidates/interface/Muon.h"
 #include "DataFormats/PatCandidates/interface/Photon.h"
 #include "DataFormats/PatCandidates/interface/Conversion.h"
 #include "DataFormats/PatCandidates/interface/PackedCandidate.h"
@@ -197,7 +199,8 @@ class ElectronSkimmer : public edm::one::EDAnalyzer<edm::one::WatchRuns, edm::on
       // Run3 additions
       const edm::ESGetToken<TransientTrackBuilder, TransientTrackRecord> ttkToken_;
 
-      // Real CMSSW propagation for signal gen muons and DSA tracks.
+      // Real CMSSW propagation for charged gen leptons, PF muons, signal
+      // gen leptons, and DSA tracks.
       // Stations 1 and 2 use the standard PropagateToMuon helper. Stations 3
       // and 4 use the same magnetic field, stepping-helix propagator, and
       // MuonDetLayerGeometry through the generic surface helper below.
@@ -303,6 +306,20 @@ bool isFinalSignalMuonFromChi2(const reco::GenParticle& p, int chi2PdgId = 10000
    return std::abs(mom->pdgId()) == std::abs(chi2PdgId);
 }
 
+bool isGenLepton(const reco::GenParticle& p) {
+   const int absID = std::abs(p.pdgId());
+   return absID >= 11 && absID <= 16;
+}
+
+constexpr int kPropagationNotAttempted = 0;
+constexpr int kPropagationFailed = 1;
+constexpr int kPropagationSucceeded = 2;
+
+constexpr int kPFMuonNoTrack = 0;
+constexpr int kPFMuonGlobalTrack = 1;
+constexpr int kPFMuonOuterTrack = 2;
+constexpr int kPFMuonInnerTrack = 3;
+
 struct PropagatedMuonAtStation {
    bool valid = false;
 
@@ -316,6 +333,12 @@ struct PropagatedMuonAtStation {
    // than the position eta/phi.
    float momEta = -999.0;
    float momPhi = -999.0;
+
+   // Cartesian momentum components are retained so the propagated momentum
+   // four-vector can be written without reconstructing it from eta/phi.
+   float px = 0.0;
+   float py = 0.0;
+   float pz = 0.0;
 };
 
 PropagatedMuonAtStation invalidPropagatedMuonAtStation() {
@@ -331,25 +354,55 @@ PropagatedMuonAtStation tsosToPropagatedMuonAtStation(const TrajectoryStateOnSur
    out.phi = tsos.globalPosition().phi();
    out.momEta = tsos.globalMomentum().eta();
    out.momPhi = tsos.globalMomentum().phi();
+   out.px = tsos.globalMomentum().x();
+   out.py = tsos.globalMomentum().y();
+   out.pz = tsos.globalMomentum().z();
    return out;
 }
 
-PropagatedMuonAtStation propagateGenMuonToStation(
-   const reco::GenParticle& genMuon,
+math::XYZTLorentzVector propagatedMomentumP4(
+   const PropagatedMuonAtStation& propagated,
+   double sourceMass
+) {
+   if (!propagated.valid) return math::XYZTLorentzVector(0., 0., 0., 0.);
+
+   const double mass = std::max(0.0, sourceMass);
+   const double momentum2 =
+      propagated.px * propagated.px +
+      propagated.py * propagated.py +
+      propagated.pz * propagated.pz;
+   const double energy = std::sqrt(momentum2 + mass * mass);
+   return math::XYZTLorentzVector(
+      propagated.px,
+      propagated.py,
+      propagated.pz,
+      energy
+   );
+}
+
+PropagatedMuonAtStation propagateGenChargedParticleToStation(
+   const reco::GenParticle& genParticle,
    const MagneticField* magneticField,
    const PropagateToMuon& propagator
 ) {
    if (!magneticField) return invalidPropagatedMuonAtStation();
-   if (std::abs(genMuon.pdgId()) != 13) return invalidPropagatedMuonAtStation();
-   if (genMuon.charge() == 0) return invalidPropagatedMuonAtStation();
+   if (genParticle.charge() == 0) return invalidPropagatedMuonAtStation();
 
-   const GlobalPoint startPos(genMuon.vx(), genMuon.vy(), genMuon.vz());
-   const GlobalVector startMom(genMuon.px(), genMuon.py(), genMuon.pz());
+   const GlobalPoint startPos(
+      genParticle.vx(),
+      genParticle.vy(),
+      genParticle.vz()
+   );
+   const GlobalVector startMom(
+      genParticle.px(),
+      genParticle.py(),
+      genParticle.pz()
+   );
 
    const FreeTrajectoryState startState(
       startPos,
       startMom,
-      TrackCharge(genMuon.charge()),
+      TrackCharge(genParticle.charge()),
       magneticField
    );
 
@@ -361,6 +414,33 @@ PropagatedMuonAtStation propagateRecoTrackToStation(
    const PropagateToMuon& propagator
 ) {
    return tsosToPropagatedMuonAtStation(propagator.extrapolate(track));
+}
+
+const reco::Track* selectPFMuonPropagationTrack(
+   const pat::Muon& muon,
+   int& trackType
+) {
+   trackType = kPFMuonNoTrack;
+
+   const auto globalTrack = muon.globalTrack();
+   if (globalTrack.isNonnull() && globalTrack.isAvailable()) {
+      trackType = kPFMuonGlobalTrack;
+      return globalTrack.get();
+   }
+
+   const auto outerTrack = muon.outerTrack();
+   if (outerTrack.isNonnull() && outerTrack.isAvailable()) {
+      trackType = kPFMuonOuterTrack;
+      return outerTrack.get();
+   }
+
+   const auto innerTrack = muon.innerTrack();
+   if (innerTrack.isNonnull() && innerTrack.isAvailable()) {
+      trackType = kPFMuonInnerTrack;
+      return innerTrack.get();
+   }
+
+   return nullptr;
 }
 
 // Propagate to the physical station-3 or station-4 surface. CMSSW's
@@ -960,7 +1040,88 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    std::vector<math::XYZTLorentzVector> pf_muon_p4s;
    std::vector<int> pf_muon_charges;
 
-   for (const auto & mu : *pfRecoMuHandle_) {
+   for (size_t iMuon = 0; iMuon < pfRecoMuHandle_->size(); ++iMuon) {
+      const auto& mu = pfRecoMuHandle_->at(iMuon);
+
+      // Dedicated PF-muon collection: every slimmedMuon with isPFMuon(),
+      // without the legacy pT > 3 GeV requirement used by Muon_* below.
+      if (mu.isPFMuon()) {
+         const int pfMuonIdx = nt.nPFMuon_;
+         nt.nPFMuon_++;
+
+         int propagationTrackType = kPFMuonNoTrack;
+         const reco::Track* propagationTrack =
+            selectPFMuonPropagationTrack(mu, propagationTrackType);
+
+         nt.pfMuonPatIdx_.push_back(static_cast<int>(iMuon));
+         nt.pfMuonP4_.push_back(mu.p4());
+         nt.pfMuonCharge_.push_back(mu.charge());
+         nt.pfMuonIDcutBasedLoose_.push_back(
+            mu.passed(reco::Muon::CutBasedIdLoose)
+         );
+         nt.pfMuonIDcutBasedMedium_.push_back(
+            mu.passed(reco::Muon::CutBasedIdMedium)
+         );
+         nt.pfMuonIDcutBasedMediumPrompt_.push_back(
+            mu.passed(reco::Muon::CutBasedIdMediumPrompt)
+         );
+         nt.pfMuonIDcutBasedTight_.push_back(
+            mu.passed(reco::Muon::CutBasedIdTight)
+         );
+         nt.pfMuonIsGlobalMuon_.push_back(mu.isGlobalMuon());
+         nt.pfMuonIsStandAloneMuon_.push_back(mu.isStandAloneMuon());
+         nt.pfMuonPropagationTrackType_.push_back(propagationTrackType);
+         nt.pfMuonNumMatchedStations_.push_back(mu.numberOfMatchedStations());
+
+         if (propagationTrack) {
+            const auto& hitPattern = propagationTrack->hitPattern();
+            nt.pfMuonTrkNumValidMuonHits_.push_back(
+               hitPattern.numberOfValidMuonHits()
+            );
+            nt.pfMuonTrkNumValidTrackerHits_.push_back(
+               hitPattern.numberOfValidTrackerHits()
+            );
+            nt.pfMuonTrkNumValidPixelHits_.push_back(
+               hitPattern.numberOfValidPixelHits()
+            );
+            nt.pfMuonTrkNumValidStripHits_.push_back(
+               hitPattern.numberOfValidStripHits()
+            );
+
+            const auto propSt2 = propagateRecoTrackToStation(
+               *propagationTrack,
+               genMuonPropagatorSt2_
+            );
+            if (propSt2.valid) {
+               const int propPFMuonIdx = nt.nPropPFMuonSt2_;
+               nt.nPropPFMuonSt2_++;
+
+               nt.pfMuonPropSt2Status_.push_back(kPropagationSucceeded);
+               nt.pfMuonPropSt2Idx_.push_back(propPFMuonIdx);
+
+               nt.propPFMuonSt2PFMuonIdx_.push_back(pfMuonIdx);
+               nt.propPFMuonSt2P4_.push_back(
+                  propagatedMomentumP4(propSt2, mu.mass())
+               );
+               nt.propPFMuonSt2PositionEta_.push_back(propSt2.eta);
+               nt.propPFMuonSt2PositionPhi_.push_back(propSt2.phi);
+            }
+            else {
+               nt.pfMuonPropSt2Status_.push_back(kPropagationFailed);
+               nt.pfMuonPropSt2Idx_.push_back(-1);
+            }
+         }
+         else {
+            nt.pfMuonTrkNumValidMuonHits_.push_back(-1);
+            nt.pfMuonTrkNumValidTrackerHits_.push_back(-1);
+            nt.pfMuonTrkNumValidPixelHits_.push_back(-1);
+            nt.pfMuonTrkNumValidStripHits_.push_back(-1);
+            nt.pfMuonPropSt2Status_.push_back(kPropagationNotAttempted);
+            nt.pfMuonPropSt2Idx_.push_back(-1);
+         }
+      }
+
+      // Legacy Muon_* collection retained unchanged for existing analyses.
       if (mu.pt() < 3) continue;
 
       pf_muon_p4s.push_back(mu.p4());
@@ -1319,6 +1480,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    for (size_t iDSA = 0; iDSA < dsaMuonHandle_->size(); ++iDSA) {
       const auto& track = dsaMuonHandle_->at(iDSA);
       dsa_muonTracks.push_back(track);
+      const int dsaMuonIdx = nt.nDSAMuon_;
       nt.nDSAMuon_++;
 
       // Construct TLorentzVector from track (muon mass assumed)
@@ -1329,6 +1491,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
 
       dsa_muon_p4s.push_back(p4);
       dsa_muon_charges.push_back(track.charge());
+      nt.recoDSAMuonP4_.push_back(p4);
 
       const auto dsaPropSt1 = propagateRecoTrackToStation(track, genMuonPropagatorSt1_);
       const auto dsaPropSt2 = propagateRecoTrackToStation(track, genMuonPropagatorSt2_);
@@ -1343,7 +1506,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       dsa_muon_prop_st3.push_back(dsaPropSt3);
       dsa_muon_prop_st4.push_back(dsaPropSt4);
 
-      // These output branches need to be added to NtupleContainerV2.
+      // Keep the legacy aligned propagation diagnostics for every DSA track.
       nt.recoDSAMuonPropSt1Valid_.push_back(dsaPropSt1.valid);
       nt.recoDSAMuonPropSt1Eta_.push_back(dsaPropSt1.eta);
       nt.recoDSAMuonPropSt1Phi_.push_back(dsaPropSt1.phi);
@@ -1355,6 +1518,21 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       nt.recoDSAMuonPropSt2Phi_.push_back(dsaPropSt2.phi);
       nt.recoDSAMuonPropSt2MomEta_.push_back(dsaPropSt2.momEta);
       nt.recoDSAMuonPropSt2MomPhi_.push_back(dsaPropSt2.momPhi);
+      if (dsaPropSt2.valid) {
+         const int propDSAMuonIdx = nt.nPropDSAMuonSt2_;
+         nt.nPropDSAMuonSt2_++;
+
+         nt.recoDSAMuonPropSt2Idx_.push_back(propDSAMuonIdx);
+         nt.propDSAMuonSt2DSAMuonIdx_.push_back(dsaMuonIdx);
+         nt.propDSAMuonSt2P4_.push_back(
+            propagatedMomentumP4(dsaPropSt2, mass)
+         );
+         nt.propDSAMuonSt2PositionEta_.push_back(dsaPropSt2.eta);
+         nt.propDSAMuonSt2PositionPhi_.push_back(dsaPropSt2.phi);
+      }
+      else {
+         nt.recoDSAMuonPropSt2Idx_.push_back(-1);
+      }
 
       nt.recoDSAMuonPropSt3Valid_.push_back(dsaPropSt3.valid);
       nt.recoDSAMuonPropSt3Eta_.push_back(dsaPropSt3.eta);
@@ -1851,9 +2029,16 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          nt.genJetMETdPhi_.push_back(reco::deltaPhi(jet.phi(),nt.genLeadMETPhi_));
       }
 
-      // Handling gen particles
-      // One complete GenParticle collection + exactly-one GenSigMuon/GenSigAntiMuon pair.
-      // GenSigMuon/GenSigAntiMuon are status-1 last-copy muons whose first non-muon ancestor is chi2.
+      // Handling gen particles.
+      //
+      // GenParticle_* stores the complete prunedGenParticles collection.
+      // GenLepton_* stores every electron, neutrino, muon, and tau entry
+      // (11 <= abs(PDG ID) <= 16), without status, copy, or acceptance cuts.
+      // Charged leptons are propagated once to Station 2; neutrinos remain in
+      // the source collection with propagation status 0.
+      //
+      // GenSigMuon/GenSigAntiMuon remain the backward-compatible scalar signal
+      // objects: status-1, last-copy muons whose first non-muon ancestor is chi2.
       math::XYZTLorentzVector gen_sig_muon_p4;
       math::XYZTLorentzVector gen_sig_antimuon_p4;
       PropagatedMuonAtStation gen_sig_muon_prop_st1;
@@ -1867,8 +2052,11 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       bool foundGenSigMuon = false;
       bool foundGenSigAntiMuon = false;
       std::vector<const reco::GenParticle*> sigFinalMuons;
+      std::map<const reco::GenParticle*, PropagatedMuonAtStation>
+         genLeptonPropSt2ByParticle;
 
-      for (const auto & genParticle : *genParticleHandle_) {
+      for (size_t genParticleIdx = 0; genParticleIdx < genParticleHandle_->size(); ++genParticleIdx) {
+         const auto& genParticle = genParticleHandle_->at(genParticleIdx);
          const int motherID = immediateMotherID(genParticle);
          const int firstDiffMotherID = firstDifferentMotherID(genParticle);
 
@@ -1898,6 +2086,110 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          nt.genPartFromHardProcessFinalState_.push_back(genParticle.fromHardProcessFinalState());
          nt.genPartFromHardProcessBeforeFSR_.push_back(genParticle.fromHardProcessBeforeFSR());
          nt.genPartIsPromptFinalState_.push_back(genParticle.isPromptFinalState());
+
+         if (isGenLepton(genParticle)) {
+            const int genLeptonIdx = nt.nGenLepton_;
+            nt.nGenLepton_++;
+            const bool isSignalLepton =
+               genParticle.isLastCopy() &&
+               std::abs(firstDiffMotherID) == 1000023;
+
+            nt.genLeptonGenParticleIdx_.push_back(
+               static_cast<int>(genParticleIdx)
+            );
+            nt.genLeptonID_.push_back(genParticle.pdgId());
+            nt.genLeptonMotherID_.push_back(motherID);
+            nt.genLeptonFirstDifferentMotherID_.push_back(firstDiffMotherID);
+            nt.genLeptonStatus_.push_back(genParticle.status());
+            nt.genLeptonCharge_.push_back(genParticle.charge());
+            nt.genLeptonP4_.push_back(genParticle.p4());
+            nt.genLeptonVxy_.push_back(genParticle.vertex().rho());
+            nt.genLeptonVx_.push_back(genParticle.vx());
+            nt.genLeptonVy_.push_back(genParticle.vy());
+            nt.genLeptonVz_.push_back(genParticle.vz());
+            nt.genLeptonIsFirstCopy_.push_back(
+               genParticle.statusFlags().isFirstCopy()
+            );
+            nt.genLeptonIsLastCopy_.push_back(genParticle.isLastCopy());
+            nt.genLeptonIsLastCopyBeforeFSR_.push_back(
+               genParticle.isLastCopyBeforeFSR()
+            );
+            nt.genLeptonIsHardProcess_.push_back(
+               genParticle.isHardProcess()
+            );
+            nt.genLeptonFromHardProcessFinalState_.push_back(
+               genParticle.fromHardProcessFinalState()
+            );
+            nt.genLeptonFromHardProcessBeforeFSR_.push_back(
+               genParticle.fromHardProcessBeforeFSR()
+            );
+            nt.genLeptonIsPromptFinalState_.push_back(
+               genParticle.isPromptFinalState()
+            );
+            nt.genLeptonIsSignal_.push_back(isSignalLepton);
+
+            PropagatedMuonAtStation propSt2;
+            int propagationStatus = kPropagationNotAttempted;
+            int propGenLeptonIdx = -1;
+
+            if (genParticle.charge() != 0) {
+               propSt2 = propagateGenChargedParticleToStation(
+                  genParticle,
+                  magneticField,
+                  genMuonPropagatorSt2_
+               );
+               genLeptonPropSt2ByParticle.emplace(&genParticle, propSt2);
+
+               if (propSt2.valid) {
+                  propagationStatus = kPropagationSucceeded;
+                  propGenLeptonIdx = nt.nPropGenLeptonSt2_;
+                  nt.nPropGenLeptonSt2_++;
+
+                  nt.propGenLeptonSt2GenLeptonIdx_.push_back(genLeptonIdx);
+                  nt.propGenLeptonSt2P4_.push_back(
+                     propagatedMomentumP4(propSt2, genParticle.mass())
+                  );
+                  nt.propGenLeptonSt2PositionEta_.push_back(propSt2.eta);
+                  nt.propGenLeptonSt2PositionPhi_.push_back(propSt2.phi);
+               }
+               else {
+                  propagationStatus = kPropagationFailed;
+               }
+            }
+
+            nt.genLeptonPropSt2Status_.push_back(propagationStatus);
+            nt.genLeptonPropSt2Idx_.push_back(propGenLeptonIdx);
+
+            if (isSignal && isSignalLepton) {
+               const int genSigLeptonIdx = nt.nGenSigLepton_;
+               nt.nGenSigLepton_++;
+               nt.genSigLeptonGenLeptonIdx_.push_back(genLeptonIdx);
+
+               if (propSt2.valid) {
+                  const int propGenSigLeptonIdx =
+                     nt.nPropGenSigLeptonSt2_;
+                  nt.nPropGenSigLeptonSt2_++;
+
+                  nt.genSigLeptonPropSt2Idx_.push_back(
+                     propGenSigLeptonIdx
+                  );
+                  nt.propGenSigLeptonSt2GenSigLeptonIdx_.push_back(
+                     genSigLeptonIdx
+                  );
+                  nt.propGenSigLeptonSt2GenLeptonIdx_.push_back(
+                     genLeptonIdx
+                  );
+                  nt.propGenSigLeptonSt2P4_.push_back(
+                     propagatedMomentumP4(propSt2, genParticle.mass())
+                  );
+                  nt.propGenSigLeptonSt2PositionEta_.push_back(propSt2.eta);
+                  nt.propGenSigLeptonSt2PositionPhi_.push_back(propSt2.phi);
+               }
+               else {
+                  nt.genSigLeptonPropSt2Idx_.push_back(-1);
+               }
+            }
+         }
 
          if (isSignal && isFinalSignalMuonFromChi2(genParticle, 1000023)) {
             sigFinalMuons.push_back(&genParticle);
@@ -1941,8 +2233,16 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
                nt.genSigMuonFromHardProcessBeforeFSR_ = p->fromHardProcessBeforeFSR();
                nt.genSigMuonIsPromptFinalState_ = p->isPromptFinalState();
 
-               gen_sig_muon_prop_st1 = propagateGenMuonToStation(*p, magneticField, genMuonPropagatorSt1_);
-               gen_sig_muon_prop_st2 = propagateGenMuonToStation(*p, magneticField, genMuonPropagatorSt2_);
+               gen_sig_muon_prop_st1 = propagateGenChargedParticleToStation(
+                  *p,
+                  magneticField,
+                  genMuonPropagatorSt1_
+               );
+               const auto propSt2It = genLeptonPropSt2ByParticle.find(p);
+               gen_sig_muon_prop_st2 =
+                  propSt2It != genLeptonPropSt2ByParticle.end()
+                     ? propSt2It->second
+                     : invalidPropagatedMuonAtStation();
                gen_sig_muon_prop_st3 = propagateGenMuonToOuterStation(
                   *p, magneticField, 3, muonGeometry, stationPropagatorAlong
                );
@@ -2005,8 +2305,17 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
                nt.genSigAntiMuonFromHardProcessBeforeFSR_ = p->fromHardProcessBeforeFSR();
                nt.genSigAntiMuonIsPromptFinalState_ = p->isPromptFinalState();
 
-               gen_sig_antimuon_prop_st1 = propagateGenMuonToStation(*p, magneticField, genMuonPropagatorSt1_);
-               gen_sig_antimuon_prop_st2 = propagateGenMuonToStation(*p, magneticField, genMuonPropagatorSt2_);
+               gen_sig_antimuon_prop_st1 =
+                  propagateGenChargedParticleToStation(
+                     *p,
+                     magneticField,
+                     genMuonPropagatorSt1_
+                  );
+               const auto propSt2It = genLeptonPropSt2ByParticle.find(p);
+               gen_sig_antimuon_prop_st2 =
+                  propSt2It != genLeptonPropSt2ByParticle.end()
+                     ? propSt2It->second
+                     : invalidPropagatedMuonAtStation();
                gen_sig_antimuon_prop_st3 = propagateGenMuonToOuterStation(
                   *p, magneticField, 3, muonGeometry, stationPropagatorAlong
                );

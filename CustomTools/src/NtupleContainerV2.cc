@@ -36,6 +36,32 @@ void NtupleContainerV2::CreateTreeBranches() {
     outT->Branch("Muon_isGlobalMuon",&recoMuonIsGlobalMuon_);
     outT->Branch("Muon_isStandAloneMuon",&recoMuonIsStandAloneMuon_);
 
+    // All PF muons and the successful Station-2 propagated PF-muon view.
+    outT->Branch("nPFMuon",&nPFMuon_);
+    outT->Branch("PFMuon_patMuonIdx",&pfMuonPatIdx_);
+    outT->Branch("PFMuon_p4",&pfMuonP4_);
+    outT->Branch("PFMuon_charge",&pfMuonCharge_);
+    outT->Branch("PFMuon_IDcutLoose",&pfMuonIDcutBasedLoose_);
+    outT->Branch("PFMuon_IDcutMedium",&pfMuonIDcutBasedMedium_);
+    outT->Branch("PFMuon_IDcutMediumPrompt",&pfMuonIDcutBasedMediumPrompt_);
+    outT->Branch("PFMuon_IDcutTight",&pfMuonIDcutBasedTight_);
+    outT->Branch("PFMuon_isGlobalMuon",&pfMuonIsGlobalMuon_);
+    outT->Branch("PFMuon_isStandAloneMuon",&pfMuonIsStandAloneMuon_);
+    outT->Branch("PFMuon_propagationTrackType",&pfMuonPropagationTrackType_);
+    outT->Branch("PFMuon_trkNumValidMuonHits",&pfMuonTrkNumValidMuonHits_);
+    outT->Branch("PFMuon_trkNumValidTrackerHits",&pfMuonTrkNumValidTrackerHits_);
+    outT->Branch("PFMuon_trkNumValidPixelHits",&pfMuonTrkNumValidPixelHits_);
+    outT->Branch("PFMuon_trkNumValidStripHits",&pfMuonTrkNumValidStripHits_);
+    outT->Branch("PFMuon_numMatchedStations",&pfMuonNumMatchedStations_);
+    outT->Branch("PFMuon_propSt2Status",&pfMuonPropSt2Status_);
+    outT->Branch("PFMuon_propSt2Idx",&pfMuonPropSt2Idx_);
+
+    outT->Branch("nPropPFMuonSt2",&nPropPFMuonSt2_);
+    outT->Branch("PropPFMuonSt2_pfMuonIdx",&propPFMuonSt2PFMuonIdx_);
+    outT->Branch("PropPFMuonSt2_p4",&propPFMuonSt2P4_);
+    outT->Branch("PropPFMuonSt2_positionEta",&propPFMuonSt2PositionEta_);
+    outT->Branch("PropPFMuonSt2_positionPhi",&propPFMuonSt2PositionPhi_);
+
     // Normal Electrons
     outT->Branch("nElectron",&nElectronDefault_);
     outT->Branch("Electron_pt",&recoElectronPt_);
@@ -249,6 +275,7 @@ void NtupleContainerV2::CreateTreeBranches() {
     outT->Branch("recoDSAMuonTrkNumPlanes", &recoDSAMuonTrkNumPlanes_);
     outT->Branch("recoDSAMuonTrkNumDTHits", &recoDSAMuonTrkNumDTHits_);
     outT->Branch("recoDSAMuonIdx", &recoDSAMuonIdx_);
+    outT->Branch("recoDSAMuonP4", &recoDSAMuonP4_);
 
     outT->Branch("recoDSAMuonPropSt1Valid", &recoDSAMuonPropSt1Valid_);
     outT->Branch("recoDSAMuonPropSt1Eta", &recoDSAMuonPropSt1Eta_);
@@ -261,6 +288,7 @@ void NtupleContainerV2::CreateTreeBranches() {
     outT->Branch("recoDSAMuonPropSt2Phi", &recoDSAMuonPropSt2Phi_);
     outT->Branch("recoDSAMuonPropSt2MomEta", &recoDSAMuonPropSt2MomEta_);
     outT->Branch("recoDSAMuonPropSt2MomPhi", &recoDSAMuonPropSt2MomPhi_);
+    outT->Branch("recoDSAMuonPropSt2Idx", &recoDSAMuonPropSt2Idx_);
 
     outT->Branch("recoDSAMuonPropSt3Valid", &recoDSAMuonPropSt3Valid_);
     outT->Branch("recoDSAMuonPropSt3Eta", &recoDSAMuonPropSt3Eta_);
@@ -273,6 +301,12 @@ void NtupleContainerV2::CreateTreeBranches() {
     outT->Branch("recoDSAMuonPropSt4Phi", &recoDSAMuonPropSt4Phi_);
     outT->Branch("recoDSAMuonPropSt4MomEta", &recoDSAMuonPropSt4MomEta_);
     outT->Branch("recoDSAMuonPropSt4MomPhi", &recoDSAMuonPropSt4MomPhi_);
+
+    outT->Branch("nPropDSAMuonSt2", &nPropDSAMuonSt2_);
+    outT->Branch("PropDSAMuonSt2_dsaMuonIdx", &propDSAMuonSt2DSAMuonIdx_);
+    outT->Branch("PropDSAMuonSt2_p4", &propDSAMuonSt2P4_);
+    outT->Branch("PropDSAMuonSt2_positionEta", &propDSAMuonSt2PositionEta_);
+    outT->Branch("PropDSAMuonSt2_positionPhi", &propDSAMuonSt2PositionPhi_);
 
     outT->Branch("recoDSAMuonOuterHitValid", &recoDSAMuonOuterHitValid_);
     outT->Branch("recoDSAMuonOuterHitTrackExtraAvailable", &recoDSAMuonOuterHitTrackExtraAvailable_);
@@ -509,7 +543,8 @@ void NtupleContainerV2::CreateTreeBranches() {
     }
 
     if (!isData_) {
-        // Complete gen-particle collection. Use this instead of separate GenMuon/GenAntiMuon collections.
+        // Authoritative complete gen-particle collection. GenLepton_* below is
+        // the all-lepton view linked back by genParticleIdx.
         outT->Branch("nGenParticle",&nGenParticle_);
         outT->Branch("GenParticle_ID",&genPartID_);
         outT->Branch("GenParticle_motherID",&genPartMotherID_);
@@ -536,7 +571,60 @@ void NtupleContainerV2::CreateTreeBranches() {
         outT->Branch("GenParticle_fromHardProcessBeforeFSR",&genPartFromHardProcessBeforeFSR_);
         outT->Branch("GenParticle_isPromptFinalState",&genPartIsPromptFinalState_);
 
+        // All gen-lepton entries, including charged leptons and neutrinos.
+        outT->Branch("nGenLepton",&nGenLepton_);
+        outT->Branch("GenLepton_genParticleIdx",&genLeptonGenParticleIdx_);
+        outT->Branch("GenLepton_ID",&genLeptonID_);
+        outT->Branch("GenLepton_motherID",&genLeptonMotherID_);
+        outT->Branch("GenLepton_firstDifferentMotherID",&genLeptonFirstDifferentMotherID_);
+        outT->Branch("GenLepton_status",&genLeptonStatus_);
+        outT->Branch("GenLepton_charge",&genLeptonCharge_);
+        outT->Branch("GenLepton_p4",&genLeptonP4_);
+        outT->Branch("GenLepton_vxy",&genLeptonVxy_);
+        outT->Branch("GenLepton_vx",&genLeptonVx_);
+        outT->Branch("GenLepton_vy",&genLeptonVy_);
+        outT->Branch("GenLepton_vz",&genLeptonVz_);
+        outT->Branch("GenLepton_isFirstCopy",&genLeptonIsFirstCopy_);
+        outT->Branch("GenLepton_isLastCopy",&genLeptonIsLastCopy_);
+        outT->Branch("GenLepton_isLastCopyBeforeFSR",&genLeptonIsLastCopyBeforeFSR_);
+        outT->Branch("GenLepton_isHardProcess",&genLeptonIsHardProcess_);
+        outT->Branch("GenLepton_fromHardProcessFinalState",&genLeptonFromHardProcessFinalState_);
+        outT->Branch("GenLepton_fromHardProcessBeforeFSR",&genLeptonFromHardProcessBeforeFSR_);
+        outT->Branch("GenLepton_isPromptFinalState",&genLeptonIsPromptFinalState_);
+        outT->Branch("GenLepton_isSignal",&genLeptonIsSignal_);
+        outT->Branch("GenLepton_propSt2Status",&genLeptonPropSt2Status_);
+        outT->Branch("GenLepton_propSt2Idx",&genLeptonPropSt2Idx_);
+
+        outT->Branch("nPropGenLeptonSt2",&nPropGenLeptonSt2_);
+        outT->Branch("PropGenLeptonSt2_genLeptonIdx",&propGenLeptonSt2GenLeptonIdx_);
+        outT->Branch("PropGenLeptonSt2_p4",&propGenLeptonSt2P4_);
+        outT->Branch("PropGenLeptonSt2_positionEta",&propGenLeptonSt2PositionEta_);
+        outT->Branch("PropGenLeptonSt2_positionPhi",&propGenLeptonSt2PositionPhi_);
+
         if (isSignal_) {
+            outT->Branch("nGenSigLepton",&nGenSigLepton_);
+            outT->Branch("GenSigLepton_genLeptonIdx",&genSigLeptonGenLeptonIdx_);
+            outT->Branch("GenSigLepton_propSt2Idx",&genSigLeptonPropSt2Idx_);
+
+            outT->Branch("nPropGenSigLeptonSt2",&nPropGenSigLeptonSt2_);
+            outT->Branch(
+                "PropGenSigLeptonSt2_genSigLeptonIdx",
+                &propGenSigLeptonSt2GenSigLeptonIdx_
+            );
+            outT->Branch(
+                "PropGenSigLeptonSt2_genLeptonIdx",
+                &propGenSigLeptonSt2GenLeptonIdx_
+            );
+            outT->Branch("PropGenSigLeptonSt2_p4",&propGenSigLeptonSt2P4_);
+            outT->Branch(
+                "PropGenSigLeptonSt2_positionEta",
+                &propGenSigLeptonSt2PositionEta_
+            );
+            outT->Branch(
+                "PropGenSigLeptonSt2_positionPhi",
+                &propGenSigLeptonSt2PositionPhi_
+            );
+
             outT->Branch("GenEle_charge",&genEleCharge_);
             outT->Branch("GenEle_motherID",&genEleMotherID_);
             outT->Branch("GenEle_pt",&genElePt_);
@@ -801,6 +889,46 @@ void NtupleContainerV2::ClearTreeBranches() {
     genPartFromHardProcessBeforeFSR_.clear();
     genPartIsPromptFinalState_.clear();
 
+    nGenLepton_ = 0;
+    genLeptonGenParticleIdx_.clear();
+    genLeptonID_.clear();
+    genLeptonMotherID_.clear();
+    genLeptonFirstDifferentMotherID_.clear();
+    genLeptonStatus_.clear();
+    genLeptonCharge_.clear();
+    genLeptonP4_.clear();
+    genLeptonVxy_.clear();
+    genLeptonVx_.clear();
+    genLeptonVy_.clear();
+    genLeptonVz_.clear();
+    genLeptonIsFirstCopy_.clear();
+    genLeptonIsLastCopy_.clear();
+    genLeptonIsLastCopyBeforeFSR_.clear();
+    genLeptonIsHardProcess_.clear();
+    genLeptonFromHardProcessFinalState_.clear();
+    genLeptonFromHardProcessBeforeFSR_.clear();
+    genLeptonIsPromptFinalState_.clear();
+    genLeptonIsSignal_.clear();
+    genLeptonPropSt2Status_.clear();
+    genLeptonPropSt2Idx_.clear();
+
+    nPropGenLeptonSt2_ = 0;
+    propGenLeptonSt2GenLeptonIdx_.clear();
+    propGenLeptonSt2P4_.clear();
+    propGenLeptonSt2PositionEta_.clear();
+    propGenLeptonSt2PositionPhi_.clear();
+
+    nGenSigLepton_ = 0;
+    genSigLeptonGenLeptonIdx_.clear();
+    genSigLeptonPropSt2Idx_.clear();
+
+    nPropGenSigLeptonSt2_ = 0;
+    propGenSigLeptonSt2GenSigLeptonIdx_.clear();
+    propGenSigLeptonSt2GenLeptonIdx_.clear();
+    propGenSigLeptonSt2P4_.clear();
+    propGenSigLeptonSt2PositionEta_.clear();
+    propGenSigLeptonSt2PositionPhi_.clear();
+
     // Gen Signal Muon
     nGenSigMuonFinal_ = 0;
     genSigMuonIsValid_ = false;
@@ -1041,6 +1169,31 @@ void NtupleContainerV2::ClearTreeBranches() {
     recoMuonIsGlobalMuon_.clear();
     recoMuonIsStandAloneMuon_.clear();
 
+    nPFMuon_ = 0;
+    pfMuonPatIdx_.clear();
+    pfMuonP4_.clear();
+    pfMuonCharge_.clear();
+    pfMuonIDcutBasedLoose_.clear();
+    pfMuonIDcutBasedMedium_.clear();
+    pfMuonIDcutBasedMediumPrompt_.clear();
+    pfMuonIDcutBasedTight_.clear();
+    pfMuonIsGlobalMuon_.clear();
+    pfMuonIsStandAloneMuon_.clear();
+    pfMuonPropagationTrackType_.clear();
+    pfMuonTrkNumValidMuonHits_.clear();
+    pfMuonTrkNumValidTrackerHits_.clear();
+    pfMuonTrkNumValidPixelHits_.clear();
+    pfMuonTrkNumValidStripHits_.clear();
+    pfMuonNumMatchedStations_.clear();
+    pfMuonPropSt2Status_.clear();
+    pfMuonPropSt2Idx_.clear();
+
+    nPropPFMuonSt2_ = 0;
+    propPFMuonSt2PFMuonIdx_.clear();
+    propPFMuonSt2P4_.clear();
+    propPFMuonSt2PositionEta_.clear();
+    propPFMuonSt2PositionPhi_.clear();
+
     // Electrons
     nElectronDefault_ = 0;
     recoElectronPt_.clear();
@@ -1259,6 +1412,7 @@ void NtupleContainerV2::ClearTreeBranches() {
     recoDSAMuonTrkNumPlanes_.clear();
     recoDSAMuonTrkNumDTHits_.clear();
     recoDSAMuonIdx_.clear();
+    recoDSAMuonP4_.clear();
 
 
     recoDSAMuonPropSt1Valid_.clear();
@@ -1272,6 +1426,7 @@ void NtupleContainerV2::ClearTreeBranches() {
     recoDSAMuonPropSt2Phi_.clear();
     recoDSAMuonPropSt2MomEta_.clear();
     recoDSAMuonPropSt2MomPhi_.clear();
+    recoDSAMuonPropSt2Idx_.clear();
 
     recoDSAMuonPropSt3Valid_.clear();
     recoDSAMuonPropSt3Eta_.clear();
@@ -1284,6 +1439,12 @@ void NtupleContainerV2::ClearTreeBranches() {
     recoDSAMuonPropSt4Phi_.clear();
     recoDSAMuonPropSt4MomEta_.clear();
     recoDSAMuonPropSt4MomPhi_.clear();
+
+    nPropDSAMuonSt2_ = 0;
+    propDSAMuonSt2DSAMuonIdx_.clear();
+    propDSAMuonSt2P4_.clear();
+    propDSAMuonSt2PositionEta_.clear();
+    propDSAMuonSt2PositionPhi_.clear();
 
     recoDSAMuonOuterHitValid_.clear();
     recoDSAMuonOuterHitTrackExtraAvailable_.clear();
