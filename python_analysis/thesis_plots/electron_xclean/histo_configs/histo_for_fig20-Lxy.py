@@ -35,19 +35,13 @@ class myHisto:
         self.Gen_vxy = self.parse_axis(('Gen_vxy',[0,1,3,6,10,15])) 
 
 
-        self.Res_LPT_lxy = self.parse_axis(('Res_LPT_lxy',200,-1,1))  #-0.5-0.5
-        self.Res_GED_lxy = self.parse_axis(('Res_GED_lxy',200,-1,1)) 
         
         #For Eff studies
         self.vxy1 = self.parse_axis(('vxy',[0,1,3,6,10,15]))  #Lxy 10, 100
         # self.ele_pt = self.parse_axis(("pt",[0,5,10,20,30])) 
         self.ele_pt = self.parse_axis(("pt",[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,25])) 
         
-        self.PT_GED = self.parse_axis(("PT_GED",[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,25]))
-        self.PT_Lpt = self.parse_axis(("PT_Lpt",[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,25])) 
-        self.PT_Lpt_noxclean = self.parse_axis(("PT_Lpt_noxclean",[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,25]))
-
-
+        
        
       
 
@@ -101,8 +95,7 @@ def make_histograms():
     h.make('res_GED_gen','Res_GED')
     h.make('res_LPT_gen','Res_LPT')
 
-    h.make('res_GED_gen_lxy','Res_GED_lxy')
-    h.make('res_LPT_gen_lxy','Res_LPT_lxy')
+   
 
     h.make('res_GED_gen_ptbin', 'Gen_vxy', 'Res_GED')
     h.make('res_LPT_gen_ptbin', 'Gen_vxy', 'Res_LPT')
@@ -150,25 +143,19 @@ def fillHistos(events,h,samp,cut,info,sum_wgt=1):
 
 
         Lpt_pt = events_new_very.AllLptElectron.pt[(events_new_very.AllLptElectron.genMatched) ] #IMP
-        print ("Lpt_pt=", Lpt_pt)
 
         Lpt_pt_flat = ak.flatten(Lpt_pt)        
-        print ("len(Lpt_pt_flat)=", len(Lpt_pt_flat)) 
         
         GED_pt  = events_new_very.Electron.pt[(events_new_very.Electron.genMatched)] 
-        print ("GED_pt=", GED_pt)
 
         GED_pt_flat = ak.flatten(GED_pt)  
-        print ("len(GED_pt_flat)=", len(GED_pt_flat))
 
         
         
         #Residual calculation:
         res_GED = (GED_pt_flat - Gen_pt_FLAT)/(Gen_pt_FLAT) 
-        print ("Res_GED=", res_GED)
 
         res_LPT = (Lpt_pt_flat - Gen_pt_FLAT)/(Gen_pt_FLAT) 
-        print("Res_LPT=", res_LPT)
 
 
         #Resolution plots

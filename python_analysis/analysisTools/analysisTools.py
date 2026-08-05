@@ -144,7 +144,7 @@ class Analyzer:
                     fullList = []
                     for l in loc:
                         status, flist = xrdClient.dirlist(l)
-                        fullList.extend(["root://cmsxrootd.fnal.gov/"+l+"/"+item.name for item in flist if (('.root' in item.name) and (item.name not in sample['blacklist']))])
+                        fullList.extend(["root://cmseos.fnal.gov/"+l+"/"+item.name for item in flist if (('.root' in item.name) and (item.name not in sample['blacklist']))])
                 if self.max_files_per_samp > 0 and len(fullList) > self.max_files_per_samp:
                     fullList = fullList[:self.max_files_per_samp]
                 if self.newCoffea:

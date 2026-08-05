@@ -959,6 +959,7 @@ def plot_signal_2D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
     samp_df = si[(si.m1 == m1) & (si.delta == delta) & (si.ctau == ctau)]
     
     samp = samp_df.name[0]
+    print (samp)
 
     m1 = samp_df.m1[0]
     dmchi = samp_df.dmchi[0]
