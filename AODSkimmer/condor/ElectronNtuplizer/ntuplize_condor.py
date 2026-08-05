@@ -13,9 +13,9 @@ def stringfy_friendly(num):
     else:
         raise ValueError("{0} is not a number!".format(num))
 
-vers = 'May2026'
-CMSSW = 'CMSSW_14_0_21'
-compiled_CMSSW_envs='ntuplizer_CMSSW_14_0_21_acrobert.tar.gz'
+vers = 'Summer2022'
+CMSSW = 'CMSSW_13_0_13'
+compiled_CMSSW_envs='ntuplizer_CMSSW_13_0_13_reshmar.tar.gz'
 
 
 m1 = float(sys.argv[1])

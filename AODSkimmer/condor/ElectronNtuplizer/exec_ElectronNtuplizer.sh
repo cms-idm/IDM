@@ -21,7 +21,11 @@ scram b ProjectRename
 eval `scram runtime -sh`
 cd iDMe/AODSkimmer
 cmsRun scripts/ElectronNtuplizer_cfg.py flist=${fname}.txt data=${isData} signal=${isSignal} year=${year} numThreads=${nThreads}
-mv test_output.root ntuples_${fname}.root
-xrdcp -f ntuples_${fname}.root root://cmseos.fnal.gov/${outPath}/ntuples_${fname}.root
-echo "Copied ntuples_${fname}.root"
+mv test_output.root ${fname}.root
+xrdcp -f ${fname}.root root://cmseos.fnal.gov/${outPath}/${fname}.root
+echo "Copied ${fname}.root"
 echo "Done"
+
+# source submit_ElectronNtuplizer_condor.sh /uscms/home/reshmar/nobackup/sampleFactory/SampleFactory/TxtFiles2022/2022_Mchi-105p0_dMchi-10p0_ctau-100_20260722_153614_files.txt 2022 4 0 1 /eos/uscms/store/group/lpcmetx/iDMe/Samples/Ntuples/ CMSSW_13_0_13 ntuplizer_reshma_CMSSW_13_0_13.tar.gz
+
+# source submit_ElectronNtuplizer_condor.sh /uscms/home/reshmar/nobackup/IDMe_Run3_Collab/CMSSW_13_0_13/src/iDMe/AODSkimmer/condor/ElectronNtuplizer/TextFilesSignal/Mchi-99p0_dMchi-18p0_ctau-100.txt 2022 4 0 1 /eos/uscms/store/group/lpcmetx/iDMe/Samples/Ntuples/ CMSSW_13_0_13 ntuplizer_reshma_CMSSW_13_0_13.tar.gz
