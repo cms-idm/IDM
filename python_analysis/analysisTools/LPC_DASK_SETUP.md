@@ -293,6 +293,74 @@ Do not jump straight to 1086 files.
    `--lifetime`.
 4. **Full run.** Drop `max_files_per_samp`, `n_workers=40`.
 
+## Before the full run: fix the resolution pairing
+
+This one is not about dask, but it will decide whether the 1086-file run is worth doing.
+In `histo_for_fig20-Lxy.py`, the residual subtracts two arrays that are ordered by different
+things:
+
+```python
+Gen_pt_FLAT = ak.flatten(ak.concatenate([GenEle_pt[:, None], GenPos_pt[:, None]], axis=1))
+Lpt_pt_flat = ak.flatten(AllLptElectron.pt[AllLptElectron.genMatched])
+res_LPT     = (Lpt_pt_flat - Gen_pt_FLAT) / Gen_pt_FLAT
+```
+
+`Gen_pt_FLAT` is always `[electron, positron]` by construction. `Lpt_pt_flat` is in reco
+collection order, which is pT-ordered. Pairing them by position assumes the leading reco
+electron matched the gen *electron*, and nothing enforces that. Measured on
+`Mchi-105p0_dMchi-10p0/ctau-100_00.root` (260 events pass the selection), the positron's
+reco partner sits first in **51.2%** of events, so about half the entries subtract two
+different particles. The same applies to `res_GED` with the `Electron` collection.
+
+| pairing | mean | RMS | \|res\| > 0.3 |
+| --- | --- | --- | --- |
+| positional, `res_LPT` | +0.1276 | 0.7938 | 35.8% |
+| index-based, `res_LPT` | -0.0336 | 0.1047 | 3.5% |
+| positional, `res_GED` | +0.1381 | 0.8010 | 35.6% |
+| index-based, `res_GED` | -0.0253 | 0.0971 | 2.3% |
+
+The ntuple already carries the correct link. `GenEle.matchIdxAllLowPt` indexes into
+`AllLptElectron`, and `GenEle.matchIdxLocal` indexes into `Electron` for this selection.
+Replace the block from `Gen_pt = ...` through `res_LPT = ...` with:
+
+```python
+ev = events_new_very
+
+# Gen side keeps its [electron, positron] order.
+Gen_pt_FLAT  = ak.flatten(ak.concatenate(
+    [ev.GenEle.pt[:, None],  ev.GenPos.pt[:, None]],  axis=1))
+Gen_vxy_FLAT = ak.flatten(ak.concatenate(
+    [ev.GenEle.vxy[:, None], ev.GenPos.vxy[:, None]], axis=1))
+
+# Reco side: take each gen particle's OWN match by index, so the two arrays line up.
+lpt, ged = ev.AllLptElectron.pt, ev.Electron.pt
+Lpt_pt_flat = ak.flatten(ak.concatenate([
+    lpt[ak.singletons(ev.GenEle.matchIdxAllLowPt)],
+    lpt[ak.singletons(ev.GenPos.matchIdxAllLowPt)]], axis=1))
+GED_pt_flat = ak.flatten(ak.concatenate([
+    ged[ak.singletons(ev.GenEle.matchIdxLocal)],
+    ged[ak.singletons(ev.GenPos.matchIdxLocal)]], axis=1))
+
+res_GED = (GED_pt_flat - Gen_pt_FLAT) / (Gen_pt_FLAT)
+res_LPT = (Lpt_pt_flat - Gen_pt_FLAT) / (Gen_pt_FLAT)
+```
+
+Everything downstream stays as it is: the fills still use `res_GED`, `res_LPT` and
+`Gen_vxy_FLAT`, and the lengths still line up (all four arrays are 2 per selected event).
+
+Two things worth knowing rather than taking on trust:
+
+- **The Lxy binning is unaffected.** `GenEle.vxy` and `GenPos.vxy` are identical to machine
+  precision because both come from the same decay vertex, so entries never moved between Lxy
+  bins. Only the residual value was wrong.
+- **`matchIdxLocal` is right for this selection specifically.** The mask pins
+  `matchType == 'R'`, and for that population `matchIdxLocal` and `matchIdxGlobal` agree
+  exactly and are both in range. If you change the selection to admit `matchType == 'L'`,
+  re-check which index addresses which collection before reusing this.
+
+Numbers above are one file, so treat the ratios as indicative rather than final. The
+direction and the ~50% swap rate are not in doubt.
+
 ## Things that will bite you
 
 **The entries audit only means anything on the full run.** While `max_files_per_samp` is
