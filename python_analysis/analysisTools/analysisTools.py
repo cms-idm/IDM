@@ -139,7 +139,7 @@ class Analyzer:
                 xrdClient = client.FileSystem("root://cmseos.fnal.gov")
                 if type(loc) != list:
                     status, flist = xrdClient.dirlist(loc)
-                    fullList = ["root://cmsxrootd.fnal.gov/"+loc+"/"+item.name for item in flist if (('.root' in item.name) and (item.name not in sample['blacklist']))]
+                    fullList = ["root://cmseos.fnal.gov/"+loc+"/"+item.name for item in flist if (('.root' in item.name) and (item.name not in sample['blacklist']))]
                 else:
                     fullList = []
                     for l in loc:
@@ -477,7 +477,6 @@ class iDMeProcessor(processor.ProcessorABC):
             else:
                 cutflow[cutName] += len(events)/sum_wgt
             cutflow_nevts[cutName] += len(events)            
-            if info['type'] == "signal":
                 # vtx_matched_events = events[events.sel_vtx.isMatched]
                 # cutflow_vtx_matched[cutName] += ak.sum(vtx_matched_events.genWgt)/ak.sum(events.genWgt)
             cutDesc[cutName] += cutDescription + "@"
@@ -903,7 +902,7 @@ def getLumi(year):
     year = str(year)
 
     lumi, unc = 0, 0
-    if year == 2022:
+    if year == '2022':
         lumi = 38.01
         unc =  0.014*lumi #1.4 percent
     if year == 2016:
