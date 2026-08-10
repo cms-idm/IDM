@@ -402,7 +402,7 @@ class iDMeProcessor(processor.ProcessorABC):
         # define "selected" vertex based on selection criteria in the routine (nominally: lowest chi2)
         #routines.selectBestVertex(events)
         if info['type'] == "signal":
-            print ("All good!")
+            print ("Signal!")
             
             #  # events = routines.selectTrueVertex(events,events.good_vtx)
             # routines.selectBestVertex(events)
@@ -478,7 +478,6 @@ class iDMeProcessor(processor.ProcessorABC):
                 cutflow[cutName] += len(events)/sum_wgt
             cutflow_nevts[cutName] += len(events)            
             if info['type'] == "signal":
-                print ("Good!")
                 # vtx_matched_events = events[events.sel_vtx.isMatched]
                 # cutflow_vtx_matched[cutName] += ak.sum(vtx_matched_events.genWgt)/ak.sum(events.genWgt)
             cutDesc[cutName] += cutDescription + "@"
