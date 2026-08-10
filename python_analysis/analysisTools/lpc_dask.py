@@ -25,31 +25,25 @@ histo configs in this repo do ``from myHisto import ...``; if yours imports anot
 module, add that module to ``configs`` too (before the file that imports it). The failure
 is a loud ModuleNotFoundError at ship time, not a silent wrong answer.
 
-WHY THE WORKER LIFETIME FLAGS EXIST (read this before tuning anything)
----------------------------------------------------------------------
-``iDMeProcessor.process`` retains roughly 90 MB per chunk, process-globally and immune to
-``gc.collect()`` (measured: steady-state 482.6 -> 568.4 MB over consecutive chunks, with
-post-gc RSS identical to pre-gc). coffea 0.7 never spans a chunk across files, so one
-chunk == one file and a single long-lived process climbs without bound.
+THE MEMORY LEAK IS FIXED; THE LIFETIME FLAGS ARE NOW ONLY INSURANCE
+------------------------------------------------------------------
+``iDMeProcessor.process`` used to retain ~90 MB per chunk, process-globally and immune to
+``gc.collect()``. That is fixed at source: ``analysisSubroutines.runJitOutput`` now detaches
+coffea arrays before they reach the numba kernels (see ``_numbaSafe`` there for the
+mechanism). Measured in the worker image, steady state went from **93.1 to 0.05 MB/chunk**;
+in the py3.8 conda env, 86 to 0.42 MB/chunk over 40 files. Histograms are bit-identical and
+each chunk runs ~17% faster, because the per-chunk numba recompile is gone.
 
-Dask does NOT fix this on its own. A distributed worker is a long-lived process serving
-unbounded tasks, and the leaked memory is *unmanaged*, so dask cannot spill it: the worker
-pauses at ``0.8 * memory``, stops accepting tasks, and therefore never reaches the ``0.95``
-threshold that would make the nanny restart it. It parks below its condor RequestMemory,
-so it does not even earn a hold; it just holds a slot. (The pause threshold and the
-non-spillability are documented dask behaviour and the ~90 MB/chunk ratchet is measured;
-the specific "27 chunks at 4GB" figure is arithmetic from those two, not a preserved run.)
+Consequence: a single worker process can do the whole 1086-file run in roughly 0.6-1.0 GB,
+so ``--lifetime`` recycling is no longer load-bearing for memory. It is kept at a long
+default purely as insurance against an unknown-unknown, and it costs a re-import plus
+``upload_file`` replay each time it fires, so do not shorten it without a reason.
 
-The fix is ``--lifetime``, which recycles the worker PROCESS on a timer inside the same
-condor job, so RSS resets to baseline every generation while the job itself is never
-resubmitted (which also avoids LPC SYSTEM_PERIODIC_REMOVE, that deletes any job exceeding
-10 restarts). Verified on real LPC condor: 5 worker generations, RSS reset each time, 88
-tasks, 0 failures; and modules shipped with ``upload_file`` survive the restarts (22/22
-tasks across 5 generations).
+Two things were NOT measured and are the reason the flags are still here: background samples
+with ``systematics`` enabled (the correctionlib/xgboost paths never ran), and a real
+distributed worker as opposed to a single process. Once one full run has been observed flat,
+the flags can go.
 
-This is a WORKAROUND. The real fix is to find the retention inside the processor -- bare
-``NanoEventsFactory`` materialization does not leak, so it is in the processor's own call
-path. Until then, the recycling keeps memory bounded.
 """
 
 import os
@@ -141,11 +135,16 @@ def check_voms_proxy(min_seconds_left=3600):
     return proxy
 
 
-def files_per_generation(memory="6GB", baseline_mib=700, leak_mib_per_file=91):
+def files_per_generation(memory="6GB", baseline_mib=700, leak_mib_per_file=0.5):
     """Estimate how many files one worker process can take before dask pauses it.
 
     dask parses ``memory`` as DECIMAL bytes ("6GB" -> 6e9 B -> 5722 MiB), then pauses the
     worker at 0.8x that. Getting this wrong by using GiB overestimates the budget by ~7%.
+
+    ``leak_mib_per_file`` defaults to the post-fix residual (0.5 MiB/file, the conservative
+    py3.8 number; the worker image measures 0.05). At that rate the budget is ~9000 files per
+    generation, i.e. 8x the whole dataset, which is why recycling is now insurance rather
+    than a requirement. Pass 91 to see what the numbers looked like before the fix.
     """
     from dask.utils import parse_bytes
     pause_mib = 0.8 * parse_bytes(memory) / (1024.0 ** 2)
@@ -157,8 +156,8 @@ def make_lpc_client(
     memory="6GB",
     disk="6GB",
     cores=1,
-    lifetime="180s",
-    lifetime_stagger="30s",
+    lifetime="3600s",
+    lifetime_stagger="300s",
     death_timeout=600,
     image=LPC_IMAGE,
     condor_config=_DEFAULT_CONDOR_CONFIG,
@@ -175,11 +174,12 @@ def make_lpc_client(
         memory/disk/cores: per-worker condor request. dask pauses a worker at 0.8x
             ``memory``; see :func:`files_per_generation` for the resulting file budget.
         lifetime/lifetime_stagger: worker process recycle timer, and the spread that keeps
-            all workers from restarting together. Keep
-            ``lifetime <= 0.6 * files_per_generation(memory) * seconds_per_file``.
-            At the defaults (6GB -> ~42 files) and a measured ~9 s/file, that ceiling is
-            ~230 s, so the 180 s default carries roughly 1.3x margin on time and 1.8x on
-            memory.
+            all workers from restarting together. Since the leak was fixed this is insurance,
+            not a working part, hence the long default: at the post-fix residual a worker
+            could process thousands of files before dask would pause it. Each restart costs a
+            re-import and an ``upload_file`` replay, so shortening it costs throughput. Set
+            ``lifetime=None``-style removal by passing your own ``worker_extra_args`` if you
+            have observed a full run flat and want it gone.
         death_timeout: seconds a worker waits for the scheduler before giving up. Raised
             from the dask default of 60 because the LPC queue can be slow.
         image: worker apptainer image. Must match the client's coffea/dask versions.

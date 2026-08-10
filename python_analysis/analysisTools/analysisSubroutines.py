@@ -49,9 +49,40 @@ def deltaPhiSingle(phi1,phi2):
 def deltaRSingle(eta1,phi1,eta2,phi2):
     return np.sqrt((eta1-eta2)**2 + deltaPhiSingle(phi1,phi2)**2)
 
+def _numbaSafe(x):
+    """Detach a coffea NanoEvents array before handing it to a numba kernel.
+
+    Two compounding leaks are triggered by passing a coffea array into an njit
+    kernel, and both are closed here:
+
+    1. awkward-1 builds the *name* of the numba ArrayViewType from
+       repr(behavior) (awkward/_connect/_numba/__init__.py:77-78), and coffea
+       stamps behavior["__events_factory__"] = self
+       (coffea/nanoevents/factory.py:387). NanoEventsFactory has no __repr__, so
+       that name embeds a fresh heap address every chunk. numba compares types by
+       name, so it sees a brand-new type each chunk, compiles a brand-new
+       specialization, and caches it forever on the module-level dispatcher. The
+       cached type holds behavior -> factory -> UprootSourceMapping -> the open
+       uproot file and its array_cache. Everything stays reachable, which is why
+       gc.collect() reclaims nothing.
+    2. ak.packed() materializes lazy VirtualArrays. awkward's numba bridge
+       Py_IncRef's any layout it is handed
+       (awkward/_connect/_numba/layout.py:2502,2565,2574) with no matching
+       Py_DecRef, so a lazy layout is refcount-leaked outright, keeping that
+       chunk's uproot source alive invisibly to gc.
+
+    ak.Array(...) drops the behavior; ak.packed(...) removes the lazy nodes.
+    Stripping behavior alone leaves ~40 MB/chunk on the table.
+
+    Any future njit call site that bypasses runJitOutput reintroduces both leaks.
+    """
+    if isinstance(x, ak.Array):
+        return ak.Array(ak.packed(ak.Array(x.layout), highlevel=False))
+    return x
+
 def runJitOutput(func,*args):
     b = ak.ArrayBuilder()
-    func(b,*args)
+    func(b,*[_numbaSafe(x) for x in args])
     out = b.snapshot()
     del b
     return out

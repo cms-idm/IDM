@@ -3,7 +3,7 @@
 This lets `Analyzer.process(execr="dask", ...)` run over the full ntuple set on LPC batch
 instead of on the interactive node, which is what currently dies with `BrokenProcessPool`.
 
-You do not need to merge anything. Copy two files and apply three one-line fixes.
+You do not need to merge anything. Copy two files, and take two fixed files.
 
 These live on branch `Menon27_allLPT_dask`, which branches from `Menon27_allLPT` and adds
 only the files described here:
@@ -20,39 +20,42 @@ or copy them straight off LPC, where they are world-readable:
 
     /uscms_data/d3/murtazas/IDM/python_analysis/analysisTools/
 
-## What is actually going wrong
+## What was going wrong, and what fixed it
 
-`iDMeProcessor.process` retains about **90 MB per chunk**, process-globally, and
-`gc.collect()` reclaims none of it (measured: steady state 482.6 -> 568.4 MB over
-consecutive chunks, post-gc RSS identical to pre-gc). coffea 0.7 never spans a chunk across
-files, so **one chunk == one file** and any single process climbs ~90 MB per file without
-bound. A cmslpc interactive node has 11.4 GB total, no per-user cgroup cap, and typically
-~4 GB free, so the kernel OOM killer reaps the process. A kernel SIGKILL is exactly what
-surfaces as `BrokenProcessPool` instead of a Python traceback, and because the leak is
-linear the death point is a reproducible chunk count. That is why it works on a subset and
-always dies around the same fraction.
+`iDMeProcessor.process` retained about **90 MB per chunk**, process-globally, and
+`gc.collect()` reclaimed none of it. coffea 0.7 never spans a chunk across files, so one
+chunk is one file and any single process climbed ~90 MB per file without bound until the
+interactive node's OOM killer reaped it. A kernel SIGKILL is what surfaces as
+`BrokenProcessPool` instead of a traceback, and because the growth was linear it always died
+at roughly the same fraction.
 
-Two things this is **not**: it is not the accumulator (all 15 samples come to 1.94 MB of
-histograms), and it is not xrootd (an I/O failure raises a normal Python exception with a
-full traceback, which is not what you saw).
+**That is now fixed at source**, in one function. `runJitOutput` in `analysisSubroutines.py`
+was handing coffea arrays straight to the numba kernels, which triggered two compounding
+leaks:
 
-**Adding dask does not fix this by itself.** A dask worker is a long-lived process serving
-unbounded tasks, and leaked memory is *unmanaged*, so dask cannot spill it: the worker
-pauses at `0.8 * memory`, stops accepting tasks, and therefore never reaches the `0.95`
-threshold that would trigger a nanny restart. It then parks below its condor RequestMemory,
-so it does not even earn a hold, it just silently holds a slot. That would trade a loud
-crash for a silent hang.
+- awkward builds the *name* of a numba type from `repr(behavior)`, and coffea stamps
+  `behavior["__events_factory__"] = self`. `NanoEventsFactory` has no `__repr__`, so the type
+  name embedded a fresh heap address every chunk. numba compares types by name, so it
+  compiled a brand-new specialization each chunk and cached it forever on a module-level
+  dispatcher, holding that chunk's open uproot file alive through the behavior dict. Since it
+  was all still reachable, `gc` correctly reclaimed nothing. (~48 MB/chunk)
+- awkward's numba bridge `Py_IncRef`s any layout handed to it with no matching `Py_DecRef`,
+  so passing a *lazy* array leaked it outright. (~40 MB/chunk)
 
-What fixes it is `--lifetime`, which recycles the worker **process** on a timer inside the
-same condor job, resetting RSS every generation while the job itself is never resubmitted.
-`make_lpc_client()` sets this up for you. Verified on real LPC condor: 5 worker generations,
-RSS reset each time, 88 tasks, 0 failures, and shipped modules surviving every restart.
+`_numbaSafe` detaches the array before it reaches the kernel: `ak.Array(...)` drops the
+behavior, `ak.packed(...)` removes the lazy nodes. Both leaks close together.
 
-This is a workaround. The real fix is to find the retention inside the processor; bare
-`NanoEventsFactory` materialization does not leak, so it is in the processor's own call
-path. Until someone does that, recycling keeps memory bounded.
+Measured, driving the real coffea `Runner` over consecutive files:
 
-## Step 0: copy two files and fix three lines
+| | before | after |
+| --- | --- | --- |
+| worker image (coffea 0.7.31) | +93.1 MB/chunk | **+0.05 MB/chunk** |
+| py3.8 conda env, 40 files | +86.1 MB/chunk | **+0.42 MB/chunk** |
+
+Histograms are bit-identical before and after (checked per numba call, not just on the final
+accumulator), and each chunk runs about **17% faster** because the per-chunk recompile is gone.
+
+## Step 0: copy the files
 
 Copy these into your own `python_analysis/analysisTools/`:
 
@@ -70,7 +73,7 @@ cp $SRC/lpc_dask.py $SRC/lpc_condor_config $SRC/LPC_DASK_SETUP.md $DEST/
   drops an `include` directive pointing at a per-user file that does not exist on all
   cmslpc-el9 nodes. `make_lpc_client()` looks for it next to `lpc_dask.py`.
 
-Then apply these three one-line fixes to your `analysisTools.py`:
+Then `analysisTools.py`, which carries three one-line fixes:
 
 1. **Delete the `if info['type'] == "signal":` line** in `iDMeProcessor.process` (near line
    480, the one whose body is entirely commented out). Right now that `if` has no body, so
@@ -88,15 +91,29 @@ Then apply these three one-line fixes to your `analysisTools.py`:
    in every 2022 output. See the note in "Things that will bite you".
 
 Or take the whole file, which differs from your `Menon27_allLPT` copy by exactly those
-three changes and nothing else:
+three changes and nothing else. **And take `analysisSubroutines.py`, which carries the memory
+fix** described above (one new helper plus one changed line in `runJitOutput`):
 
 ```bash
 SRC=/uscms_data/d3/murtazas/IDM/python_analysis/analysisTools
 DEST=~/nobackup/IDMe_Run3_Collab/CMSSW_13_0_13/src/iDMe/python_analysis/analysisTools
 
-diff $SRC/analysisTools.py $DEST/analysisTools.py     # check first: should be the 3 changes
-cp   $SRC/analysisTools.py $DEST/analysisTools.py
+diff $SRC/analysisTools.py        $DEST/analysisTools.py        # should be the 3 changes
+diff $SRC/analysisSubroutines.py  $DEST/analysisSubroutines.py  # should be _numbaSafe only
+cp   $SRC/analysisTools.py        $DEST/
+cp   $SRC/analysisSubroutines.py  $DEST/
 ```
+
+## Do you actually need dask?
+
+Honestly, probably not any more. With the leak fixed a single process stays flat at well
+under 1 GB for the whole 1086-file run, so your original `execr="futures", workers=2` on a
+login node now works and takes roughly an hour. If that is acceptable, stop reading here and
+just apply the Step 0 fixes.
+
+The rest of this document is worth it when an hour per iteration is too slow. With 40 condor
+workers the same run is a few minutes of compute, at the cost of the one-time setup below and
+a scheduler that lives in your notebook kernel. That is the trade.
 
 ## Step 1: a VOMS proxy the schedd can read
 
@@ -287,10 +304,10 @@ Do not jump straight to 1086 files.
    on **histogram contents per named `(samp, cut)` cell**, never on raw arrays positionally,
    and not on cutflows alone (they are sums over the whole sample and cannot detect this).
 3. **150 files.** `max_files_per_samp=10, max_samples=-1`. Watch the dashboard Workers tab:
-   each worker's memory should **sawtooth**, climbing then dropping back to ~0.3 GB every
-   few minutes. That sawtooth is the recycling working. If memory instead climbs
-   monotonically and workers go orange or grey, check `print(cluster.job_script())` contains
-   `--lifetime`.
+   with the memory fix in place each worker should sit **flat** at roughly 0.5-0.6 GB and stay
+   there. Flat is the pass condition. If memory instead climbs steadily by tens of MB per
+   file, the `analysisSubroutines.py` fix is not in effect on the workers, so check that you
+   shipped the fixed copy and not your old one.
 4. **Full run.** Drop `max_files_per_samp`, `n_workers=40`.
 
 ## Before the full run: fix the resolution pairing
@@ -427,8 +444,9 @@ around 20k entries, so you are already at one chunk per file, the maximum coffea
 produce. Raising it does nothing; *lowering* it to 5000 raised measured peak RSS from 1044
 to 2255 MB and added 57% more I/O. Leave it alone.
 
-**Do not raise `workers` on the futures path as a stopgap.** Each extra worker adds its own
-~380 MB baseline plus its own leak, so more workers fail *earlier*, not later.
+**Raising `workers` on the futures path is fine now, within reason.** Each worker still costs
+its own ~380 MB baseline, so on a login node with ~4 GB free keep it modest; but with the leak
+gone they no longer fail earlier the more you add, which was true before the fix.
 
 ## If something goes wrong
 
@@ -455,10 +473,10 @@ condor_rm $USER                   # remove all of yours, use with care
 
 ## Fallback if dask keeps fighting you
 
-One fresh process per N files under plain condor is *structurally* immune to the leak rather
-than merely bounded against it: a job running `execr="iterative"` over 5 files peaks around
-1.2 GB against a 4 GB request, with no timer to tune, and it survives a dropped connection
-because there is no scheduler living in your notebook kernel. It costs a merge step
-afterwards with `coffea.processor.accumulate`. `Run3_core`'s `condor/` directory has a
-working harness of this shape to crib from. Worth switching to if the in-image client is not
-working within about half a day, or if you need runs to survive overnight.
+One fresh process per N files under plain condor needs no scheduler in your notebook kernel,
+so it survives a dropped connection and runs unattended overnight. It costs a merge step
+afterwards with `coffea.processor.accumulate`. `Run3_core`'s `condor/` directory has a working
+harness of this shape to crib from. Worth switching to if the in-image client is not working
+within about half a day, or if you need runs to survive an ssh drop. Before the leak was
+fixed this was also the only structurally safe option; now it is purely about robustness and
+unattended running.
