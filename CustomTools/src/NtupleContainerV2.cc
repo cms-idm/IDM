@@ -5,6 +5,7 @@ NtupleContainerV2::NtupleContainerV2() {}
 NtupleContainerV2::~NtupleContainerV2() {}
 
 void NtupleContainerV2::SetTree(TTree *tree) { outT = tree; }
+void NtupleContainerV2::SetSlimTree(TTree *tree) { outT_slim = tree; }
 
 void NtupleContainerV2::CreateTreeBranches() {
 
@@ -67,6 +68,11 @@ void NtupleContainerV2::CreateTreeBranches() {
     outT->Branch("Electron_e",&recoElectronE_);
     outT->Branch("Electron_vxy",&recoElectronVxy_);
     outT->Branch("Electron_vz",&recoElectronVz_);
+    outT->Branch("Electron_svProxyValid",&recoElectronSVProxyValid_);
+    outT->Branch("Electron_svProxyX",&recoElectronSVProxyX_);
+    outT->Branch("Electron_svProxyY",&recoElectronSVProxyY_);
+    outT->Branch("Electron_svProxyZ",&recoElectronSVProxyZ_);
+    outT->Branch("Electron_svProxyVxy",&recoElectronSVProxyVxy_);
     outT->Branch("Electron_dxy",&recoElectronDxy_);
     outT->Branch("Electron_dxyErr",&recoElectronDxyError_);
     outT->Branch("Electron_dz",&recoElectronDz_);
@@ -124,6 +130,11 @@ void NtupleContainerV2::CreateTreeBranches() {
     outT->Branch("LptElectron_e",&recoLowPtElectronE_);
     outT->Branch("LptElectron_vxy",&recoLowPtElectronVxy_);
     outT->Branch("LptElectron_vz",&recoLowPtElectronVz_);
+    outT->Branch("LptElectron_svProxyValid",&recoLowPtElectronSVProxyValid_);
+    outT->Branch("LptElectron_svProxyX",&recoLowPtElectronSVProxyX_);
+    outT->Branch("LptElectron_svProxyY",&recoLowPtElectronSVProxyY_);
+    outT->Branch("LptElectron_svProxyZ",&recoLowPtElectronSVProxyZ_);
+    outT->Branch("LptElectron_svProxyVxy",&recoLowPtElectronSVProxyVxy_);
     outT->Branch("LptElectron_dxy",&recoLowPtElectronDxy_);
     outT->Branch("LptElectron_dxyErr",&recoLowPtElectronDxyError_);
     outT->Branch("LptElectron_dz",&recoLowPtElectronDz_);
@@ -197,6 +208,11 @@ void NtupleContainerV2::CreateTreeBranches() {
     outT->Branch("AllLptElectron_e",&recoAllLowPtElectronE_);
     outT->Branch("AllLptElectron_vxy",&recoAllLowPtElectronVxy_);
     outT->Branch("AllLptElectron_vz",&recoAllLowPtElectronVz_);
+    outT->Branch("AllLptElectron_svProxyValid",&recoAllLowPtElectronSVProxyValid_);
+    outT->Branch("AllLptElectron_svProxyX",&recoAllLowPtElectronSVProxyX_);
+    outT->Branch("AllLptElectron_svProxyY",&recoAllLowPtElectronSVProxyY_);
+    outT->Branch("AllLptElectron_svProxyZ",&recoAllLowPtElectronSVProxyZ_);
+    outT->Branch("AllLptElectron_svProxyVxy",&recoAllLowPtElectronSVProxyVxy_);
     outT->Branch("AllLptElectron_dxy",&recoAllLowPtElectronDxy_);
     outT->Branch("AllLptElectron_dxyErr",&recoAllLowPtElectronDxyError_);
     outT->Branch("AllLptElectron_dz",&recoAllLowPtElectronDz_);
@@ -297,47 +313,6 @@ void NtupleContainerV2::CreateTreeBranches() {
     outT->Branch("Photon_eta",&PhotonEta_);
     outT->Branch("Photon_phi",&PhotonPhi_);
     outT->Branch("Photon_pt",&PhotonPt_);
-    outT->Branch("Photon_energy",&PhotonEnergy_);
-    outT->Branch("Photon_scRawE",&PhotonScRawE_);
-    outT->Branch("Photon_scEta",&PhotonScEta_);
-    outT->Branch("Photon_scPhi",&PhotonScPhi_);
-    outT->Branch("Photon_scEtaWidth",&PhotonScEtaWidth_);
-    outT->Branch("Photon_scPhiWidth",&PhotonScPhiWidth_);
-    outT->Branch("Photon_r9",&PhotonR9_);
-    outT->Branch("Photon_full5x5_r9",&PhotonFull5x5R9_);
-    outT->Branch("Photon_sIeIe",&PhotonSIeIe_);
-    outT->Branch("Photon_full5x5_sIeIe",&PhotonFull5x5SIeIe_);
-    outT->Branch("Photon_HoE",&PhotonHoE_);
-    outT->Branch("Photon_full5x5_HoE",&PhotonFull5x5HoE_);
-    outT->Branch("Photon_e1x5",&PhotonE1x5_);
-    outT->Branch("Photon_e2x5",&PhotonE2x5_);
-    outT->Branch("Photon_e5x5",&PhotonE5x5_);
-    outT->Branch("Photon_full5x5_e1x5",&PhotonFull5x5E1x5_);
-    outT->Branch("Photon_full5x5_e2x5",&PhotonFull5x5E2x5_);
-    outT->Branch("Photon_full5x5_e5x5",&PhotonFull5x5E5x5_);
-    outT->Branch("Photon_seedE",&PhotonSeedE_);
-    outT->Branch("Photon_eMax",&PhotonEMax_);
-    outT->Branch("Photon_e2nd",&PhotonE2nd_);
-    outT->Branch("Photon_e3x3",&PhotonE3x3_);
-    outT->Branch("Photon_eTop",&PhotonETop_);
-    outT->Branch("Photon_eBottom",&PhotonEBottom_);
-    outT->Branch("Photon_eLeft",&PhotonELeft_);
-    outT->Branch("Photon_eRight",&PhotonERight_);
-    outT->Branch("Photon_chIso",&PhotonChIso_);
-    outT->Branch("Photon_nhIso",&PhotonNhIso_);
-    outT->Branch("Photon_phIso",&PhotonPhIso_);
-    outT->Branch("Photon_puChIso",&PhotonPuChIso_);
-    outT->Branch("Photon_puppiChIso",&PhotonPuppiChIso_);
-    outT->Branch("Photon_puppiNhIso",&PhotonPuppiNhIso_);
-    outT->Branch("Photon_puppiPhIso",&PhotonPuppiPhIso_);
-    outT->Branch("Photon_trkIso",&PhotonTrkIso_);
-    outT->Branch("Photon_ecalIso",&PhotonEcalIso_);
-    outT->Branch("Photon_hcalIso",&PhotonHcalIso_);
-    outT->Branch("Photon_passElectronVeto",&PhotonPassElectronVeto_);
-    outT->Branch("Photon_hasPixelSeed",&PhotonHasPixelSeed_);
-    outT->Branch("Photon_isEB",&PhotonIsEB_);
-    outT->Branch("Photon_isEE",&PhotonIsEE_);
-    outT->Branch("Photon_isEBEEGap",&PhotonIsEBEEGap_);
 
     // OOT Photons
     outT->Branch("nootPhoton",&nOOTPhotons_);
@@ -345,155 +320,27 @@ void NtupleContainerV2::CreateTreeBranches() {
     outT->Branch("ootPhoton_eta",&ootPhotonEta_);
     outT->Branch("ootPhoton_phi",&ootPhotonPhi_);
     outT->Branch("ootPhoton_pt",&ootPhotonPt_);
-    outT->Branch("ootPhoton_energy",&ootPhotonEnergy_);
-    outT->Branch("ootPhoton_scRawE",&ootPhotonScRawE_);
-    outT->Branch("ootPhoton_scEta",&ootPhotonScEta_);
-    outT->Branch("ootPhoton_scPhi",&ootPhotonScPhi_);
-    outT->Branch("ootPhoton_scEtaWidth",&ootPhotonScEtaWidth_);
-    outT->Branch("ootPhoton_scPhiWidth",&ootPhotonScPhiWidth_);
-    outT->Branch("ootPhoton_r9",&ootPhotonR9_);
-    outT->Branch("ootPhoton_full5x5_r9",&ootPhotonFull5x5R9_);
-    outT->Branch("ootPhoton_sIeIe",&ootPhotonSIeIe_);
-    outT->Branch("ootPhoton_full5x5_sIeIe",&ootPhotonFull5x5SIeIe_);
-    outT->Branch("ootPhoton_HoE",&ootPhotonHoE_);
-    outT->Branch("ootPhoton_full5x5_HoE",&ootPhotonFull5x5HoE_);
-    outT->Branch("ootPhoton_e1x5",&ootPhotonE1x5_);
-    outT->Branch("ootPhoton_e2x5",&ootPhotonE2x5_);
-    outT->Branch("ootPhoton_e5x5",&ootPhotonE5x5_);
-    outT->Branch("ootPhoton_full5x5_e1x5",&ootPhotonFull5x5E1x5_);
-    outT->Branch("ootPhoton_full5x5_e2x5",&ootPhotonFull5x5E2x5_);
-    outT->Branch("ootPhoton_full5x5_e5x5",&ootPhotonFull5x5E5x5_);
-    outT->Branch("ootPhoton_seedE",&ootPhotonSeedE_);
-    outT->Branch("ootPhoton_eMax",&ootPhotonEMax_);
-    outT->Branch("ootPhoton_e2nd",&ootPhotonE2nd_);
-    outT->Branch("ootPhoton_e3x3",&ootPhotonE3x3_);
-    outT->Branch("ootPhoton_eTop",&ootPhotonETop_);
-    outT->Branch("ootPhoton_eBottom",&ootPhotonEBottom_);
-    outT->Branch("ootPhoton_eLeft",&ootPhotonELeft_);
-    outT->Branch("ootPhoton_eRight",&ootPhotonERight_);
-    outT->Branch("ootPhoton_chIso",&ootPhotonChIso_);
-    outT->Branch("ootPhoton_nhIso",&ootPhotonNhIso_);
-    outT->Branch("ootPhoton_phIso",&ootPhotonPhIso_);
-    outT->Branch("ootPhoton_puChIso",&ootPhotonPuChIso_);
-    outT->Branch("ootPhoton_puppiChIso",&ootPhotonPuppiChIso_);
-    outT->Branch("ootPhoton_puppiNhIso",&ootPhotonPuppiNhIso_);
-    outT->Branch("ootPhoton_puppiPhIso",&ootPhotonPuppiPhIso_);
-    outT->Branch("ootPhoton_trkIso",&ootPhotonTrkIso_);
-    outT->Branch("ootPhoton_ecalIso",&ootPhotonEcalIso_);
-    outT->Branch("ootPhoton_hcalIso",&ootPhotonHcalIso_);
-    outT->Branch("ootPhoton_passElectronVeto",&ootPhotonPassElectronVeto_);
-    outT->Branch("ootPhoton_hasPixelSeed",&ootPhotonHasPixelSeed_);
-    outT->Branch("ootPhoton_isEB",&ootPhotonIsEB_);
-    outT->Branch("ootPhoton_isEE",&ootPhotonIsEE_);
-    outT->Branch("ootPhoton_isEBEEGap",&ootPhotonIsEBEEGap_);
 
     // Isolated Tracks
     outT->Branch("nIsoTrack",&nIsoTrack_);
     outT->Branch("IsoTrack_pt",&isoTrackPt_);
     outT->Branch("IsoTrack_eta",&isoTrackEta_);
     outT->Branch("IsoTrack_phi",&isoTrackPhi_);
-    outT->Branch("IsoTrack_p",&isoTrackP_);
-    outT->Branch("IsoTrack_charge",&isoTrackCharge_);
-    outT->Branch("IsoTrack_dxy",&isoTrackDxy_);
-    outT->Branch("IsoTrack_dz",&isoTrackDz_);
-    outT->Branch("IsoTrack_dxyErr",&isoTrackDxyErr_);
-    outT->Branch("IsoTrack_dzErr",&isoTrackDzErr_);
-    outT->Branch("IsoTrack_pfIso03_chHad",&isoTrackPfIso03ChHad_);
-    outT->Branch("IsoTrack_pfIso03_nhHad",&isoTrackPfIso03NhHad_);
-    outT->Branch("IsoTrack_pfIso03_pho",&isoTrackPfIso03Pho_);
-    outT->Branch("IsoTrack_pfIso03_pu",&isoTrackPfIso03Pu_);
-    outT->Branch("IsoTrack_miniIso_chHad",&isoTrackMiniIsoChHad_);
-    outT->Branch("IsoTrack_miniIso_nhHad",&isoTrackMiniIsoNhHad_);
-    outT->Branch("IsoTrack_miniIso_pho",&isoTrackMiniIsoPho_);
-    outT->Branch("IsoTrack_miniIso_pu",&isoTrackMiniIsoPu_);
-    outT->Branch("IsoTrack_matchedCaloJetEmE",&isoTrackMatchedCaloJetEmE_);
-    outT->Branch("IsoTrack_matchedCaloJetHadE",&isoTrackMatchedCaloJetHadE_);
-    outT->Branch("IsoTrack_isHighPurity",&isoTrackIsHighPurity_);
-    outT->Branch("IsoTrack_isTight",&isoTrackIsTight_);
-    outT->Branch("IsoTrack_isLoose",&isoTrackIsLoose_);
-    outT->Branch("IsoTrack_nValidHits",&isoTrackNValidHits_);
-    outT->Branch("IsoTrack_nValidPixHits",&isoTrackNValidPixHits_);
-    outT->Branch("IsoTrack_nValidStripHits",&isoTrackNValidStripHits_);
-    outT->Branch("IsoTrack_lostInnerLayers",&isoTrackLostInnerLayers_);
-    outT->Branch("IsoTrack_lostLayers",&isoTrackLostLayers_);
-    outT->Branch("IsoTrack_lostOuterLayers",&isoTrackLostOuterLayers_);
-    outT->Branch("IsoTrack_dEdxStrip",&isoTrackDEdxStrip_);
-    outT->Branch("IsoTrack_dEdxPixel",&isoTrackDEdxPixel_);
-    outT->Branch("IsoTrack_fromPV",&isoTrackFromPV_);
-    outT->Branch("IsoTrack_deltaEta",&isoTrackDeltaEta_);
-    outT->Branch("IsoTrack_deltaPhi",&isoTrackDeltaPhi_);
-    outT->Branch("IsoTrack_pfLepOverlap",&isoTrackPfLepOverlap_);
-    outT->Branch("IsoTrack_pfNeutralSum",&isoTrackPfNeutralSum_);
 
     // PF Candidates
     outT->Branch("nPFCand",&nPFCand_);
     outT->Branch("PFCand_pt",&pfCandPt_);
     outT->Branch("PFCand_eta",&pfCandEta_);
     outT->Branch("PFCand_phi",&pfCandPhi_);
-    outT->Branch("PFCand_energy",&pfCandEnergy_);
-    outT->Branch("PFCand_charge",&pfCandCharge_);
-    outT->Branch("PFCand_pdgId",&pfCandPdgId_);
-    outT->Branch("PFCand_hasTrackDetails",&pfCandHasTrackDetails_);
-    outT->Branch("PFCand_dxy",&pfCandDxy_);
-    outT->Branch("PFCand_dxyErr",&pfCandDxyErr_);
-    outT->Branch("PFCand_dz",&pfCandDz_);
-    outT->Branch("PFCand_dzErr",&pfCandDzErr_);
-    outT->Branch("PFCand_trkChi2",&pfCandTrkChi2_);
-    outT->Branch("PFCand_numHits",&pfCandNumHits_);
-    outT->Branch("PFCand_numPixHits",&pfCandNumPixHits_);
-    outT->Branch("PFCand_pixelLayers",&pfCandPixelLayers_);
-    outT->Branch("PFCand_stripLayers",&pfCandStripLayers_);
-    outT->Branch("PFCand_trackerLayers",&pfCandTrackerLayers_);
-    outT->Branch("PFCand_lostInnerHits",&pfCandLostInnerHits_);
-    outT->Branch("PFCand_trkHighPurity",&pfCandTrkHighPurity_);
-    outT->Branch("PFCand_trkAlgo",&pfCandTrkAlgo_);
-    outT->Branch("PFCand_fromPV",&pfCandFromPV_);
-    outT->Branch("PFCand_pvAssocQuality",&pfCandPvAssocQuality_);
-    outT->Branch("PFCand_dzAssocPV",&pfCandDzAssocPV_);
-    outT->Branch("PFCand_caloFrac",&pfCandCaloFrac_);
-    outT->Branch("PFCand_hcalFrac",&pfCandHcalFrac_);
-    outT->Branch("PFCand_rawCaloFrac",&pfCandRawCaloFrac_);
-    outT->Branch("PFCand_rawHcalFrac",&pfCandRawHcalFrac_);
-    outT->Branch("PFCand_puppiWeight",&pfCandPuppiWeight_);
-    outT->Branch("PFCand_puppiWeightNoLep",&pfCandPuppiWeightNoLep_);
-    outT->Branch("PFCand_isGoodEgamma",&pfCandIsGoodEgamma_);
-    outT->Branch("PFCand_isIsolatedChHad",&pfCandIsIsolatedChHad_);
 
     // Lost Tracks
     outT->Branch("nLostTrack",&nLostTrack_);
     outT->Branch("LostTrack_pt",&lostTrackPt_);
     outT->Branch("LostTrack_eta",&lostTrackEta_);
     outT->Branch("LostTrack_phi",&lostTrackPhi_);
-    outT->Branch("LostTrack_energy",&lostTrackEnergy_);
-    outT->Branch("LostTrack_charge",&lostTrackCharge_);
-    outT->Branch("LostTrack_pdgId",&lostTrackPdgId_);
-    outT->Branch("LostTrack_hasTrackDetails",&lostTrackHasTrackDetails_);
-    outT->Branch("LostTrack_dxy",&lostTrackDxy_);
-    outT->Branch("LostTrack_dxyErr",&lostTrackDxyErr_);
-    outT->Branch("LostTrack_dz",&lostTrackDz_);
-    outT->Branch("LostTrack_dzErr",&lostTrackDzErr_);
-    outT->Branch("LostTrack_trkChi2",&lostTrackTrkChi2_);
-    outT->Branch("LostTrack_numHits",&lostTrackNumHits_);
-    outT->Branch("LostTrack_numPixHits",&lostTrackNumPixHits_);
-    outT->Branch("LostTrack_pixelLayers",&lostTrackPixelLayers_);
-    outT->Branch("LostTrack_stripLayers",&lostTrackStripLayers_);
-    outT->Branch("LostTrack_trackerLayers",&lostTrackTrackerLayers_);
-    outT->Branch("LostTrack_lostInnerHits",&lostTrackLostInnerHits_);
-    outT->Branch("LostTrack_trkHighPurity",&lostTrackTrkHighPurity_);
-    outT->Branch("LostTrack_trkAlgo",&lostTrackTrkAlgo_);
-    outT->Branch("LostTrack_fromPV",&lostTrackFromPV_);
-    outT->Branch("LostTrack_pvAssocQuality",&lostTrackPvAssocQuality_);
-    outT->Branch("LostTrack_dzAssocPV",&lostTrackDzAssocPV_);
-    outT->Branch("LostTrack_caloFrac",&lostTrackCaloFrac_);
-    outT->Branch("LostTrack_hcalFrac",&lostTrackHcalFrac_);
-    outT->Branch("LostTrack_rawCaloFrac",&lostTrackRawCaloFrac_);
-    outT->Branch("LostTrack_rawHcalFrac",&lostTrackRawHcalFrac_);
-    outT->Branch("LostTrack_puppiWeight",&lostTrackPuppiWeight_);
-    outT->Branch("LostTrack_puppiWeightNoLep",&lostTrackPuppiWeightNoLep_);
-    outT->Branch("LostTrack_isGoodEgamma",&lostTrackIsGoodEgamma_);
-    outT->Branch("LostTrack_isIsolatedChHad",&lostTrackIsIsolatedChHad_);
 
-    // Photon conversions
+    // Photon conversions (unused -- fill loop is disabled in ElectronSkimmer.cc, see nt.nConversions_)
+    /*
     outT->Branch("nConversion",&nConversions_);
     outT->Branch("Conversion_pt",&conversionPt_);
     outT->Branch("Conversion_eta",&conversionEta_);
@@ -545,7 +392,7 @@ void NtupleContainerV2::CreateTreeBranches() {
     outT->Branch("Conversion_tk2_dxyPV",&conversion_Trk2dxyPV_);
     outT->Branch("Conversion_tk2_dz",&conversion_Trk2dz_);
     outT->Branch("Conversion_tk2_dzPV",&conversion_Trk2dzPV_);
-    
+    */
 
     // Jets
     outT->Branch("nPFJetAll",&PFNJetAll_);
@@ -590,6 +437,8 @@ void NtupleContainerV2::CreateTreeBranches() {
     outT->Branch("PFJet_corrJERDown_eta",&PFJetCorrectedJERDownEta_);
     outT->Branch("PFJet_corrJERDown_phi",&PFJetCorrectedJERDownPhi_);
     outT->Branch("HEM_flag",&PFHEMFlag_);
+    outT->Branch("PFHT",&PFHT_);
+    outT->Branch("PFJetPtLeading",&PFJetPtLeading_);
 
     // MET
     outT->Branch("PFMET_ET",&PFMET_ET_);
@@ -825,6 +674,51 @@ void NtupleContainerV2::CreateTreeBranches() {
 
 }
 
+// Mirrors the subset of CreateTreeBranches() that ElectronSkimmer::analyze() fills
+// unconditionally, before the ptmiss preselection gate. The electron-count and jet
+// summary branches (nElectron, nLptElectron, nAllLptElectron, nPFJet, PFHT,
+// PFJetPtLeading) are filled via a lightweight pass for events that fail the
+// preselection, and via the full reconstruction otherwise -- see analyze().
+void NtupleContainerV2::CreateSlimTreeBranches() {
+
+    outT_slim->Branch("trigFired",&fired_);
+    outT_slim->Branch("eventNum", &eventNum_);
+    outT_slim->Branch("lumiSec", &lumiSec_);
+    outT_slim->Branch("runNum", &runNum_);
+    for (int i = 0; i < numTrigs_; i++) {
+        TString branchName = TString::Format("trig_%s", trigNames_[i].c_str());
+        outT_slim->Branch(branchName,&trigPassed_[i],branchName+"/O");
+    }
+
+    outT_slim->Branch("METFiltersFailBits",&METFiltersFailBits_);
+
+    // Stored as Float16_t (leaflist "/f") -- these are event-level bookkeeping
+    // quantities only (preselection efficiency/normalization), so the reduced
+    // mantissa precision (~1e-4 relative) is not analysis-sensitive here.
+    outT_slim->Branch("PFMET_ET",&PFMET_ET_,"PFMET_ET/f");
+    outT_slim->Branch("PFMET_pt",&PFMET_Pt_,"PFMET_pt/f");
+    outT_slim->Branch("PFMET_phi",&PFMET_Phi_,"PFMET_phi/f");
+
+    outT_slim->Branch("CaloMET_ET",&CaloMET_ET_,"CaloMET_ET/f");
+    outT_slim->Branch("CaloMET_pt",&CaloMET_Pt_,"CaloMET_pt/f");
+    outT_slim->Branch("CaloMET_phi",&CaloMET_Phi_,"CaloMET_phi/f");
+
+    outT_slim->Branch("fixedGridRhoFastjetAll",&fixedGridRhoFastjetAll_,"fixedGridRhoFastjetAll/f");
+
+    outT_slim->Branch("nElectron",&nElectronDefault_);
+    outT_slim->Branch("nLptElectron",&nElectronLowPt_);
+    outT_slim->Branch("nAllLptElectron",&nElectronAllLowPt_);
+    outT_slim->Branch("nPFJet",&PFNJet_);
+    outT_slim->Branch("PFHT",&PFHT_,"PFHT/f");
+    outT_slim->Branch("PFJetPtLeading",&PFJetPtLeading_,"PFJetPtLeading/f");
+
+    if (!isData_) {
+        outT_slim->Branch("genWgt", &genwgt_);
+        outT_slim->Branch("genPU_obs", &genpuobs_);
+        outT_slim->Branch("genPU_true", &genputrue_);
+    }
+}
+
 void NtupleContainerV2::ClearTreeBranches() {
     // Reset trigger
     fired_ = 0;
@@ -964,6 +858,11 @@ void NtupleContainerV2::ClearTreeBranches() {
     recoElectronE_.clear();
     recoElectronVxy_.clear();
     recoElectronVz_.clear();
+    recoElectronSVProxyValid_.clear();
+    recoElectronSVProxyX_.clear();
+    recoElectronSVProxyY_.clear();
+    recoElectronSVProxyZ_.clear();
+    recoElectronSVProxyVxy_.clear();
     recoElectronDxy_.clear();
     recoElectronDxyError_.clear();
     recoElectronDz_.clear();
@@ -1021,6 +920,11 @@ void NtupleContainerV2::ClearTreeBranches() {
     recoLowPtElectronE_.clear();
     recoLowPtElectronVxy_.clear();
     recoLowPtElectronVz_.clear();
+    recoLowPtElectronSVProxyValid_.clear();
+    recoLowPtElectronSVProxyX_.clear();
+    recoLowPtElectronSVProxyY_.clear();
+    recoLowPtElectronSVProxyZ_.clear();
+    recoLowPtElectronSVProxyVxy_.clear();
     recoLowPtElectronDxy_.clear();
     recoLowPtElectronDxyError_.clear();
     recoLowPtElectronDz_.clear();
@@ -1094,6 +998,11 @@ void NtupleContainerV2::ClearTreeBranches() {
     recoAllLowPtElectronE_.clear();
     recoAllLowPtElectronVxy_.clear();
     recoAllLowPtElectronVz_.clear();
+    recoAllLowPtElectronSVProxyValid_.clear();
+    recoAllLowPtElectronSVProxyX_.clear();
+    recoAllLowPtElectronSVProxyY_.clear();
+    recoAllLowPtElectronSVProxyZ_.clear();
+    recoAllLowPtElectronSVProxyVxy_.clear();
     recoAllLowPtElectronDxy_.clear();
     recoAllLowPtElectronDxyError_.clear();
     recoAllLowPtElectronDz_.clear();
@@ -1198,47 +1107,6 @@ void NtupleContainerV2::ClearTreeBranches() {
     PhotonEta_.clear();
     PhotonPhi_.clear();
     PhotonPt_.clear();
-    PhotonEnergy_.clear();
-    PhotonScRawE_.clear();
-    PhotonScEta_.clear();
-    PhotonScPhi_.clear();
-    PhotonScEtaWidth_.clear();
-    PhotonScPhiWidth_.clear();
-    PhotonR9_.clear();
-    PhotonFull5x5R9_.clear();
-    PhotonSIeIe_.clear();
-    PhotonFull5x5SIeIe_.clear();
-    PhotonHoE_.clear();
-    PhotonFull5x5HoE_.clear();
-    PhotonE1x5_.clear();
-    PhotonE2x5_.clear();
-    PhotonE5x5_.clear();
-    PhotonFull5x5E1x5_.clear();
-    PhotonFull5x5E2x5_.clear();
-    PhotonFull5x5E5x5_.clear();
-    PhotonSeedE_.clear();
-    PhotonEMax_.clear();
-    PhotonE2nd_.clear();
-    PhotonE3x3_.clear();
-    PhotonETop_.clear();
-    PhotonEBottom_.clear();
-    PhotonELeft_.clear();
-    PhotonERight_.clear();
-    PhotonChIso_.clear();
-    PhotonNhIso_.clear();
-    PhotonPhIso_.clear();
-    PhotonPuChIso_.clear();
-    PhotonPuppiChIso_.clear();
-    PhotonPuppiNhIso_.clear();
-    PhotonPuppiPhIso_.clear();
-    PhotonTrkIso_.clear();
-    PhotonEcalIso_.clear();
-    PhotonHcalIso_.clear();
-    PhotonPassElectronVeto_.clear();
-    PhotonHasPixelSeed_.clear();
-    PhotonIsEB_.clear();
-    PhotonIsEE_.clear();
-    PhotonIsEBEEGap_.clear();
 
     // OOT Photons
     nOOTPhotons_ = 0;
@@ -1246,153 +1114,24 @@ void NtupleContainerV2::ClearTreeBranches() {
     ootPhotonEta_.clear();
     ootPhotonPhi_.clear();
     ootPhotonPt_.clear();
-    ootPhotonEnergy_.clear();
-    ootPhotonScRawE_.clear();
-    ootPhotonScEta_.clear();
-    ootPhotonScPhi_.clear();
-    ootPhotonScEtaWidth_.clear();
-    ootPhotonScPhiWidth_.clear();
-    ootPhotonR9_.clear();
-    ootPhotonFull5x5R9_.clear();
-    ootPhotonSIeIe_.clear();
-    ootPhotonFull5x5SIeIe_.clear();
-    ootPhotonHoE_.clear();
-    ootPhotonFull5x5HoE_.clear();
-    ootPhotonE1x5_.clear();
-    ootPhotonE2x5_.clear();
-    ootPhotonE5x5_.clear();
-    ootPhotonFull5x5E1x5_.clear();
-    ootPhotonFull5x5E2x5_.clear();
-    ootPhotonFull5x5E5x5_.clear();
-    ootPhotonSeedE_.clear();
-    ootPhotonEMax_.clear();
-    ootPhotonE2nd_.clear();
-    ootPhotonE3x3_.clear();
-    ootPhotonETop_.clear();
-    ootPhotonEBottom_.clear();
-    ootPhotonELeft_.clear();
-    ootPhotonERight_.clear();
-    ootPhotonChIso_.clear();
-    ootPhotonNhIso_.clear();
-    ootPhotonPhIso_.clear();
-    ootPhotonPuChIso_.clear();
-    ootPhotonPuppiChIso_.clear();
-    ootPhotonPuppiNhIso_.clear();
-    ootPhotonPuppiPhIso_.clear();
-    ootPhotonTrkIso_.clear();
-    ootPhotonEcalIso_.clear();
-    ootPhotonHcalIso_.clear();
-    ootPhotonPassElectronVeto_.clear();
-    ootPhotonHasPixelSeed_.clear();
-    ootPhotonIsEB_.clear();
-    ootPhotonIsEE_.clear();
-    ootPhotonIsEBEEGap_.clear();
 
     // Isolated Tracks
     nIsoTrack_ = 0;
     isoTrackPt_.clear();
     isoTrackEta_.clear();
     isoTrackPhi_.clear();
-    isoTrackP_.clear();
-    isoTrackCharge_.clear();
-    isoTrackDxy_.clear();
-    isoTrackDz_.clear();
-    isoTrackDxyErr_.clear();
-    isoTrackDzErr_.clear();
-    isoTrackPfIso03ChHad_.clear();
-    isoTrackPfIso03NhHad_.clear();
-    isoTrackPfIso03Pho_.clear();
-    isoTrackPfIso03Pu_.clear();
-    isoTrackMiniIsoChHad_.clear();
-    isoTrackMiniIsoNhHad_.clear();
-    isoTrackMiniIsoPho_.clear();
-    isoTrackMiniIsoPu_.clear();
-    isoTrackMatchedCaloJetEmE_.clear();
-    isoTrackMatchedCaloJetHadE_.clear();
-    isoTrackIsHighPurity_.clear();
-    isoTrackIsTight_.clear();
-    isoTrackIsLoose_.clear();
-    isoTrackNValidHits_.clear();
-    isoTrackNValidPixHits_.clear();
-    isoTrackNValidStripHits_.clear();
-    isoTrackLostInnerLayers_.clear();
-    isoTrackLostLayers_.clear();
-    isoTrackLostOuterLayers_.clear();
-    isoTrackDEdxStrip_.clear();
-    isoTrackDEdxPixel_.clear();
-    isoTrackFromPV_.clear();
-    isoTrackDeltaEta_.clear();
-    isoTrackDeltaPhi_.clear();
-    isoTrackPfLepOverlap_.clear();
-    isoTrackPfNeutralSum_.clear();
 
     // PF Candidates
     nPFCand_ = 0;
     pfCandPt_.clear();
     pfCandEta_.clear();
     pfCandPhi_.clear();
-    pfCandEnergy_.clear();
-    pfCandCharge_.clear();
-    pfCandPdgId_.clear();
-    pfCandHasTrackDetails_.clear();
-    pfCandDxy_.clear();
-    pfCandDxyErr_.clear();
-    pfCandDz_.clear();
-    pfCandDzErr_.clear();
-    pfCandTrkChi2_.clear();
-    pfCandNumHits_.clear();
-    pfCandNumPixHits_.clear();
-    pfCandPixelLayers_.clear();
-    pfCandStripLayers_.clear();
-    pfCandTrackerLayers_.clear();
-    pfCandLostInnerHits_.clear();
-    pfCandTrkHighPurity_.clear();
-    pfCandTrkAlgo_.clear();
-    pfCandFromPV_.clear();
-    pfCandPvAssocQuality_.clear();
-    pfCandDzAssocPV_.clear();
-    pfCandCaloFrac_.clear();
-    pfCandHcalFrac_.clear();
-    pfCandRawCaloFrac_.clear();
-    pfCandRawHcalFrac_.clear();
-    pfCandPuppiWeight_.clear();
-    pfCandPuppiWeightNoLep_.clear();
-    pfCandIsGoodEgamma_.clear();
-    pfCandIsIsolatedChHad_.clear();
 
     // Lost Tracks
     nLostTrack_ = 0;
     lostTrackPt_.clear();
     lostTrackEta_.clear();
     lostTrackPhi_.clear();
-    lostTrackEnergy_.clear();
-    lostTrackCharge_.clear();
-    lostTrackPdgId_.clear();
-    lostTrackHasTrackDetails_.clear();
-    lostTrackDxy_.clear();
-    lostTrackDxyErr_.clear();
-    lostTrackDz_.clear();
-    lostTrackDzErr_.clear();
-    lostTrackTrkChi2_.clear();
-    lostTrackNumHits_.clear();
-    lostTrackNumPixHits_.clear();
-    lostTrackPixelLayers_.clear();
-    lostTrackStripLayers_.clear();
-    lostTrackTrackerLayers_.clear();
-    lostTrackLostInnerHits_.clear();
-    lostTrackTrkHighPurity_.clear();
-    lostTrackTrkAlgo_.clear();
-    lostTrackFromPV_.clear();
-    lostTrackPvAssocQuality_.clear();
-    lostTrackDzAssocPV_.clear();
-    lostTrackCaloFrac_.clear();
-    lostTrackHcalFrac_.clear();
-    lostTrackRawCaloFrac_.clear();
-    lostTrackRawHcalFrac_.clear();
-    lostTrackPuppiWeight_.clear();
-    lostTrackPuppiWeightNoLep_.clear();
-    lostTrackIsGoodEgamma_.clear();
-    lostTrackIsIsolatedChHad_.clear();
 
     // Photon conversions
     nConversions_ = 0;
@@ -1490,6 +1229,8 @@ void NtupleContainerV2::ClearTreeBranches() {
     PFJetCorrectedJERDownEta_.clear();
     PFJetCorrectedJERDownPhi_.clear();
     PFHEMFlag_ = false;
+    PFHT_ = 0;
+    PFJetPtLeading_ = -999;
 
     // MET 
     PFMET_ET_ = -999;

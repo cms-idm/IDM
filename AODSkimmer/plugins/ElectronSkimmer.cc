@@ -112,6 +112,7 @@
 #include "DataFormats/MuonReco/interface/Muon.h"  // for SF computation, add prompt muon channels
 
 #include "TTree.h"
+#include "TFile.h"
 #include "TMath.h"
 
 class ElectronSkimmer : public edm::one::EDAnalyzer<edm::one::WatchRuns, edm::one::SharedResources>  {
@@ -137,10 +138,22 @@ class ElectronSkimmer : public edm::one::EDAnalyzer<edm::one::WatchRuns, edm::on
       NtupleContainerV2 nt;
       edm::Service<TFileService> fs;
 
+      // Slim, all-events tree for background samples: written to its own
+      // output file (not managed by TFileService) since it lives alongside,
+      // not inside, the full ntuple file.
+      TFile *slimTFile_;
+      TTree *outT_slim;
+      std::string slimOutfile_;
+
       std::mt19937 m_random_generator;
 
       bool isData;
       bool isSignal;
+      // Selects the criterion gating the full-event background stream: "metThreshold" (ptmiss
+      // cut) or "hlt" (OR of hltSelectionPaths_). Irrelevant for signal.
+      std::string selectionMode_;
+      double metThreshold_;
+      std::vector<std::string> hltSelectionPaths_;
       std::string year;
       const std::string triggerProcessName_;
       // Run3 modified
@@ -230,8 +243,14 @@ class ElectronSkimmer : public edm::one::EDAnalyzer<edm::one::WatchRuns, edm::on
 //
 ElectronSkimmer::ElectronSkimmer(const edm::ParameterSet& ps)
  :
+   slimTFile_(nullptr),
+   outT_slim(nullptr),
+   slimOutfile_(ps.getParameter<std::string>("slimOutfile")),
    isData(ps.getParameter<bool>("isData")),
    isSignal(ps.getParameter<bool>("isSignal")),
+   selectionMode_(ps.getParameter<std::string>("selectionMode")),
+   metThreshold_(ps.getParameter<double>("metThreshold")),
+   hltSelectionPaths_(ps.getParameter<std::vector<std::string> >("hltSelectionPaths")),
    year(ps.getParameter<std::string>("year")),
    triggerProcessName_(ps.getParameter<std::string>("triggerProcessName")),
    metFilterName_(ps.getParameter<std::string>("metFilterName")),
@@ -385,10 +404,34 @@ void ElectronSkimmer::beginJob()
       nt.numTrigs_++;
    }
    nt.CreateTreeBranches();
+
+   // Slim, all-events tree -- background only. Signal is exempt from the background
+   // preselection (see analyze()), so a separate slim stream would be redundant.
+   if (!isSignal) {
+      std::string slimName = slimOutfile_;
+      if (slimName.empty()) {
+         std::string mainName = fs->file().GetName();
+         size_t pos = mainName.rfind(".root");
+         slimName = (pos != std::string::npos) ? mainName.substr(0,pos) + "_slim.root" : mainName + "_slim.root";
+      }
+      slimTFile_ = new TFile(slimName.c_str(), "RECREATE");
+      slimTFile_->mkdir("ntuples")->cd();
+      outT_slim = new TTree("outT", "outT");
+      nt.SetSlimTree(outT_slim);
+      nt.CreateSlimTreeBranches();
+   }
 }
 
 // ------------ method called once each job just after ending the event loop  ------------
-void ElectronSkimmer::endJob() {}
+void ElectronSkimmer::endJob() {
+   if (slimTFile_) {
+      slimTFile_->cd("ntuples");
+      outT_slim->Write();
+      slimTFile_->Close();
+      delete slimTFile_;
+      slimTFile_ = nullptr;
+   }
+}
 
 void ElectronSkimmer::endRun(edm::Run const& iRun, edm::EventSetup const& iSetup) {}
 
@@ -400,6 +443,18 @@ ElectronSkimmer::fillDescriptions(edm::ConfigurationDescriptions& descriptions) 
    // Inputs from the run_ntuplizer_cfg python (cmsRun inputs)
    desc.add<bool>("isData", 0);
    desc.add<bool>("isSignal",0);
+   // Criterion gating the full-event background stream; irrelevant for signal.
+   // "metThreshold": nt.PFMET_Pt_ >= metThreshold. "hlt": OR of hltSelectionPaths.
+   desc.add<std::string>("selectionMode", "metThreshold");
+   // ptmiss threshold (GeV), used when selectionMode == "metThreshold"
+   desc.add<double>("metThreshold", 200.0);
+   // Trigger paths ORed together when selectionMode == "hlt". An event passes if any of these
+   // fired; if none of them exist in the run's trigger menu, the event fails the selection.
+   desc.add<std::vector<std::string> >("hltSelectionPaths",
+       {"HLT_PFMETNoMu120_PFMHTNoMu120_IDTight", "HLT_PFMETNoMu120_PFMHTNoMu120_IDTight_PFHT60"});
+   // Output file for the slim, all-events background stream. If left empty, it is derived
+   // by inserting "_slim" before the ".root" extension of the main TFileService output file.
+   desc.add<std::string>("slimOutfile","");
    desc.add<std::string>("year","none"); // placeholder, is updated dynamically later
    desc.add<std::string>("triggerProcessName", "HLT");
    desc.add<std::string>("metFilterName","PAT");
@@ -495,21 +550,21 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    nt.eventNum_ = iEvent.id().event();
    nt.lumiSec_ = iEvent.luminosityBlock();
    nt.runNum_ = iEvent.id().run();
-   reco::Vertex pv = (*primaryVertexHandle_).at(0);
-   nt.PV_x_ = pv.x();
-   nt.PV_y_ = pv.y();
-   nt.PV_z_ = pv.z();
-      
-   double nPV = 0;
-   for (const auto & ele : *primaryVertexHandle_) {
-     nPV++;
-   }
-   nt.numPV_ = nPV;
 
-   auto beamspot = *beamspotHandle_;
-   // Set up objects for vertex reco - different for Run3
-   const TransientTrackBuilder* theB = &iSetup.getData(ttkToken_);
-   KalmanVertexFitter kvf(true);
+   // Pileup density (event-level, always filled regardless of the background preselection below)
+   nt.fixedGridRhoFastjetAll_ = rhoHandle_.isValid() ? *(rhoHandle_.product()) : -999;
+
+   // Gen weight & gen pileup truth (event-level, always filled for MC regardless of the background preselection below)
+   if (!isData) {
+      nt.genwgt_ = genEvtInfoHandle_->weight();
+      for (const auto & pileupInfo : *pileupInfosHandle_) {
+         if (pileupInfo.getBunchCrossing() == 0) {
+            nt.genpuobs_ = pileupInfo.getPU_NumInteractions();
+            nt.genputrue_ = pileupInfo.getTrueNumInteractions();
+            break;
+         }
+      }
+   }
 
    // MET Filters (as recommended here https://twiki.cern.ch/twiki/bin/view/CMS/MissingETOptionalFiltersRun2#UL_data)
    for (size_t i = 0; i < metFilters_.size(); i++) {
@@ -559,11 +614,51 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       nt.CaloMET_ET_ = met.caloMETSumEt();
    }
 
+   // Only reconstruct electrons/jets/muons/photons/vertices (and everything derived from them)
+   // for events passing the background preselection (metThreshold or hlt, see selectionMode_);
+   // for background, events failing it are instead recorded (event-level info only) in the
+   // slim tree below. Signal samples are exempt from this preselection and always get every
+   // branch filled, regardless of the preselection outcome.
+   bool passesBkgSelection;
+   if (selectionMode_ == "hlt") {
+      passesBkgSelection = false;
+      for (const auto& path : hltSelectionPaths_) {
+         for (size_t idx = 0; idx < trigPaths_.size(); idx++) {
+            if (trigPaths_[idx] == path && trigExist_.at(idx) && nt.trigPassed_[idx]) {
+               passesBkgSelection = true;
+            }
+         }
+      }
+   }
+   else {
+      passesBkgSelection = (nt.PFMET_Pt_ >= metThreshold_);
+   }
+   bool passesPtMiss = isSignal || passesBkgSelection;
+   if (passesPtMiss) {
+
+   reco::Vertex pv = (*primaryVertexHandle_).at(0);
+   nt.PV_x_ = pv.x();
+   nt.PV_y_ = pv.y();
+   nt.PV_z_ = pv.z();
+
+   double nPV = 0;
+   for (const auto & ele : *primaryVertexHandle_) {
+     nPV++;
+   }
+   nt.numPV_ = nPV;
+
+   auto beamspot = *beamspotHandle_;
+   // Set up objects for vertex reco - different for Run3
+   const TransientTrackBuilder* theB = &iSetup.getData(ttkToken_);
+   KalmanVertexFitter kvf(true);
+
    // Handling Jets
    for (auto & jet : *recoJetHandle_) {
       nt.PFNJetAll_++;
       if (helper.JetID(jet,year) && jet.pt() > 30) {
          nt.PFNJet_++;
+         nt.PFHT_ += jet.pt();
+         if (jet.pt() > nt.PFJetPtLeading_) nt.PFJetPtLeading_ = jet.pt();
          nt.PFJetPt_.push_back(jet.pt());
          nt.PFJetEta_.push_back(jet.eta());
          nt.PFJetPhi_.push_back(jet.phi());
@@ -598,8 +693,6 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          nt.PFJetPtRaw_.push_back((1 - jet.jecFactor("Uncorrected"))*jet.pt());
          nt.PFJetEnergyRaw_.push_back((1 - jet.jecFactor("Uncorrected"))*jet.energy());
          nt.PFJetMassRaw_.push_back((1 - jet.jecFactor("Uncorrected"))*jet.mass());
- 
-         nt.fixedGridRhoFastjetAll_ = rhoHandle_.isValid() ? *(rhoHandle_.product()) : -999;
 
          // For JER
          if (!isData) {
@@ -710,6 +803,12 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       nt.recoElectronE_.push_back(ele.energy());
       nt.recoElectronVxy_.push_back(ele.trackPositionAtVtx().rho());
       nt.recoElectronVz_.push_back(ele.trackPositionAtVtx().z());
+      auto svProxy = helper.EstimateSVProxyFromInnermostHit(*track);
+      nt.recoElectronSVProxyValid_.push_back(svProxy.valid);
+      nt.recoElectronSVProxyX_.push_back(svProxy.x);
+      nt.recoElectronSVProxyY_.push_back(svProxy.y);
+      nt.recoElectronSVProxyZ_.push_back(svProxy.z);
+      nt.recoElectronSVProxyVxy_.push_back(svProxy.vxy);
       nt.recoElectronTrkIso_.push_back(ele.trackIso());
       nt.recoElectronTrkRelIso_.push_back(ele.trackIso()/ele.pt());
       nt.recoElectronCaloIso_.push_back(ele.caloIso());
@@ -833,6 +932,14 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       nt.recoAllLowPtElectronE_.push_back(ele.energy());
       nt.recoAllLowPtElectronVxy_.push_back(ele.trackPositionAtVtx().rho());
       nt.recoAllLowPtElectronVz_.push_back(ele.trackPositionAtVtx().z());
+      {
+         auto svProxy = helper.EstimateSVProxyFromInnermostHit(*track);
+         nt.recoAllLowPtElectronSVProxyValid_.push_back(svProxy.valid);
+         nt.recoAllLowPtElectronSVProxyX_.push_back(svProxy.x);
+         nt.recoAllLowPtElectronSVProxyY_.push_back(svProxy.y);
+         nt.recoAllLowPtElectronSVProxyZ_.push_back(svProxy.z);
+         nt.recoAllLowPtElectronSVProxyVxy_.push_back(svProxy.vxy);
+      }
       nt.recoAllLowPtElectronTrkIso_.push_back(ele.trackIso());
       nt.recoAllLowPtElectronTrkRelIso_.push_back(ele.trackIso()/ele.pt());
       nt.recoAllLowPtElectronCaloIso_.push_back(ele.caloIso());
@@ -943,6 +1050,14 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          nt.recoLowPtElectronE_.push_back(ele.energy());
          nt.recoLowPtElectronVxy_.push_back(ele.trackPositionAtVtx().rho());
          nt.recoLowPtElectronVz_.push_back(ele.trackPositionAtVtx().z());
+         {
+            auto svProxy = helper.EstimateSVProxyFromInnermostHit(*track);
+            nt.recoLowPtElectronSVProxyValid_.push_back(svProxy.valid);
+            nt.recoLowPtElectronSVProxyX_.push_back(svProxy.x);
+            nt.recoLowPtElectronSVProxyY_.push_back(svProxy.y);
+            nt.recoLowPtElectronSVProxyZ_.push_back(svProxy.z);
+            nt.recoLowPtElectronSVProxyVxy_.push_back(svProxy.vxy);
+         }
          nt.recoLowPtElectronTrkIso_.push_back(ele.trackIso());
          nt.recoLowPtElectronTrkRelIso_.push_back(ele.trackIso()/ele.pt());
          nt.recoLowPtElectronCaloIso_.push_back(ele.caloIso());
@@ -1239,50 +1354,10 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       nt.PhotonEta_.push_back(ph.eta());
       nt.PhotonPhi_.push_back(ph.phi());
       nt.PhotonPt_.push_back(ph.pt());
-      nt.PhotonEnergy_.push_back(ph.energy());
-      nt.PhotonScRawE_.push_back(ph.superCluster()->rawEnergy());
-      nt.PhotonScEta_.push_back(ph.superCluster()->eta());
-      nt.PhotonScPhi_.push_back(ph.superCluster()->phi());
-      nt.PhotonScEtaWidth_.push_back(ph.superCluster()->etaWidth());
-      nt.PhotonScPhiWidth_.push_back(ph.superCluster()->phiWidth());
-      nt.PhotonR9_.push_back(ph.r9());
-      nt.PhotonFull5x5R9_.push_back(ph.full5x5_r9());
-      nt.PhotonSIeIe_.push_back(ph.sigmaIetaIeta());
-      nt.PhotonFull5x5SIeIe_.push_back(ph.full5x5_sigmaIetaIeta());
-      nt.PhotonHoE_.push_back(ph.hadronicOverEm());
-      nt.PhotonFull5x5HoE_.push_back(ph.full5x5_hadronicOverEm());
-      nt.PhotonE1x5_.push_back(ph.e1x5());
-      nt.PhotonE2x5_.push_back(ph.e2x5());
-      nt.PhotonE5x5_.push_back(ph.e5x5());
-      nt.PhotonFull5x5E1x5_.push_back(ph.full5x5_e1x5());
-      nt.PhotonFull5x5E2x5_.push_back(ph.full5x5_e2x5());
-      nt.PhotonFull5x5E5x5_.push_back(ph.full5x5_e5x5());
-      nt.PhotonSeedE_.push_back(ph.seedEnergy());
-      nt.PhotonEMax_.push_back(ph.eMax());
-      nt.PhotonE2nd_.push_back(ph.e2nd());
-      nt.PhotonE3x3_.push_back(ph.e3x3());
-      nt.PhotonETop_.push_back(ph.eTop());
-      nt.PhotonEBottom_.push_back(ph.eBottom());
-      nt.PhotonELeft_.push_back(ph.eLeft());
-      nt.PhotonERight_.push_back(ph.eRight());
-      nt.PhotonChIso_.push_back(ph.chargedHadronIso());
-      nt.PhotonNhIso_.push_back(ph.neutralHadronIso());
-      nt.PhotonPhIso_.push_back(ph.photonIso());
-      nt.PhotonPuChIso_.push_back(ph.puChargedHadronIso());
-      nt.PhotonPuppiChIso_.push_back(ph.puppiChargedHadronIso());
-      nt.PhotonPuppiNhIso_.push_back(ph.puppiNeutralHadronIso());
-      nt.PhotonPuppiPhIso_.push_back(ph.puppiPhotonIso());
-      nt.PhotonTrkIso_.push_back(ph.trackIso());
-      nt.PhotonEcalIso_.push_back(ph.ecalIso());
-      nt.PhotonHcalIso_.push_back(ph.hcalIso());
-      nt.PhotonPassElectronVeto_.push_back(ph.passElectronVeto());
-      nt.PhotonHasPixelSeed_.push_back(ph.hasPixelSeed());
-      nt.PhotonIsEB_.push_back(ph.isEB());
-      nt.PhotonIsEE_.push_back(ph.isEE());
-      nt.PhotonIsEBEEGap_.push_back(ph.isEBEEGap());
    }
 
-   // Handling OOT photons
+   // Handling OOT photons (signal samples only)
+   if (isSignal) {
    for (const auto & ph : *ootPhotonsHandle_) {
       if (matchesEleSC(ph)) continue;
       nt.nOOTPhotons_++;
@@ -1290,96 +1365,25 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       nt.ootPhotonEta_.push_back(ph.eta());
       nt.ootPhotonPhi_.push_back(ph.phi());
       nt.ootPhotonPt_.push_back(ph.pt());
-      nt.ootPhotonEnergy_.push_back(ph.energy());
-      nt.ootPhotonScRawE_.push_back(ph.superCluster()->rawEnergy());
-      nt.ootPhotonScEta_.push_back(ph.superCluster()->eta());
-      nt.ootPhotonScPhi_.push_back(ph.superCluster()->phi());
-      nt.ootPhotonScEtaWidth_.push_back(ph.superCluster()->etaWidth());
-      nt.ootPhotonScPhiWidth_.push_back(ph.superCluster()->phiWidth());
-      nt.ootPhotonR9_.push_back(ph.r9());
-      nt.ootPhotonFull5x5R9_.push_back(ph.full5x5_r9());
-      nt.ootPhotonSIeIe_.push_back(ph.sigmaIetaIeta());
-      nt.ootPhotonFull5x5SIeIe_.push_back(ph.full5x5_sigmaIetaIeta());
-      nt.ootPhotonHoE_.push_back(ph.hadronicOverEm());
-      nt.ootPhotonFull5x5HoE_.push_back(ph.full5x5_hadronicOverEm());
-      nt.ootPhotonE1x5_.push_back(ph.e1x5());
-      nt.ootPhotonE2x5_.push_back(ph.e2x5());
-      nt.ootPhotonE5x5_.push_back(ph.e5x5());
-      nt.ootPhotonFull5x5E1x5_.push_back(ph.full5x5_e1x5());
-      nt.ootPhotonFull5x5E2x5_.push_back(ph.full5x5_e2x5());
-      nt.ootPhotonFull5x5E5x5_.push_back(ph.full5x5_e5x5());
-      nt.ootPhotonSeedE_.push_back(ph.seedEnergy());
-      nt.ootPhotonEMax_.push_back(ph.eMax());
-      nt.ootPhotonE2nd_.push_back(ph.e2nd());
-      nt.ootPhotonE3x3_.push_back(ph.e3x3());
-      nt.ootPhotonETop_.push_back(ph.eTop());
-      nt.ootPhotonEBottom_.push_back(ph.eBottom());
-      nt.ootPhotonELeft_.push_back(ph.eLeft());
-      nt.ootPhotonERight_.push_back(ph.eRight());
-      nt.ootPhotonChIso_.push_back(ph.chargedHadronIso());
-      nt.ootPhotonNhIso_.push_back(ph.neutralHadronIso());
-      nt.ootPhotonPhIso_.push_back(ph.photonIso());
-      nt.ootPhotonPuChIso_.push_back(ph.puChargedHadronIso());
-      nt.ootPhotonPuppiChIso_.push_back(ph.puppiChargedHadronIso());
-      nt.ootPhotonPuppiNhIso_.push_back(ph.puppiNeutralHadronIso());
-      nt.ootPhotonPuppiPhIso_.push_back(ph.puppiPhotonIso());
-      nt.ootPhotonTrkIso_.push_back(ph.trackIso());
-      nt.ootPhotonEcalIso_.push_back(ph.ecalIso());
-      nt.ootPhotonHcalIso_.push_back(ph.hcalIso());
-      nt.ootPhotonPassElectronVeto_.push_back(ph.passElectronVeto());
-      nt.ootPhotonHasPixelSeed_.push_back(ph.hasPixelSeed());
-      nt.ootPhotonIsEB_.push_back(ph.isEB());
-      nt.ootPhotonIsEE_.push_back(ph.isEE());
-      nt.ootPhotonIsEBEEGap_.push_back(ph.isEBEEGap());
+   }
    }
 
-   // Handling isolated tracks
-   if (isoTrackHandle_.isValid()) {
+   // Handling isolated tracks (signal samples only)
+   if (isSignal && isoTrackHandle_.isValid()) {
       for (const auto & trk : *isoTrackHandle_) {
          if (matchesEleTrack(trk)) continue;
          nt.nIsoTrack_++;
          nt.isoTrackPt_.push_back(trk.pt());
          nt.isoTrackEta_.push_back(trk.eta());
          nt.isoTrackPhi_.push_back(trk.phi());
-         nt.isoTrackP_.push_back(trk.p());
-         nt.isoTrackCharge_.push_back(trk.charge());
-         nt.isoTrackDxy_.push_back(trk.dxy());
-         nt.isoTrackDz_.push_back(trk.dz());
-         nt.isoTrackDxyErr_.push_back(trk.dxyError());
-         nt.isoTrackDzErr_.push_back(trk.dzError());
-         nt.isoTrackPfIso03ChHad_.push_back(trk.pfIsolationDR03().chargedHadronIso());
-         nt.isoTrackPfIso03NhHad_.push_back(trk.pfIsolationDR03().neutralHadronIso());
-         nt.isoTrackPfIso03Pho_.push_back(trk.pfIsolationDR03().photonIso());
-         nt.isoTrackPfIso03Pu_.push_back(trk.pfIsolationDR03().puChargedHadronIso());
-         nt.isoTrackMiniIsoChHad_.push_back(trk.miniPFIsolation().chargedHadronIso());
-         nt.isoTrackMiniIsoNhHad_.push_back(trk.miniPFIsolation().neutralHadronIso());
-         nt.isoTrackMiniIsoPho_.push_back(trk.miniPFIsolation().photonIso());
-         nt.isoTrackMiniIsoPu_.push_back(trk.miniPFIsolation().puChargedHadronIso());
-         nt.isoTrackMatchedCaloJetEmE_.push_back(trk.matchedCaloJetEmEnergy());
-         nt.isoTrackMatchedCaloJetHadE_.push_back(trk.matchedCaloJetHadEnergy());
-         nt.isoTrackIsHighPurity_.push_back(trk.isHighPurityTrack());
-         nt.isoTrackIsTight_.push_back(trk.isTightTrack());
-         nt.isoTrackIsLoose_.push_back(trk.isLooseTrack());
-         nt.isoTrackNValidHits_.push_back(trk.hitPattern().numberOfValidHits());
-         nt.isoTrackNValidPixHits_.push_back(trk.hitPattern().numberOfValidPixelHits());
-         nt.isoTrackNValidStripHits_.push_back(trk.hitPattern().numberOfValidStripHits());
-         nt.isoTrackLostInnerLayers_.push_back(trk.lostInnerLayers());
-         nt.isoTrackLostLayers_.push_back(trk.lostLayers());
-         nt.isoTrackLostOuterLayers_.push_back(trk.lostOuterLayers());
-         nt.isoTrackDEdxStrip_.push_back(trk.dEdxStrip());
-         nt.isoTrackDEdxPixel_.push_back(trk.dEdxPixel());
-         nt.isoTrackFromPV_.push_back(trk.fromPV());
-         nt.isoTrackDeltaEta_.push_back(trk.deltaEta());
-         nt.isoTrackDeltaPhi_.push_back(trk.deltaPhi());
-         nt.isoTrackPfLepOverlap_.push_back(trk.pfLepOverlap());
-         nt.isoTrackPfNeutralSum_.push_back(trk.pfNeutralSum());
       }
    }
 
-   // Handling PF candidates (charged only, cross-cleaned against electrons).
+   // Handling PF candidates (charged only, cross-cleaned against electrons; signal samples only).
    // Used as fallback tracking objects when searching for a second gen lepton
    // merged into one reco electron: bestTrack()/pseudoTrack() can be fed
    // straight into the KVF used for the e+e- vertex reco above.
+   if (isSignal) {
    for (const auto & cand : *packedPFCandHandle_) {
       if (cand.charge() == 0) continue;
       if (matchesEleDir(cand.eta(),cand.phi())) continue;
@@ -1387,58 +1391,13 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       nt.pfCandPt_.push_back(cand.pt());
       nt.pfCandEta_.push_back(cand.eta());
       nt.pfCandPhi_.push_back(cand.phi());
-      nt.pfCandEnergy_.push_back(cand.energy());
-      nt.pfCandCharge_.push_back(cand.charge());
-      nt.pfCandPdgId_.push_back(cand.pdgId());
-      bool hasTrk = cand.hasTrackDetails();
-      nt.pfCandHasTrackDetails_.push_back(hasTrk);
-      if (hasTrk) {
-         const reco::Track * trk = cand.bestTrack();
-         nt.pfCandDxy_.push_back(cand.dxy());
-         nt.pfCandDxyErr_.push_back(cand.dxyError());
-         nt.pfCandDz_.push_back(cand.dz());
-         nt.pfCandDzErr_.push_back(cand.dzError());
-         nt.pfCandTrkChi2_.push_back(trk->normalizedChi2());
-         nt.pfCandNumHits_.push_back(cand.numberOfHits());
-         nt.pfCandNumPixHits_.push_back(cand.numberOfPixelHits());
-         nt.pfCandPixelLayers_.push_back(cand.pixelLayersWithMeasurement());
-         nt.pfCandStripLayers_.push_back(cand.stripLayersWithMeasurement());
-         nt.pfCandTrackerLayers_.push_back(cand.trackerLayersWithMeasurement());
-         nt.pfCandLostInnerHits_.push_back(cand.lostInnerHits());
-         nt.pfCandTrkHighPurity_.push_back(cand.trackHighPurity());
-         nt.pfCandTrkAlgo_.push_back(cand.trkAlgo());
-      }
-      else {
-         nt.pfCandDxy_.push_back(-999.);
-         nt.pfCandDxyErr_.push_back(-999.);
-         nt.pfCandDz_.push_back(-999.);
-         nt.pfCandDzErr_.push_back(-999.);
-         nt.pfCandTrkChi2_.push_back(-999.);
-         nt.pfCandNumHits_.push_back(-999);
-         nt.pfCandNumPixHits_.push_back(-999);
-         nt.pfCandPixelLayers_.push_back(-999);
-         nt.pfCandStripLayers_.push_back(-999);
-         nt.pfCandTrackerLayers_.push_back(-999);
-         nt.pfCandLostInnerHits_.push_back(-999);
-         nt.pfCandTrkHighPurity_.push_back(false);
-         nt.pfCandTrkAlgo_.push_back(-999);
-      }
-      nt.pfCandFromPV_.push_back(cand.fromPV());
-      nt.pfCandPvAssocQuality_.push_back(cand.pvAssociationQuality());
-      nt.pfCandDzAssocPV_.push_back(cand.dzAssociatedPV());
-      nt.pfCandCaloFrac_.push_back(cand.caloFraction());
-      nt.pfCandHcalFrac_.push_back(cand.hcalFraction());
-      nt.pfCandRawCaloFrac_.push_back(cand.rawCaloFraction());
-      nt.pfCandRawHcalFrac_.push_back(cand.rawHcalFraction());
-      nt.pfCandPuppiWeight_.push_back(cand.puppiWeight());
-      nt.pfCandPuppiWeightNoLep_.push_back(cand.puppiWeightNoLep());
-      nt.pfCandIsGoodEgamma_.push_back(cand.isGoodEgamma());
-      nt.pfCandIsIsolatedChHad_.push_back(cand.isIsolatedChargedHadron());
+   }
    }
 
    // Handling lost tracks (same pat::PackedCandidate schema as PFCand above;
    // these never went through particle-flow classification, so the calo/puppi/
-   // egamma fields are just the PackedCandidate defaults).
+   // egamma fields are just the PackedCandidate defaults; signal samples only).
+   if (isSignal) {
    for (const auto & cand : *lostTracksHandle_) {
       if (cand.charge() == 0) continue;
       if (matchesEleDir(cand.eta(),cand.phi())) continue;
@@ -1446,55 +1405,11 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       nt.lostTrackPt_.push_back(cand.pt());
       nt.lostTrackEta_.push_back(cand.eta());
       nt.lostTrackPhi_.push_back(cand.phi());
-      nt.lostTrackEnergy_.push_back(cand.energy());
-      nt.lostTrackCharge_.push_back(cand.charge());
-      nt.lostTrackPdgId_.push_back(cand.pdgId());
-      bool hasTrk = cand.hasTrackDetails();
-      nt.lostTrackHasTrackDetails_.push_back(hasTrk);
-      if (hasTrk) {
-         const reco::Track * trk = cand.bestTrack();
-         nt.lostTrackDxy_.push_back(cand.dxy());
-         nt.lostTrackDxyErr_.push_back(cand.dxyError());
-         nt.lostTrackDz_.push_back(cand.dz());
-         nt.lostTrackDzErr_.push_back(cand.dzError());
-         nt.lostTrackTrkChi2_.push_back(trk->normalizedChi2());
-         nt.lostTrackNumHits_.push_back(cand.numberOfHits());
-         nt.lostTrackNumPixHits_.push_back(cand.numberOfPixelHits());
-         nt.lostTrackPixelLayers_.push_back(cand.pixelLayersWithMeasurement());
-         nt.lostTrackStripLayers_.push_back(cand.stripLayersWithMeasurement());
-         nt.lostTrackTrackerLayers_.push_back(cand.trackerLayersWithMeasurement());
-         nt.lostTrackLostInnerHits_.push_back(cand.lostInnerHits());
-         nt.lostTrackTrkHighPurity_.push_back(cand.trackHighPurity());
-         nt.lostTrackTrkAlgo_.push_back(cand.trkAlgo());
-      }
-      else {
-         nt.lostTrackDxy_.push_back(-999.);
-         nt.lostTrackDxyErr_.push_back(-999.);
-         nt.lostTrackDz_.push_back(-999.);
-         nt.lostTrackDzErr_.push_back(-999.);
-         nt.lostTrackTrkChi2_.push_back(-999.);
-         nt.lostTrackNumHits_.push_back(-999);
-         nt.lostTrackNumPixHits_.push_back(-999);
-         nt.lostTrackPixelLayers_.push_back(-999);
-         nt.lostTrackStripLayers_.push_back(-999);
-         nt.lostTrackTrackerLayers_.push_back(-999);
-         nt.lostTrackLostInnerHits_.push_back(-999);
-         nt.lostTrackTrkHighPurity_.push_back(false);
-         nt.lostTrackTrkAlgo_.push_back(-999);
-      }
-      nt.lostTrackFromPV_.push_back(cand.fromPV());
-      nt.lostTrackPvAssocQuality_.push_back(cand.pvAssociationQuality());
-      nt.lostTrackDzAssocPV_.push_back(cand.dzAssociatedPV());
-      nt.lostTrackCaloFrac_.push_back(cand.caloFraction());
-      nt.lostTrackHcalFrac_.push_back(cand.hcalFraction());
-      nt.lostTrackRawCaloFrac_.push_back(cand.rawCaloFraction());
-      nt.lostTrackRawHcalFrac_.push_back(cand.rawHcalFraction());
-      nt.lostTrackPuppiWeight_.push_back(cand.puppiWeight());
-      nt.lostTrackPuppiWeightNoLep_.push_back(cand.puppiWeightNoLep());
-      nt.lostTrackIsGoodEgamma_.push_back(cand.isGoodEgamma());
-      nt.lostTrackIsIsolatedChHad_.push_back(cand.isIsolatedChargedHadron());
+   }
    }
 
+   // Handling conversions (signal samples only)
+   if (isSignal) {
    /*std::cout << "filling conversions" << std::endl;
    for (const auto & conv : *conversionsHandle_) {
       if (conv.nTracks() < 2) continue;
@@ -1563,8 +1478,9 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       nt.conversion_Trk2dxyPV_.push_back(t2.dxy(pv.position()));
       nt.conversion_Trk2dxyBS_.push_back(t2.dxy(beamspot));
       nt.conversion_Trk2dz_.push_back(t2.dz());
-      nt.conversion_Trk2dzPV_.push_back(t2.dz(pv.position()));      
+      nt.conversion_Trk2dzPV_.push_back(t2.dz(pv.position()));
    }*/
+   }
 
    // Define vertex reco function.
    // fillLpt=false fills vtx_* branches (mixed GED+LowPt pool).
@@ -1778,19 +1694,8 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    //isoCalc.calcIso();
 
    // extra info from MC
+   // (genwgt_ and gen pileup are filled earlier, unconditionally -- see top of analyze())
    if (!isData) {
-      // Gen weight
-      nt.genwgt_ = genEvtInfoHandle_->weight();
-
-      // Gen pileup
-      for (const auto & pileupInfo : *pileupInfosHandle_) {
-         if (pileupInfo.getBunchCrossing() == 0) {
-               nt.genpuobs_ = pileupInfo.getPU_NumInteractions();
-               nt.genputrue_ = pileupInfo.getTrueNumInteractions();
-               break;
-         }
-      }
-
       // Lead gen MET
       if (genMETHandle_->size() > 0) {
          auto met = (*genMETHandle_).at(0);
@@ -2100,6 +2005,40 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    }
 
    outT->Fill();
+
+   } // end if (passesPtMiss)
+   else {
+      // Events failing the background preselection skip the full reconstruction above,
+      // but the slim tree still gets lightweight electron-count/jet-summary quantities.
+      for (const auto & jet : *recoJetHandle_) {
+         nt.PFNJetAll_++;
+         if (helper.JetID(jet,year) && jet.pt() > 30) {
+            nt.PFNJet_++;
+            nt.PFHT_ += jet.pt();
+            if (jet.pt() > nt.PFJetPtLeading_) nt.PFJetPtLeading_ = jet.pt();
+         }
+      }
+
+      vector<math::XYZTLorentzVector> regElep4sLight;
+      for (const auto & ele : *recoNanoElectronHandle_) {
+         nt.nElectronDefault_++;
+         regElep4sLight.push_back(ele.p4());
+      }
+
+      const float PFmatch_threshold = 0.05; // same dR threshold used for GED/LowPt cross-cleaning above
+      for (const auto & ele : *lowPtNanoElectronHandle_) {
+         if (ele.pt() < 1) continue;
+         nt.nElectronAllLowPt_++;
+         float mindR = 999;
+         for (const auto & p4 : regElep4sLight) {
+            mindR = std::min(mindR, (float)reco::deltaR(ele.p4(), p4));
+         }
+         if (mindR >= PFmatch_threshold) nt.nElectronLowPt_++;
+      }
+   }
+
+   if (!isSignal) outT_slim->Fill();
+
    return;
 }
 

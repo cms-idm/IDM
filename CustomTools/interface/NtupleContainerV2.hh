@@ -19,6 +19,10 @@ public:
     void SetTree(TTree *tree);
     void CreateTreeBranches();
     void ClearTreeBranches();
+    // Slim tree: event-level-only branches, filled for every event regardless
+    // of any downstream preselection (see SetSlimTree/CreateSlimTreeBranches).
+    void SetSlimTree(TTree *tree);
+    void CreateSlimTreeBranches();
 
     // Trigger and event-level branches
     unsigned int fired_;
@@ -176,6 +180,12 @@ public:
     vector<float> recoElectronE_;
     vector<float> recoElectronVxy_;
     vector<float> recoElectronVz_;
+    // SV-proxy displacement estimated from the tracker layer of the innermost valid hit
+    vector<bool> recoElectronSVProxyValid_;
+    vector<float> recoElectronSVProxyX_;
+    vector<float> recoElectronSVProxyY_;
+    vector<float> recoElectronSVProxyZ_;
+    vector<float> recoElectronSVProxyVxy_;
     vector<float> recoElectronDxy_;
     vector<float> recoElectronDxyError_;
     vector<float> recoElectronDz_;
@@ -233,6 +243,12 @@ public:
     vector<float> recoLowPtElectronE_;
     vector<float> recoLowPtElectronVxy_;
     vector<float> recoLowPtElectronVz_;
+    // SV-proxy displacement estimated from the tracker layer of the innermost valid hit
+    vector<bool> recoLowPtElectronSVProxyValid_;
+    vector<float> recoLowPtElectronSVProxyX_;
+    vector<float> recoLowPtElectronSVProxyY_;
+    vector<float> recoLowPtElectronSVProxyZ_;
+    vector<float> recoLowPtElectronSVProxyVxy_;
     vector<float> recoLowPtElectronDxy_;
     vector<float> recoLowPtElectronDxyError_;
     vector<float> recoLowPtElectronDz_;
@@ -306,6 +322,12 @@ public:
     vector<float> recoAllLowPtElectronE_;
     vector<float> recoAllLowPtElectronVxy_;
     vector<float> recoAllLowPtElectronVz_;
+    // SV-proxy displacement estimated from the tracker layer of the innermost valid hit
+    vector<bool> recoAllLowPtElectronSVProxyValid_;
+    vector<float> recoAllLowPtElectronSVProxyX_;
+    vector<float> recoAllLowPtElectronSVProxyY_;
+    vector<float> recoAllLowPtElectronSVProxyZ_;
+    vector<float> recoAllLowPtElectronSVProxyVxy_;
     vector<float> recoAllLowPtElectronDxy_;
     vector<float> recoAllLowPtElectronDxyError_;
     vector<float> recoAllLowPtElectronDz_;
@@ -406,54 +428,6 @@ public:
     vector<float> PhotonEta_;
     vector<float> PhotonPhi_;
     vector<float> PhotonPt_;
-    vector<float> PhotonEnergy_;
-    // supercluster
-    vector<float> PhotonScRawE_;
-    vector<float> PhotonScEta_;
-    vector<float> PhotonScPhi_;
-    vector<float> PhotonScEtaWidth_;
-    vector<float> PhotonScPhiWidth_;
-    // shower shapes
-    vector<float> PhotonR9_;
-    vector<float> PhotonFull5x5R9_;
-    vector<float> PhotonSIeIe_;
-    vector<float> PhotonFull5x5SIeIe_;
-    vector<float> PhotonHoE_;
-    vector<float> PhotonFull5x5HoE_;
-    vector<float> PhotonE1x5_;
-    vector<float> PhotonE2x5_;
-    vector<float> PhotonE5x5_;
-    vector<float> PhotonFull5x5E1x5_;
-    vector<float> PhotonFull5x5E2x5_;
-    vector<float> PhotonFull5x5E5x5_;
-    // regression inputs (pat-level)
-    vector<float> PhotonSeedE_;
-    vector<float> PhotonEMax_;
-    vector<float> PhotonE2nd_;
-    vector<float> PhotonE3x3_;
-    vector<float> PhotonETop_;
-    vector<float> PhotonEBottom_;
-    vector<float> PhotonELeft_;
-    vector<float> PhotonERight_;
-    // PF isolation
-    vector<float> PhotonChIso_;
-    vector<float> PhotonNhIso_;
-    vector<float> PhotonPhIso_;
-    vector<float> PhotonPuChIso_;
-    // PUPPI isolation
-    vector<float> PhotonPuppiChIso_;
-    vector<float> PhotonPuppiNhIso_;
-    vector<float> PhotonPuppiPhIso_;
-    // detector-based isolation
-    vector<float> PhotonTrkIso_;
-    vector<float> PhotonEcalIso_;
-    vector<float> PhotonHcalIso_;
-    // flags
-    vector<int> PhotonPassElectronVeto_;
-    vector<int> PhotonHasPixelSeed_;
-    vector<int> PhotonIsEB_;
-    vector<int> PhotonIsEE_;
-    vector<int> PhotonIsEBEEGap_;
 
     // OOT Photons
     int nOOTPhotons_;
@@ -461,173 +435,25 @@ public:
     vector<float> ootPhotonEta_;
     vector<float> ootPhotonPhi_;
     vector<float> ootPhotonPt_;
-    vector<float> ootPhotonEnergy_;
-    // supercluster
-    vector<float> ootPhotonScRawE_;
-    vector<float> ootPhotonScEta_;
-    vector<float> ootPhotonScPhi_;
-    vector<float> ootPhotonScEtaWidth_;
-    vector<float> ootPhotonScPhiWidth_;
-    // shower shapes
-    vector<float> ootPhotonR9_;
-    vector<float> ootPhotonFull5x5R9_;
-    vector<float> ootPhotonSIeIe_;
-    vector<float> ootPhotonFull5x5SIeIe_;
-    vector<float> ootPhotonHoE_;
-    vector<float> ootPhotonFull5x5HoE_;
-    vector<float> ootPhotonE1x5_;
-    vector<float> ootPhotonE2x5_;
-    vector<float> ootPhotonE5x5_;
-    vector<float> ootPhotonFull5x5E1x5_;
-    vector<float> ootPhotonFull5x5E2x5_;
-    vector<float> ootPhotonFull5x5E5x5_;
-    // regression inputs (pat-level)
-    vector<float> ootPhotonSeedE_;
-    vector<float> ootPhotonEMax_;
-    vector<float> ootPhotonE2nd_;
-    vector<float> ootPhotonE3x3_;
-    vector<float> ootPhotonETop_;
-    vector<float> ootPhotonEBottom_;
-    vector<float> ootPhotonELeft_;
-    vector<float> ootPhotonERight_;
-    // PF isolation
-    vector<float> ootPhotonChIso_;
-    vector<float> ootPhotonNhIso_;
-    vector<float> ootPhotonPhIso_;
-    vector<float> ootPhotonPuChIso_;
-    // PUPPI isolation
-    vector<float> ootPhotonPuppiChIso_;
-    vector<float> ootPhotonPuppiNhIso_;
-    vector<float> ootPhotonPuppiPhIso_;
-    // detector-based isolation
-    vector<float> ootPhotonTrkIso_;
-    vector<float> ootPhotonEcalIso_;
-    vector<float> ootPhotonHcalIso_;
-    // flags
-    vector<int> ootPhotonPassElectronVeto_;
-    vector<int> ootPhotonHasPixelSeed_;
-    vector<int> ootPhotonIsEB_;
-    vector<int> ootPhotonIsEE_;
-    vector<int> ootPhotonIsEBEEGap_;
 
     // Isolated Tracks
     int nIsoTrack_;
     vector<float> isoTrackPt_;
     vector<float> isoTrackEta_;
     vector<float> isoTrackPhi_;
-    vector<float> isoTrackP_;
-    vector<int>   isoTrackCharge_;
-    vector<float> isoTrackDxy_;
-    vector<float> isoTrackDz_;
-    vector<float> isoTrackDxyErr_;
-    vector<float> isoTrackDzErr_;
-    // PF isolation DR03
-    vector<float> isoTrackPfIso03ChHad_;
-    vector<float> isoTrackPfIso03NhHad_;
-    vector<float> isoTrackPfIso03Pho_;
-    vector<float> isoTrackPfIso03Pu_;
-    // mini PF isolation
-    vector<float> isoTrackMiniIsoChHad_;
-    vector<float> isoTrackMiniIsoNhHad_;
-    vector<float> isoTrackMiniIsoPho_;
-    vector<float> isoTrackMiniIsoPu_;
-    // calo matching
-    vector<float> isoTrackMatchedCaloJetEmE_;
-    vector<float> isoTrackMatchedCaloJetHadE_;
-    // track quality
-    vector<int>   isoTrackIsHighPurity_;
-    vector<int>   isoTrackIsTight_;
-    vector<int>   isoTrackIsLoose_;
-    // hit pattern
-    vector<int>   isoTrackNValidHits_;
-    vector<int>   isoTrackNValidPixHits_;
-    vector<int>   isoTrackNValidStripHits_;
-    vector<int>   isoTrackLostInnerLayers_;
-    vector<int>   isoTrackLostLayers_;
-    vector<int>   isoTrackLostOuterLayers_;
-    // dEdx
-    vector<float> isoTrackDEdxStrip_;
-    vector<float> isoTrackDEdxPixel_;
-    // other
-    vector<int>   isoTrackFromPV_;
-    vector<float> isoTrackDeltaEta_;
-    vector<float> isoTrackDeltaPhi_;
-    vector<int>   isoTrackPfLepOverlap_;
-    vector<float> isoTrackPfNeutralSum_;
 
     // PF Candidates (charged only, cross-cleaned against electrons)
     int nPFCand_;
     vector<float> pfCandPt_;
     vector<float> pfCandEta_;
     vector<float> pfCandPhi_;
-    vector<float> pfCandEnergy_;
-    vector<int>   pfCandCharge_;
-    vector<int>   pfCandPdgId_;
-    vector<bool>  pfCandHasTrackDetails_;
-    // impact parameter / track quality (only meaningful if HasTrackDetails)
-    vector<float> pfCandDxy_;
-    vector<float> pfCandDxyErr_;
-    vector<float> pfCandDz_;
-    vector<float> pfCandDzErr_;
-    vector<float> pfCandTrkChi2_;
-    vector<int>   pfCandNumHits_;
-    vector<int>   pfCandNumPixHits_;
-    vector<int>   pfCandPixelLayers_;
-    vector<int>   pfCandStripLayers_;
-    vector<int>   pfCandTrackerLayers_;
-    vector<int>   pfCandLostInnerHits_;
-    vector<bool>  pfCandTrkHighPurity_;
-    vector<int>   pfCandTrkAlgo_;
-    // vertex association
-    vector<int>   pfCandFromPV_;
-    vector<int>   pfCandPvAssocQuality_;
-    vector<float> pfCandDzAssocPV_;
-    // PF-specific (calo/puppi/egamma) info
-    vector<float> pfCandCaloFrac_;
-    vector<float> pfCandHcalFrac_;
-    vector<float> pfCandRawCaloFrac_;
-    vector<float> pfCandRawHcalFrac_;
-    vector<float> pfCandPuppiWeight_;
-    vector<float> pfCandPuppiWeightNoLep_;
-    vector<bool>  pfCandIsGoodEgamma_;
-    vector<bool>  pfCandIsIsolatedChHad_;
 
     // Lost Tracks (charged pat::PackedCandidates not promoted to PF candidates;
-    // cross-cleaned against electrons). Same schema as PFCand; the PF-specific
-    // calo/puppi/egamma fields are never set by particle flow for these and are
-    // filled with their PackedCandidate defaults (0/false).
+    // cross-cleaned against electrons).
     int nLostTrack_;
     vector<float> lostTrackPt_;
     vector<float> lostTrackEta_;
     vector<float> lostTrackPhi_;
-    vector<float> lostTrackEnergy_;
-    vector<int>   lostTrackCharge_;
-    vector<int>   lostTrackPdgId_;
-    vector<bool>  lostTrackHasTrackDetails_;
-    vector<float> lostTrackDxy_;
-    vector<float> lostTrackDxyErr_;
-    vector<float> lostTrackDz_;
-    vector<float> lostTrackDzErr_;
-    vector<float> lostTrackTrkChi2_;
-    vector<int>   lostTrackNumHits_;
-    vector<int>   lostTrackNumPixHits_;
-    vector<int>   lostTrackPixelLayers_;
-    vector<int>   lostTrackStripLayers_;
-    vector<int>   lostTrackTrackerLayers_;
-    vector<int>   lostTrackLostInnerHits_;
-    vector<bool>  lostTrackTrkHighPurity_;
-    vector<int>   lostTrackTrkAlgo_;
-    vector<int>   lostTrackFromPV_;
-    vector<int>   lostTrackPvAssocQuality_;
-    vector<float> lostTrackDzAssocPV_;
-    vector<float> lostTrackCaloFrac_;
-    vector<float> lostTrackHcalFrac_;
-    vector<float> lostTrackRawCaloFrac_;
-    vector<float> lostTrackRawHcalFrac_;
-    vector<float> lostTrackPuppiWeight_;
-    vector<float> lostTrackPuppiWeightNoLep_;
-    vector<bool>  lostTrackIsGoodEgamma_;
-    vector<bool>  lostTrackIsIsolatedChHad_;
 
     // Photon conversions
     int nConversions_;
@@ -725,6 +551,8 @@ public:
     vector<float> PFJetCorrectedJERDownEta_;
     vector<float> PFJetCorrectedJERDownPhi_;
     bool PFHEMFlag_;
+    float PFHT_;
+    float PFJetPtLeading_;
 
     // MET
     float PFMET_ET_;
@@ -867,6 +695,8 @@ public:
 protected:
     // Reco and gen TTrees
     TTree * outT;
+    // Slim, all-events tree (background only; see CreateSlimTreeBranches)
+    TTree * outT_slim;
 
 };
 
