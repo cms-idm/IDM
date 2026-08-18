@@ -3,10 +3,18 @@ import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 from matplotlib.colors import LogNorm
 import mplhep as hep
+import sys
+import os
+
+# Make the script runnable regardless of the caller's current working
+# directory by anchoring paths to the repo root (one level up from this file).
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
 import coffea.util as util
 import analysisTools.utils as utils
 import analysisTools.plotTools as ptools
-import os
 
 plt.rcParams.update({
     'font.size':        20,
@@ -18,8 +26,8 @@ plt.rcParams.update({
     'figure.titlesize': 24,
 })
 
-outdir    = 'workarea'
-vers      = 'May2026'
+outdir    = os.path.join(REPO_ROOT, 'workarea')
+vers      = 'Jul2026noID'
 selection = 'anmatchvtx'
 hists_tag = 'genmatching'
 saved_signal_hists = f"{outdir}/hists_sig{vers}_{selection}-sel_{hists_tag}.coffea"
@@ -34,7 +42,8 @@ ann_mode = None   # 'wgt_sum': annotate with weighted bin yield
 s_hists = util.load(saved_signal_hists)[0]
 s_pts   = utils.get_signal_point_dict(s_hists)
 
-os.makedirs('plots', exist_ok=True)
+plotdir = os.path.join(REPO_ROOT, 'plots', 'genmatching')
+os.makedirs(plotdir, exist_ok=True)
 
 # ── display metadata ──────────────────────────────────────────────────────────
 
@@ -135,7 +144,7 @@ for rank, rstyle in rank_styles.items():
     ax.set_title(rf'{rstyle["label"]} electron min $\Delta R$(reco, gen) — all samples')
     ax.legend()
     plt.tight_layout()
-    plt.savefig(f'plots/hist_{seltag}_dr_to_gen_{rank}_allcolls.png')
+    plt.savefig(f'{plotdir}/hist_{seltag}_dr_to_gen_{rank}_allcolls.png')
     plt.close(fig)
 
 # 1b: one plot per collection, overlay both ranks
@@ -154,7 +163,7 @@ for coll, cstyle in coll_styles.items():
     ax.set_title(rf'{cstyle["label"]} min $\Delta R$(reco, gen): leading vs subleading — all samples')
     ax.legend()
     plt.tight_layout()
-    plt.savefig(f'plots/hist_{seltag}_dr_to_gen_{coll}_bothranks.png')
+    plt.savefig(f'{plotdir}/hist_{seltag}_dr_to_gen_{coll}_bothranks.png')
     plt.close(fig)
 
 # 1c: cumulative dR distributions — fraction of electrons within dR cone
@@ -182,7 +191,7 @@ for rank, rstyle in rank_styles.items():
     ax.set_title(rf'{rstyle["label"]} electron cumulative $\Delta R$(reco, gen) — all samples')
     ax.legend()
     plt.tight_layout()
-    plt.savefig(f'plots/hist_{seltag}_dr_to_gen_{rank}_cdf_allcolls.png')
+    plt.savefig(f'{plotdir}/hist_{seltag}_dr_to_gen_{rank}_cdf_allcolls.png')
     plt.close(fig)
 
 
@@ -214,7 +223,7 @@ for coll, cstyle in coll_styles.items():
             )
             ax.legend(fontsize=16)
             plt.tight_layout()
-            plt.savefig(f'plots/hist_{seltag}_{histname}_2D_allsamps.png')
+            plt.savefig(f'{plotdir}/hist_{seltag}_{histname}_2D_allsamps.png')
             plt.close(fig)
 
 
@@ -249,7 +258,7 @@ for rank, rstyle in rank_styles.items():
         )
         ax.legend(fontsize=16, ncol=2)
         plt.tight_layout()
-        plt.savefig(f'plots/hist_{seltag}_dr_to_gen_vs_{varname}_{rank}_profile_allsamps.png')
+        plt.savefig(f'{plotdir}/hist_{seltag}_dr_to_gen_vs_{varname}_{rank}_profile_allsamps.png')
         plt.close(fig)
 
 
@@ -272,7 +281,7 @@ ax.set_ylabel('A.U.')
 ax.set_title(r'Reco electron matching ambiguity — all samples')
 ax.legend()
 plt.tight_layout()
-plt.savefig(f'plots/hist_{seltag}_n_reco_near_gen_allcolls.png')
+plt.savefig(f'{plotdir}/hist_{seltag}_n_reco_near_gen_allcolls.png')
 plt.close(fig)
 
 # 4b: dr_to_nearest_other_reco — intra-collection clone distance
@@ -291,7 +300,7 @@ for rank, rstyle in rank_styles.items():
     ax.set_title(rf'{rstyle["label"]} electron intra-collection clone distance — all samples')
     ax.legend()
     plt.tight_layout()
-    plt.savefig(f'plots/hist_{seltag}_dr_to_nearest_other_reco_{rank}_allcolls.png')
+    plt.savefig(f'{plotdir}/hist_{seltag}_dr_to_nearest_other_reco_{rank}_allcolls.png')
     plt.close(fig)
 
 
@@ -311,7 +320,7 @@ ax.set_ylabel('A.U.')
 ax.set_title(r'Gen particle coverage by reco collection — all samples')
 ax.legend()
 plt.tight_layout()
-plt.savefig(f'plots/hist_{seltag}_n_gen_near_reco_allcolls.png')
+plt.savefig(f'{plotdir}/hist_{seltag}_n_gen_near_reco_allcolls.png')
 plt.close(fig)
 
 
@@ -345,7 +354,7 @@ for coll, cstyle in coll_styles.items():
     ax.set_title(rf'{cstyle["label"]} min $\Delta R$(gen, reco): $e^-$ vs $e^+$ — all samples')
     ax.legend()
     plt.tight_layout()
-    plt.savefig(f'plots/hist_{seltag}_dr_gen_to_reco_{coll}_bothparts.png')
+    plt.savefig(f'{plotdir}/hist_{seltag}_dr_gen_to_reco_{coll}_bothparts.png')
     plt.close(fig)
 
 # 6b: one plot per genpart, overlay both collections
@@ -363,7 +372,7 @@ for genpart, gpstyle in genpart_styles.items():
     ax.set_title(rf'{gpstyle["label"]} min $\Delta R$(gen, reco) — all samples')
     ax.legend()
     plt.tight_layout()
-    plt.savefig(f'plots/hist_{seltag}_dr_gen_to_reco_{genpart}_allcolls.png')
+    plt.savefig(f'{plotdir}/hist_{seltag}_dr_gen_to_reco_{genpart}_allcolls.png')
     plt.close(fig)
 
 # 6c: 2D colormesh — dR vs secondary variable for each (coll, genpart)
@@ -394,7 +403,7 @@ for coll, cstyle in coll_styles.items():
             )
             ax.legend(fontsize=16)
             plt.tight_layout()
-            plt.savefig(f'plots/hist_{seltag}_{histname}_2D_allsamps.png')
+            plt.savefig(f'{plotdir}/hist_{seltag}_{histname}_2D_allsamps.png')
             plt.close(fig)
 
 # 6d: profile plots (median + 90th pct) — one plot per variable, overlay colls and genparts
@@ -424,7 +433,7 @@ for varname, varlabel, doLogx in _gen2reco_var_specs:
     ax.set_title(rf'Gen-to-reco $\Delta R$ vs {varlabel} — all samples')
     ax.legend(fontsize=14, ncol=2)
     plt.tight_layout()
-    plt.savefig(f'plots/hist_{seltag}_dr_gen_to_reco_vs_{varname}_profile_allsamps.png')
+    plt.savefig(f'{plotdir}/hist_{seltag}_dr_gen_to_reco_vs_{varname}_profile_allsamps.png')
     plt.close(fig)
 
 
@@ -463,7 +472,7 @@ for varkey, varlabel, histbase in _ee_var_specs:
         ax.set_title(rf'Gen vs reco {varlabel} ({fstyle["label"]}) — all samples')
         ax.legend(fontsize=16)
         plt.tight_layout()
-        plt.savefig(f'plots/hist_{seltag}_{histname}_2D_allsamps.png')
+        plt.savefig(f'{plotdir}/hist_{seltag}_{histname}_2D_allsamps.png')
         plt.close(fig)
 
 # 7b: overlay matched vs selvtx — 1D projections (gen axis and reco axis)
@@ -482,7 +491,7 @@ for varkey, varlabel, histbase in _ee_var_specs:
         ax.set_title(rf'{axis_label} {varlabel}: matched vs selected vtx — all samples')
         ax.legend()
         plt.tight_layout()
-        plt.savefig(f'plots/hist_{seltag}_{histbase}_{axis_label.lower()}_proj_allsamps.png')
+        plt.savefig(f'{plotdir}/hist_{seltag}_{histbase}_{axis_label.lower()}_proj_allsamps.png')
         plt.close(fig)
 
 
@@ -588,5 +597,5 @@ for title, outname, variables, doLogy, solid_label, dotted_label, do_ann in sig_
 
         plt.title(rf'{title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
         plt.tight_layout()
-        plt.savefig(f'plots/hist_{seltag}_{outname}_{tag}.png')
+        plt.savefig(f'{plotdir}/hist_{seltag}_{outname}_{tag}.png')
         plt.close()

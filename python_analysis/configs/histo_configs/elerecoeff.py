@@ -41,10 +41,14 @@ def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
     wgt = events.eventWgt
     #print(sum_wgt, np.sum(events.eventWgt), np.sum(wgt))
 
-    lxy_ele = np.sqrt((events.GenEle.vx - events.PV.x)**2 + (events.GenEle.vy - events.PV.y)**2)
-    lxy_pos = np.sqrt((events.GenPos.vx - events.PV.x)**2 + (events.GenPos.vy - events.PV.y)**2)
-    lz_ele = np.abs(events.GenEle.vz - events.PV.z)
-    lz_pos = np.abs(events.GenPos.vz - events.PV.z)
+    # lxy/lz are measured from the chi2 production vertex (the true, unsmeared
+    # primary vertex) rather than the reconstructed PV, which carries ~10-15um
+    # of resolution/bias that would otherwise leak into a "truth" quantity.
+    chi2 = ak.firsts(events.GenPart[np.abs(events.GenPart.ID) == 1000023])
+    lxy_ele = np.sqrt((events.GenEle.vx - chi2.vx)**2 + (events.GenEle.vy - chi2.vy)**2)
+    lxy_pos = np.sqrt((events.GenPos.vx - chi2.vx)**2 + (events.GenPos.vy - chi2.vy)**2)
+    lz_ele = np.abs(events.GenEle.vz - chi2.vz)
+    lz_pos = np.abs(events.GenPos.vz - chi2.vz)
     
     all_gen           = ak.concatenate([events.GenEle,                    events.GenPos],                   axis=0)
     all_lxy           = ak.concatenate([lxy_ele,                          lxy_pos],                         axis=0)

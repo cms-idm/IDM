@@ -5,6 +5,14 @@ import matplotlib as mpl
 import awkward as ak
 
 import sys
+import os
+
+# Make the script runnable regardless of the caller's current working
+# directory by anchoring paths to the repo root (two levels up from this file).
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
 from analysisTools.analysisTools import Analyzer
 from analysisTools.analysisTools import loadSchema
 import analysisTools.analysisTools as tools
@@ -15,7 +23,6 @@ import analysisTools.utils as utils
 import analysisTools.plotTools as ptools
 import time
 import json
-import os
 import glob
 from hist import Hist
 from hist.axis import Variable
@@ -24,8 +31,10 @@ import copy
 import warnings
 import mplhep as hep
 
-outdir = 'workarea'
-saved_signal_hists = f"{outdir}/hists_sigMay2026_recoeff-sel_elerecoeff.coffea"
+outdir = os.path.join(REPO_ROOT, 'workarea')
+plotdir = os.path.join(REPO_ROOT, 'plots', 'elerecoeff')
+os.makedirs(plotdir, exist_ok=True)
+saved_signal_hists = f"{outdir}/hists_sigJul2026noID_anmatchvtx-sel_elerecoeff.coffea"
 
 title = 'Electron Reco'
 plottag = 'hlt2eles_ele-reco_pt-lxy'
@@ -156,7 +165,7 @@ for tag, h_eff in eff_all.items():
     hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6', ax=ax)
     plot_2D_eff(h_eff, ax, rf'{title}: {labels_all[tag]} Efficiency ($p_T$ vs $L_{{xy}}$) — all samples')
     plt.tight_layout()
-    plt.savefig(f"plots/hist_{plottag}_{tag}_allsamps.png")
+    plt.savefig(f"{plotdir}/hist_{plottag}_{tag}_allsamps.png")
     plt.close(fig)
 
 # ── Per-sample efficiency plots (2×2 grid per sample) ─────────────────────────
@@ -194,5 +203,5 @@ for sname in selected_samples:
     plot_2D_eff(eff_ps['alllpt'], axes[1, 1], rf'AllLowPt — {slabel}')
     fig.suptitle(rf'{title} Efficiency ($p_T$ vs $L_{{xy}}$)', fontsize=14)
     plt.tight_layout()
-    plt.savefig(f"plots/hist_{plottag}_persamp_{sname}.png")
+    plt.savefig(f"{plotdir}/hist_{plottag}_persamp_{sname}.png")
     plt.close(fig)

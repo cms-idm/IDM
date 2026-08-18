@@ -4,25 +4,33 @@ import matplotlib.pyplot as plt
 import awkward as ak
 
 import sys
-#sys.path.append("../../analysisTools/")
-from tools.analysisTools import Analyzer
-from tools.analysisTools import loadSchema
-import tools.analysisTools as tools
-import tools.analysisSubroutines as routines
+import os
+
+# Make the script runnable regardless of the caller's current working
+# directory by anchoring paths to the repo root (two levels up from this file).
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
+from analysisTools.analysisTools import Analyzer
+from analysisTools.analysisTools import loadSchema
+import analysisTools.analysisTools as tools
+import analysisTools.analysisSubroutines as routines
 import importlib
 import coffea.util as util
-import tools.utils as utils
-import tools.plotTools as ptools
+import analysisTools.utils as utils
+import analysisTools.plotTools as ptools
 import time
 import json
-import os
 import glob
 
 #cuts_config = "configs/selections/minimal_cuts.py"
 #hists_config = "configs/hists/genstudy.py"
 #sample_config = "configs/samples/signal_2024_Apr2026_aEM.json"
-outdir = 'workarea'
-saved_signal_hists = f"{outdir}/step1_genstudy_signal_minimalselection.coffea"
+outdir = os.path.join(REPO_ROOT, 'workarea')
+plotdir = os.path.join(REPO_ROOT, 'plots', 'genstudy')
+os.makedirs(plotdir, exist_ok=True)
+saved_signal_hists = f"{outdir}/hists_sigJul2026noID_anmatchvtx-sel_genstudy.coffea"
 
 # Signal
 s_hists = util.load(saved_signal_hists)[0]
@@ -47,7 +55,7 @@ plot_title = r'Gen $p_T^{miss}$'
 plot_dict = {
     'variable': ['gen_met'],
     'year': 2024,
-    'cut': 'cut5',
+    'cut': 'cut1',
 }
 
 style_dict = {
@@ -77,7 +85,7 @@ for m1 in m1s:
 
 plt.title(rf'{plot_title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
 plt.legend()
-plt.savefig(f"plots/hist_{sel_label}_{plot_label}_ctau-{utils.stringfy_friendly(ctaus[0])}_m1-narrow.png")
+plt.savefig(f"{plotdir}/hist_{sel_label}_{plot_label}_ctau-{utils.stringfy_friendly(ctaus[0])}_m1-narrow.png")
 
 # signal points
 m1s = [0.05, 0.5, 5, 50]
@@ -97,7 +105,7 @@ for m1 in m1s:
 
 plt.title(rf'{plot_title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
 plt.legend()
-plt.savefig(f"plots/hist_{sel_label}_{plot_label}_ctau-{utils.stringfy_friendly(ctaus[0])}_m1-wide.png")
+plt.savefig(f"{plotdir}/hist_{sel_label}_{plot_label}_ctau-{utils.stringfy_friendly(ctaus[0])}_m1-wide.png")
 
 # signal points
 m1s = [1, 2, 5]
@@ -117,7 +125,7 @@ for m1 in m1s:
 
 plt.title(rf'{plot_title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
 plt.legend()
-plt.savefig(f"plots/hist_{sel_label}_{plot_label}_delta-{utils.stringfy_friendly(deltas[0])}.png")
+plt.savefig(f"{plotdir}/hist_{sel_label}_{plot_label}_delta-{utils.stringfy_friendly(deltas[0])}.png")
 
 # signal points
 m1s = [5]
@@ -137,5 +145,5 @@ for m1 in m1s:
 
 plt.title(rf'{plot_title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
 plt.legend()
-plt.savefig(f"plots/hist_{sel_label}_{plot_label}_m1-{utils.stringfy_friendly(m1s[0])}.png")
+plt.savefig(f"{plotdir}/hist_{sel_label}_{plot_label}_m1-{utils.stringfy_friendly(m1s[0])}.png")
 

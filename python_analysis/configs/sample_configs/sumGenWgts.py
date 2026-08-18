@@ -54,6 +54,7 @@ for samp in samples:
         nFiles = 1
         try:
             tree = uproot.open(loc)['ntuples/outT']
+            print(tree.num_entries)
             if tree.num_entries == 0:
                 sum_wgt = 0
             else:
@@ -62,6 +63,7 @@ for samp in samples:
                 else:
                     sum_wgt = 0
                 sum_evt = tree.num_entries
+                print(tree.num_entries)
         except:
             blacklist.append(loc)
             sum_wgt = 0

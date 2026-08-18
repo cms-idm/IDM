@@ -1,4 +1,5 @@
 from hist.axis import StrCategory, Regular, Integer, IntCategory, Variable
+import hist.axis.transform as transform
 import numpy as np
 
 ############################
@@ -36,7 +37,7 @@ ele_chi2 = Regular(200,0,100,name="chi2",label=r"Track $\chi^2/df$")
 ele_trkIso = Regular(100,0,100,name="trkIso",label="Tracker Iso")
 ele_trkRelIso = Regular(100,0,5,name="relIso",label="Tracker Relative Iso")
 ele_PFRelIso = Regular(100,0,10,name="relIso",label="PF Relative Iso")
-ele_PFIso = Regular(100,0,100,name="iso",label="PF Isolation")
+ele_PFIso = Regular(100,0,20,name="iso",label="PF Isolation")
 ele_PFRelIsoM = Regular(100,0,200,name="isoM",label=r"$I_{PF}^{rel} \times m_{e^+e^-}$")
 ele_PFIsoM = Regular(100,0,200,name="isoM",label=r"$I_{PF} \times m_{e^+e^-}$")
 ele_miniIso = Regular(100,0,100,name="iso",label="Mini Iso")
@@ -46,7 +47,7 @@ ele_miniRelIsoCorr = Regular(100,0,10,name="iso",label="Corrected Mini Relative 
 
 ele_prob = Regular(100,0,1,name="prob",label=r"Electron Track $\chi^2$ Probability")
 ele_angRes = Regular(100,0,0.1,name="angRes",label=r"Angular Resolution $\sqrt{\sigma_\eta^2 + \sigma_\phi^2}$")
-ele_dxy = Regular(100,0,20,name="dxy",label="Electron Track $d_{xy}$ [cm]")
+ele_dxy = Regular(100,0,40,name="dxy",label="Electron Track $d_{xy}$ [cm]")
 ele_dxySignif = Regular(150,0,150,name="dxy_signif",label=r"Electron Track $d_{xy}/\sigma_{d_{xy}}$")
 ele_dz = Regular(100,0,5,name="dz",label="Electron Track $d_{z}$ [cm]")
 ele_dxydz = Regular(100,0,5,name="dxydz",label="Electron Track $d_{xy}/d_{z}$")
@@ -63,10 +64,12 @@ ee_ctau_pr = Regular(100, 0, 500, name="ctau", label=r"$c\tau$ [mm]")
 vxy = Regular(2000,0,50,name="vxy",label="$v_{xy}$ [cm]")
 vxy_coarse = Regular(100,0,50,name="vxy",label="$v_{xy}$ [cm]")
 vxy_zoom_fine = Regular(250,0,25,name="vxy",label="$v_{xy}$ [cm]")
-Lxy_zoom_fine = Regular(400,0,40,name="lxy",label="$L_{xy}$ [cm]")
+Lxy_zoom_fine = Regular(200,0,40,name="lxy",label="$L_{xy}$ [cm]")
 vxy_zoom = Regular(200,0,20,name="vxy",label="$v_{xy}$ [cm]")
 vxy_zoomzoom = Regular(500,0,5,name="vxy",label="$v_{xy}$ [cm]")
 vxy_projected = Regular(4000,-50,50,name="vxy_projected",label="$v_{xy}$ [cm]")
+lxy_coarse = Regular(100,0,50,name="lxy",label="$L_{xy}$ [cm]")
+lxy_log = Regular(60,1e-4,100,name="lxy",label="$L_{xy}$ [cm]",transform=transform.log)
 vz = Regular(2000,0,50,name="vz",label="$v_{z}$ [cm]")
 vz_coarse = Regular(100,0,50,name="vz",label="$v_{z}$ [cm]")
 vz_fine = Regular(250,0,50,name="vz",label="$v_{z}$ [cm]")
@@ -169,3 +172,4 @@ _eta_edges_coarse = list(np.linspace(-3, 3, 9))
 genpt_coarse  = Variable(_pt_edges_coarse,  name='pt',  label=r'$p_T^\mathrm{gen}$ [GeV]')
 genlxy_coarse = Variable(_lxy_edges_coarse, name='lxy', label=r'$L_{xy}$ [cm]')
 geneta_coarse = Variable(_eta_edges_coarse, name='eta', label=r'$\eta^\mathrm{gen}$')
+

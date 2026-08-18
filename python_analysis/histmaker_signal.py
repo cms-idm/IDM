@@ -1,4 +1,4 @@
-# imports
+7# imports
 import numpy as np
 import matplotlib.pyplot as plt
 import awkward as ak
@@ -18,9 +18,9 @@ import os
 import glob
 
 # ---- SETTINGS ----
-vers = 'Jun2026noID'
+vers = 'Jul2026noID'
 cuts = 'anmatchvtx'
-hists = 'mergedmatch'
+hists = 'lxyanalysis'
 
 
 # ---- FILES ----
@@ -36,7 +36,8 @@ sample_config = f"configs/sample_configs/signal_2024_{vers}_aEM.json"
 analyzer = Analyzer(sample_config, hists_config, cuts_config) # If not using BDT in cuts
 
 t1 = time.time()
-out = analyzer.process(execr='iterative')
+#out = analyzer.process(execr='iterative')
+out = analyzer.process(execr='futures', workers=8)
 t2 = time.time()
 
 print("Runtime: {:.2f} minutes".format((t2-t1)/60))

@@ -96,9 +96,15 @@ subroutines = []
 def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
     wgt = events.eventWgt/sum_wgt
 
+    # lxy_map is measured from the chi2 production vertex (the true, unsmeared
+    # primary vertex) rather than the reconstructed PV, which carries ~10-15um
+    # of resolution/bias that would otherwise leak into a "truth" quantity.
+    # dxy_gen_map is intentionally left relative to the reco PV below, since it's
+    # compared directly against reco dxy (also PV-relative) for resolution studies.
+    chi2 = ak.firsts(events.GenPart[np.abs(events.GenPart.ID) == 1000023])
     lxy_map = {
-        'ele': np.sqrt((events.GenEle.vx - events.PV.x)**2 + (events.GenEle.vy - events.PV.y)**2),
-        'pos': np.sqrt((events.GenPos.vx - events.PV.x)**2 + (events.GenPos.vy - events.PV.y)**2),
+        'ele': np.sqrt((events.GenEle.vx - chi2.vx)**2 + (events.GenEle.vy - chi2.vy)**2),
+        'pos': np.sqrt((events.GenPos.vx - chi2.vx)**2 + (events.GenPos.vy - chi2.vy)**2),
     }
     dxy_gen_map = {
         'ele': (-(events.GenEle.vx - events.PV.x) * events.GenEle.py + (events.GenEle.vy - events.PV.y) * events.GenEle.px) / events.GenEle.pt,

@@ -12,7 +12,7 @@ def cut1(events,info):
 def cut2(events,info):
     name = "cut2"
     desc = r"$\vec{p}_T^{miss}$ Trigger (120 GeV)"
-    plots = True
+    plots = False
 
     if info["year"] == 2016:
         cut = (events.trigFired16 & (1<<9)) == (1<<9)
@@ -50,7 +50,7 @@ def cut3(events,info):
 def cut4(events,info):
     name = "cut4"
     desc = "nJets > 0 (pT > 30 GeV)"
-    plots = True
+    plots = False
     nJets = ak.count(events.PFJet.pt,axis=1)
     cut = (nJets > 0) 
     return events[cut], name, desc, plots
@@ -60,7 +60,7 @@ def cut5(events,info):
     # using the medium WP, as in Andre's version of iDM
     name = "cut5"
     desc = "No b-tagged jets"
-    plots = True
+    plots = False
     bTag = events.PFJet.bTag
 
     # DeepFlavour working points for UL samples
@@ -75,7 +75,7 @@ def cut5(events,info):
 def cut6(events, info):
     name = 'cut6'
     desc = r'J1 $p_T > 80$ GeV, $|\eta| < 2.4$'
-    plots = True
+    plots = False
     jets = events.PFJet
     sortJetsByPt = ak.argsort(jets.pt, ascending=False)
     j1 = jets[sortJetsByPt][:, 0]
@@ -85,7 +85,7 @@ def cut6(events, info):
 def cut7(events, info):
     name = 'cut7'
     desc = r'$|\Delta \phi(\vec{p}_T^{miss},$ J1$)| > 1.5$'
-    plots = True
+    plots = False
     jets = events.PFJet
     sortJetsByPt = ak.argsort(jets.pt, ascending=False)
     j1 = jets[sortJetsByPt][:, 0]

@@ -4,7 +4,14 @@ import matplotlib.pyplot as plt
 import awkward as ak
 
 import sys
-#sys.path.append("../../analysisTools/")
+import os
+
+# Make the script runnable regardless of the caller's current working
+# directory by anchoring paths to the repo root (two levels up from this file).
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
 from analysisTools.analysisTools import Analyzer
 from analysisTools.analysisTools import loadSchema
 import analysisTools.analysisTools as tools
@@ -15,7 +22,6 @@ import analysisTools.utils as utils
 import analysisTools.plotTools as ptools
 import time
 import json
-import os
 import glob
 from hist import Hist, loc as hloc
 from hist.axis import Variable
@@ -27,8 +33,10 @@ import mplhep as hep
 #cuts_config = "configs/selections/minimal_cuts.py"
 #hists_config = "configs/hists/genstudy.py"
 #sample_config = "configs/samples/signal_2024_Apr2026_aEM.json"
-outdir = 'workarea'
-saved_signal_hists = f"{outdir}/hists_sigMay2026_an-sel_elerecoeff.coffea"
+outdir = os.path.join(REPO_ROOT, 'workarea')
+plotdir = os.path.join(REPO_ROOT, 'plots', 'elerecoeff')
+os.makedirs(plotdir, exist_ok=True)
+saved_signal_hists = f"{outdir}/hists_sigJul2026noID_anmatchvtx-sel_elerecoeff.coffea"
 
 title = 'Electron Reco'
 seltag = 'nocuts'
@@ -194,7 +202,7 @@ for cfg in proj_configs:
         ax.set_xscale('log')
     plt.title(rf"{title}: {cfg['var']}")
     plt.legend()
-    plt.savefig(f"plots/hist_{cfg['plottag']}_hist_allpts.png")
+    plt.savefig(f"{plotdir}/hist_{cfg['plottag']}_hist_allpts.png")
     plt.close(fig)
 
     alllpt_hists = [
@@ -225,7 +233,7 @@ for cfg in proj_configs:
         ax.set_xscale('log')
     plt.title(rf"{title} Efficiency by {cfg['var']}")
     plt.legend()
-    plt.savefig(f"plots/hist_{cfg['plottag']}_ratio_allpts.png")
+    plt.savefig(f"{plotdir}/hist_{cfg['plottag']}_ratio_allpts.png")
     plt.close(fig)
 
     # Per-sample efficiency plots: 3 plots, each pair controls for 2 of (m1, delta, ctau)
@@ -266,7 +274,7 @@ for cfg in proj_configs:
             ax.set_xscale('log')
         plt.title(rf"{title} Efficiency by {cfg['var']} — {vc['label']}")
         plt.legend(fontsize=11)
-        plt.savefig(f"plots/hist_{cfg['plottag']}_ratio_persamp_{vc['tag']}.png")
+        plt.savefig(f"{plotdir}/hist_{cfg['plottag']}_ratio_persamp_{vc['tag']}.png")
         plt.close(fig)
 
     # Multi-sample comparison: one efficiency type per plot, all samples as solid colored lines
@@ -312,7 +320,7 @@ for cfg in proj_configs:
             ax.set_xscale('log')
         plt.title(rf"{title} {et['label']} Efficiency by {cfg['var']}")
         plt.legend(fontsize=10)
-        plt.savefig(f"plots/hist_{cfg['plottag']}_ratio_multisamp_{et['tag']}.png")
+        plt.savefig(f"{plotdir}/hist_{cfg['plottag']}_ratio_multisamp_{et['tag']}.png")
         plt.close(fig)
 
 # ── Comparison plots ──────────────────────────────────────────────────────────

@@ -5,10 +5,18 @@ from matplotlib.colors import LogNorm
 from scipy.optimize import curve_fit
 from scipy.special import erf as sp_erf
 import mplhep as hep
+import sys
+import os
+
+# Make the script runnable regardless of the caller's current working
+# directory by anchoring paths to the repo root (one level up from this file).
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
 import coffea.util as util
 import analysisTools.utils as utils
 import analysisTools.plotTools as ptools
-import os
 
 plt.rcParams.update({
     'font.size':        20,
@@ -20,9 +28,9 @@ plt.rcParams.update({
     'figure.titlesize': 24,
 })
 
-outdir    = 'workarea'
-vers      = 'May2026'
-selection = 'an'    # change to match the selection used when running the histmaker
+outdir    = os.path.join(REPO_ROOT, 'workarea')
+vers      = 'Jul2026noID'
+selection = 'anmatchvtx'
 hists_tag = 'recores'
 saved_signal_hists = f"{outdir}/hists_sig{vers}_{selection}-sel_{hists_tag}.coffea"
 seltag = 'nocuts'
@@ -33,7 +41,8 @@ size   = (16, 12)
 s_hists = util.load(saved_signal_hists)[0]
 s_pts   = utils.get_signal_point_dict(s_hists)
 
-os.makedirs('plots', exist_ok=True)
+plotdir = os.path.join(REPO_ROOT, 'plots', 'recores')
+os.makedirs(plotdir, exist_ok=True)
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -439,7 +448,7 @@ for qcfg in qty_configs:
                 fontsize=18, va='top', ha='left',
                 bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
     plt.tight_layout()
-    plt.savefig(f'plots/hist_{seltag}_res_{qty}_1D_allsamps.png')
+    plt.savefig(f'{plotdir}/hist_{seltag}_res_{qty}_1D_allsamps.png')
     plt.close(fig)
 
 
@@ -474,7 +483,7 @@ for qcfg in qty_configs:
         ax.set_title(f'Electron {qcfg["title"]} vs {gvcfg["label"]} — all samples')
         ax.legend()
         plt.tight_layout()
-        plt.savefig(f'plots/hist_{seltag}_res_{qty}_vs_{gvar}_profile_allsamps.png')
+        plt.savefig(f'{plotdir}/hist_{seltag}_res_{qty}_vs_{gvar}_profile_allsamps.png')
         plt.close(fig)
 
 
@@ -530,7 +539,7 @@ for histname, title, doLogx in _2d_specs:
         ax.set_xscale('log')
     ax.set_title(f'{title} — all samples')
     plt.tight_layout()
-    plt.savefig(f'plots/hist_{seltag}_{histname}_2D_allsamps.png')
+    plt.savefig(f'{plotdir}/hist_{seltag}_{histname}_2D_allsamps.png')
     plt.close(fig)
 
 # ── Section 4: 2D mean-resolution maps (genpt × genlxy, genpt × geneta) ──────
@@ -562,7 +571,7 @@ for histbase, title_base, cbar_label, fit_range in _mean2d_specs:
         ax.set_ylabel(h3d.axes[1].label)
         ax.set_title(f'{title_base} ({reco_label}) — all samples')
         plt.tight_layout()
-        plt.savefig(f'plots/hist_{seltag}_{histname}_meanres_allsamps.png')
+        plt.savefig(f'{plotdir}/hist_{seltag}_{histname}_meanres_allsamps.png')
         plt.close(fig)
 
 # ── Section 5: 2D RMS-resolution maps (genpt × genlxy, genpt × geneta) ───────
@@ -593,7 +602,7 @@ for histbase, title_base, cbar_label, fit_range in _sigma2d_specs:
         ax.set_ylabel(h3d.axes[1].label)
         ax.set_title(f'{title_base} ({reco_label}) — all samples')
         plt.tight_layout()
-        plt.savefig(f'plots/hist_{seltag}_{histname}_sigmares_allsamps.png')
+        plt.savefig(f'{plotdir}/hist_{seltag}_{histname}_sigmares_allsamps.png')
         plt.close(fig)
 
 # ── Section 6: 1D DSCB σ vs gen variable (LowPt and GED overlaid) ────────────
@@ -642,7 +651,7 @@ for qcfg in qty_configs:
         ax.set_title(f'Electron {qcfg["title"]} DSCB $\\sigma$ vs {gvcfg["label"]} — all samples')
         ax.legend()
         plt.tight_layout()
-        plt.savefig(f'plots/hist_{seltag}_res_{qty}_vs_{gvar}_sigma1D_allsamps.png')
+        plt.savefig(f'{plotdir}/hist_{seltag}_res_{qty}_vs_{gvar}_sigma1D_allsamps.png')
         plt.close(fig)
 
 # ── Section 7: 1D resolution slices for individual gen-variable bins ──────────
@@ -740,5 +749,5 @@ for qcfg in qty_configs:
             plt.tight_layout()
             lo_str = str(lo).replace('.', 'p').replace('-', 'n')
             hi_str = str(hi).replace('.', 'p').replace('-', 'n')
-            plt.savefig(f'plots/hist_{seltag}_res_{qty}_vs_{gvar}_{lo_str}to{hi_str}_1Dslice.png')
+            plt.savefig(f'{plotdir}/hist_{seltag}_res_{qty}_vs_{gvar}_{lo_str}to{hi_str}_1Dslice.png')
             plt.close(fig)

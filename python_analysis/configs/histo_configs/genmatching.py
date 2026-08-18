@@ -81,6 +81,11 @@ subroutines = []
 def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
     wgt = events.eventWgt / sum_wgt
 
+    # gen Lxy is measured from the chi2 production vertex (the true, unsmeared
+    # primary vertex) rather than the reconstructed PV, which carries ~10-15um
+    # of resolution/bias that would otherwise leak into a "truth" quantity.
+    chi2 = ak.firsts(events.GenPart[np.abs(events.GenPart.ID) == 1000023])
+
     # AllLptElectron does not get mindRj in the standard subroutines; compute it here
     events['AllLptElectron', 'mindRj'] = ak.fill_none(
         ak.min(events.AllLptElectron.dRJets, axis=-1), 999
@@ -177,8 +182,8 @@ def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
             hists[f'dr_to_gen_vs_eta_{tag}'].fill(samp=samp, cut=cut, eta=ele.eta, dr=dr_gen, weight=w)
 
             # ── Suggested fills ──
-            gen_lxy = np.sqrt((gen_ele.vx - events.PV.x[has_rank])**2
-                             +(gen_ele.vy - events.PV.y[has_rank])**2)
+            gen_lxy = np.sqrt((gen_ele.vx - chi2.vx[has_rank])**2
+                             +(gen_ele.vy - chi2.vy[has_rank])**2)
             gen_pt  = np.minimum(gen_ele.pt, gen_pos.pt)
             hists[f'dr_to_gen_vs_genlxy_{tag}'].fill(samp=samp, cut=cut, lxy=gen_lxy,       dr=dr_gen, weight=w)
             hists[f'dr_to_gen_vs_genpt_{tag}' ].fill(samp=samp, cut=cut, pt=gen_pt,         dr=dr_gen, weight=w)
@@ -199,8 +204,8 @@ def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
     # Complements the reco-to-gen fills above: here we ask, for each gen particle,
     # how close is the nearest reco electron in each collection?
     gen_lxy_all = np.sqrt(
-        (events.GenEle.vx - events.PV.x)**2 +
-        (events.GenEle.vy - events.PV.y)**2
+        (events.GenEle.vx - chi2.vx)**2 +
+        (events.GenEle.vy - chi2.vy)**2
     )
     gen_parts = {'ele': events.GenEle, 'pos': events.GenPos}
 

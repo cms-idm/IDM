@@ -1,0 +1,361 @@
+try:
+    from histobins import *
+except ModuleNotFoundError:
+    from configs.histo_configs.histobins import *
+from hist import Hist
+from hist.axis import Regular
+import hist
+import numpy as np
+import awkward as ak
+
+# Merged-electron category only (definition mirrors mergedcats.py's _cat_merged):
+# an AllLptElectron quality-matched (dR<0.1, charge, pt within 20%) to one gen
+# electron while also being within dR<0.1 of the other gen (but not a full
+# quality match to it), with neither gen having a photon/track/conversion
+# alternative.
+
+# All axes below use log-scale binning (100 bins each). Log binning is
+# undefined at 0, so every lower edge is floored at 1e-4; values at/below that
+# floor land in the underflow bin rather than being plotted.
+_LOG = hist.axis.transform.log
+
+# Lxy_zoom_fine (histobins.py) is Regular(400,0,40,name='lxy',...) but linear,
+# so a local log-scale axis is declared here instead of reusing it directly.
+# Re-declared under different axis names (same binning) for the reco dxy /
+# svProxyVxy axes so all three can share one 2D hist without a name collision
+# on fill.
+_lxy_log              = Regular(100, 1e-4, 40, name='lxy',        label=r'$L_{xy}$ [cm]', transform=_LOG)
+_dxy_zoom_fine        = Regular(100, 1e-4, 2,  name='dxy',        label=r'Electron Track $d_{xy}$ [cm]', transform=_LOG)
+
+# mele_gen_lxy_vs_svProxyVxy is kept linear (not log) per request, so it gets
+# its own non-transformed lxy axis alongside the linear svProxyVxy axis.
+_lxy_linear           = Regular(100, 0, 40, name='lxy',           label=r'$L_{xy}$ [cm]')
+_svProxyVxy_zoom_fine = Regular(100, 0, 40, name='svProxyVxy',    label=r'SV Proxy $v_{xy}$ [cm]')
+
+# Reco and truth dphi axes share the same [0,pi] binning (dphi/dphi_generic in
+# histobins.py) but need distinct names to coexist on one 2D hist.
+_dphi_reco  = Regular(100, 1e-4, 1, name='dphi_reco',  label=r'Reco $\Delta\phi(e, p_{T}^{miss})$', transform=_LOG)
+_dphi_truth = Regular(100, 1e-4, 1, name='dphi_truth', label=r'Truth $\Delta\phi(ee, \chi_2)$', transform=_LOG)
+_dphi_truth_genmet = Regular(100, 1e-4, 1, name='dphi_truth_genmet', label=r'Truth $\Delta\phi(ee, p_{T}^{miss,gen})$', transform=_LOG)
+
+_lxyEst_zoom_fine = Regular(100, 1e-4, 40, name='lxyEst', label=r'$d_{xy}\sin(\Delta\phi(e, p_{T}^{miss}))$ [cm]', transform=_LOG)
+
+_dphi_genee_chi2   = Regular(100, 1e-4, 1, name='dphi_genee_chi2',   label=r'Truth $\Delta\phi(ee, \chi_2)$', transform=_LOG)
+_dphi_chi2_genmet  = Regular(100, 1e-4, 1, name='dphi_chi2_genmet',  label=r'Truth $\Delta\phi(\chi_2, p_{T}^{miss,gen})$', transform=_LOG)
+
+# Local log-scale stand-in for the imported (linear) ee_met_dphi axis, used by
+# the two single-dphi hists below.
+_ee_met_dphi_log = Regular(100, 1e-4, 0.5, name='dphi', label=r'$\Delta \phi$', transform=_LOG)
+
+# ── Reco-quality comparison between the two gen-Lxy populations seen in the
+# gen-lxy-vs-dxy plot (uncorrelated low-lxy lobe vs. correlated high-lxy lobe).
+# Split at gen Lxy = 0.01 cm; one histogram per candidate quality/resolution
+# variable, with a 'pop' axis ('prompt'/'displaced') to separate the two
+# populations for overlay plotting. Shared by both the track-quality variables
+# (_POP_COMPARE) and the lead/sublead resolution variables below.
+POP_LXY_CUT = 0.01  # cm
+
+pop = StrCategory(['prompt', 'displaced'], name='pop', label=f'Gen Lxy population (cut at {POP_LXY_CUT} cm)')
+
+# dR(gen, reco) for the merged category is <0.1 by construction for the two
+# individually-matched gens (dr_to_ge/dr_to_gp < 0.1); dR(genEE, reco) is not
+# directly bounded by the selection but is expected to land in the same
+# ballpark, so the zoom range is widened slightly relative to mergedmatch.py's
+# equivalent axis (0-0.15) to avoid clipping its tail.
+_dr_reco_zoom = Regular(120, 1e-4, 0.1, name='dr', label=r'$\Delta R$', transform=_LOG)
+
+_dpt_lead_sublead = Regular(100, 0, 30, name='dpt', label=r'Gen $p_T^{lead} - p_T^{sublead}$ [GeV]')
+
+# res_pt/res_dxy (histobins.py) use variable-width bins (fine near 0, coarser
+# in the tails), which the plotting side has to correct for with a per-bin
+# binwnorm. Using a plain Regular axis here instead avoids that entirely.
+_res_pt_pm2  = Regular(100, -2, 2, name='res', label=r'$\Delta p_T/p_T^\mathrm{gen}$')
+_res_dxy_pm2 = Regular(100, -2, 2, name='res', label=r'$\Delta d_{xy}/d_{xy}^\mathrm{gen}$')
+
+# Second round of pop-compare variables: the track-fit-quality/iso/ID set
+# above showed no large separation between the two Lxy populations, so these
+# probe quantities more directly tied to the displaced track's geometry
+# (calo-matching, hit pattern, vertex/category flags) instead.
+_HoverE           = Regular(100, 0, 0.5,  name='HoverE',           label=r'$H/E$')
+_EoverPInv        = Regular(100, 0, 0.2,  name='EoverPInv',        label=r'$|1/E - 1/p|$ [GeV$^{-1}$]')
+_dEtaSeed         = Regular(100, 0, 0.05, name='dEtaSeed',         label=r'$|\Delta\eta_{seed}|$')
+_dPhiIn           = Regular(100, 0, 0.5,  name='dPhiIn',           label=r'$|\Delta\phi_{in}|$')
+_sigmaIetaIeta    = Regular(100, 0, 0.05, name='sigmaIetaIeta',    label=r'Full5x5 $\sigma_{i\eta i\eta}$')
+_scEtaWidth       = Regular(100, 0, 0.05, name='scEtaWidth',       label=r'SC $\eta$ Width')
+_scPhiWidth       = Regular(100, 0, 0.5,  name='scPhiWidth',       label=r'SC $\phi$ Width')
+_missingInnerHits = Integer(0, 6,         name='missingInnerHits', label='Expected Missing Inner Hits')
+_dxySignif        = Regular(100, 1e-3, 100,   name='dxy_signif',        label=r'Electron Track $d_xy/\sigma_{d_xy}$', transform=_LOG)
+_dzSignif         = Regular(100, 1e-3, 100,   name='dz_signif',        label=r'Electron Track $d_z/\sigma_{d_z}$', transform=_LOG)
+_minDRtoReg       = Regular(100, 0, 0.5,  name='minDRtoReg',       label=r'Min $\Delta R$ to Seeding Region')
+_svProxyValid     = IntCategory([0, 1],   name='svProxyValid',     label='SV Proxy Fit Valid')
+_conversionVeto   = IntCategory([0, 1],   name='conversionVeto',   label='Conversion Veto')
+_isPF             = IntCategory([0, 1],   name='isPF',             label='Reconstructed as PF Electron')
+
+# axis name -> (Regular axis reused from histobins.py, value extractor on `me`)
+_POP_COMPARE = {
+    'pt':               (ele_pt_zoom_fine,  lambda me: me.pt),
+    'eta':              (ele_eta_fine,      lambda me: me.eta),
+    'trkChi2':          (ele_chi2,          lambda me: me.trkChi2),
+    'trkProb':          (ele_prob,          lambda me: me.trkProb),
+    'numTrackerHits':   (ele_trkHits,       lambda me: me.numTrackerHits),
+    'numPixHits':       (ele_pixHits,       lambda me: me.numPixHits),
+    'numStripHits':     (ele_stripHits,     lambda me: me.numStripHits),
+    'trkRelIso':        (ele_trkRelIso,     lambda me: me.trkRelIso),
+    'PFRelIso':         (ele_PFRelIso,      lambda me: me.PFRelIso),
+    'miniRelIso':       (ele_miniRelIso,    lambda me: me.miniRelIso),
+    'angRes':           (ele_angRes,        lambda me: me.angRes),
+    'ID':               (ele_id,            lambda me: me.ID),
+    'dxySignif':        (_dxySignif,        lambda me: np.abs(me.dxy) / me.dxyErr),
+    'HoverE':           (_HoverE,           lambda me: me.HoverE),
+    'EoverPInv':        (_EoverPInv,        lambda me: me.abs1overEm1overP),
+    'dEtaSeed':         (_dEtaSeed,         lambda me: me.absdEtaSeed),
+    'dPhiIn':           (_dPhiIn,           lambda me: me.absdPhiIn),
+    'sigmaIetaIeta':    (_sigmaIetaIeta,    lambda me: me.full55sigmaIetaIeta),
+    'scEtaWidth':       (_scEtaWidth,       lambda me: me.scEtaWidth),
+    'scPhiWidth':       (_scPhiWidth,       lambda me: me.scPhiWidth),
+    'missingInnerHits': (_missingInnerHits, lambda me: me.expMissingInnerHits),
+    'dzSignif':         (_dzSignif,         lambda me: np.abs(me.dz) / me.dzErr),
+    'minDRtoReg':       (_minDRtoReg,       lambda me: me.minDRtoReg),
+    'svProxyValid':     (_svProxyValid,     lambda me: me.svProxyValid),
+    'conversionVeto':   (_conversionVeto,   lambda me: me.conversionVeto),
+    'isPF':             (_isPF,             lambda me: me.isPF),
+}
+
+def make_histograms():
+    histograms = {}
+    histograms['mele_gen_lxy_vs_dxy'] = Hist(
+        samp, cut, _lxy_log, _dxy_zoom_fine, storage=hist.storage.Weight()
+    )
+    histograms['mele_gen_lxy_vs_svProxyVxy'] = Hist(
+        samp, cut, _lxy_linear, _svProxyVxy_zoom_fine, storage=hist.storage.Weight()
+    )
+    histograms['mele_dphi_reco_vs_truth'] = Hist(
+        samp, cut, _dphi_reco, _dphi_truth, storage=hist.storage.Weight()
+    )
+    histograms['mele_dphi_reco_vs_truth_genmet'] = Hist(
+        samp, cut, _dphi_reco, _dphi_truth_genmet, storage=hist.storage.Weight()
+    )
+    histograms['mele_gen_lxy_vs_lxyEst'] = Hist(
+        samp, cut, _lxy_log, _lxyEst_zoom_fine, storage=hist.storage.Weight()
+    )
+    histograms['mele_dphi_recoMET_vs_genMET'] = Hist(
+        samp, cut, _ee_met_dphi_log, storage=hist.storage.Weight()
+    )
+    histograms['mele_dphi_recoele_vs_genee'] = Hist(
+        samp, cut, _ee_met_dphi_log, storage=hist.storage.Weight()
+    )
+    histograms['mele_dphi_genee_vs_chi2'] = Hist(
+        samp, cut, _dphi_genee_chi2, storage=hist.storage.Weight()
+    )
+    histograms['mele_dphi_chi2_vs_genmet'] = Hist(
+        samp, cut, _dphi_chi2_genmet, storage=hist.storage.Weight()
+    )
+    for var, (axis, _) in _POP_COMPARE.items():
+        histograms[f'mele_popcompare_{var}'] = Hist(
+            samp, cut, pop, axis, storage=hist.storage.Weight()
+        )
+
+    # ── Prompt/displaced lead-sublead resolution & separation ────────────────
+    histograms['mele_gen_lxy']          = Hist(samp, cut, pop, _lxy_log,         storage=hist.storage.Weight())
+    histograms['mele_dr_ee_reco']       = Hist(samp, cut, pop, _dr_reco_zoom,     storage=hist.storage.Weight())
+    histograms['mele_dr_lead_reco']     = Hist(samp, cut, pop, _dr_reco_zoom,     storage=hist.storage.Weight())
+    histograms['mele_dr_sublead_reco']  = Hist(samp, cut, pop, _dr_reco_zoom,     storage=hist.storage.Weight())
+    histograms['mele_ptres_ee']         = Hist(samp, cut, pop, _res_pt_pm2,       storage=hist.storage.Weight())
+    histograms['mele_ptres_lead']       = Hist(samp, cut, pop, _res_pt_pm2,       storage=hist.storage.Weight())
+    histograms['mele_dpt_lead_sublead'] = Hist(samp, cut, pop, _dpt_lead_sublead, storage=hist.storage.Weight())
+    histograms['mele_dxyres_lead']      = Hist(samp, cut, pop, _res_dxy_pm2,      storage=hist.storage.Weight())
+    histograms['mele_dxyres_sublead']   = Hist(samp, cut, pop, _res_dxy_pm2,      storage=hist.storage.Weight())
+    return histograms
+
+subroutines = []
+
+def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
+    # ── Gen kinematics ────────────────────────────────────────────────────────
+    # gen_lxy is measured from the chi2 production vertex (the true, unsmeared
+    # primary vertex) rather than the reconstructed PV, which carries ~10-15um
+    # of resolution/bias that would otherwise leak into a "truth" quantity.
+    chi2       = ak.firsts(events.GenPart[np.abs(events.GenPart.ID) == 1000023])
+    gen_lxy    = np.sqrt((events.GenEle.vx - chi2.vx)**2 + (events.GenEle.vy - chi2.vy)**2)
+    gen_sum_pt = events.GenEle.pt + events.GenPos.pt
+    chi1       = events.GenPart[np.abs(events.GenPart.ID) == 1000022]
+    gen_met_phi = np.arctan2(ak.sum(chi1.py, axis=1), ak.sum(chi1.px, axis=1))
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+    def _dphi(a, b):
+        d = np.abs(a - b)
+        return ak.where(d > np.pi, 2 * np.pi - d, d)
+
+    def _dr(eta1, phi1, eta2, phi2):
+        return np.sqrt((eta1 - eta2)**2 + _dphi(phi1, phi2)**2)
+
+    def _pt_rel(obj_pt, gen_pt):
+        return np.abs(obj_pt - gen_pt) / gen_pt < 0.2
+
+    # ── Photon / OOT-photon / track / conversion matching to gen ─────────────
+    # (Needed to determine whether either gen has a non-electron alternative,
+    # which excludes the event from the merged-electron category.)
+    _pho_dr_ge  = _dr(events.Photon.eta,     events.Photon.phi,     events.GenEle.eta, events.GenEle.phi)
+    _pho_dr_gp  = _dr(events.Photon.eta,     events.Photon.phi,     events.GenPos.eta, events.GenPos.phi)
+    _oot_dr_ge  = _dr(events.ootPhoton.eta,  events.ootPhoton.phi,  events.GenEle.eta, events.GenEle.phi)
+    _oot_dr_gp  = _dr(events.ootPhoton.eta,  events.ootPhoton.phi,  events.GenPos.eta, events.GenPos.phi)
+    _trk_dr_ge  = _dr(events.IsoTrack.eta,   events.IsoTrack.phi,   events.GenEle.eta, events.GenEle.phi)
+    _trk_dr_gp  = _dr(events.IsoTrack.eta,   events.IsoTrack.phi,   events.GenPos.eta, events.GenPos.phi)
+    _conv_dr_ge = _dr(events.Conversion.eta, events.Conversion.phi, events.GenEle.eta, events.GenEle.phi)
+    _conv_dr_gp = _dr(events.Conversion.eta, events.Conversion.phi, events.GenPos.eta, events.GenPos.phi)
+
+    _pho_pt_ge  = _pt_rel(events.Photon.pt,     events.GenEle.pt)
+    _pho_pt_gp  = _pt_rel(events.Photon.pt,     events.GenPos.pt)
+    _oot_pt_ge  = _pt_rel(events.ootPhoton.pt,  events.GenEle.pt)
+    _oot_pt_gp  = _pt_rel(events.ootPhoton.pt,  events.GenPos.pt)
+    _trk_pt_ge  = _pt_rel(events.IsoTrack.pt,   events.GenEle.pt)
+    _trk_pt_gp  = _pt_rel(events.IsoTrack.pt,   events.GenPos.pt)
+    _conv_pt_ge = _pt_rel(events.Conversion.pt, events.GenEle.pt)
+    _conv_pt_gp = _pt_rel(events.Conversion.pt, events.GenPos.pt)
+
+    _ge_any = (
+        ak.any((_pho_dr_ge  < 0.1) & _pho_pt_ge,                                  axis=1) |
+        ak.any((_oot_dr_ge  < 0.1) & _oot_pt_ge,                                  axis=1) |
+        ak.any((_trk_dr_ge  < 0.1) & (events.IsoTrack.charge == -1) & _trk_pt_ge, axis=1) |
+        ak.any((_conv_dr_ge < 0.1) & _conv_pt_ge,                                 axis=1)
+    )
+    _gp_any = (
+        ak.any((_pho_dr_gp  < 0.1) & _pho_pt_gp,                                  axis=1) |
+        ak.any((_oot_dr_gp  < 0.1) & _oot_pt_gp,                                  axis=1) |
+        ak.any((_trk_dr_gp  < 0.1) & (events.IsoTrack.charge == +1) & _trk_pt_gp, axis=1) |
+        ak.any((_conv_dr_gp < 0.1) & _conv_pt_gp,                                 axis=1)
+    )
+
+    # ── AllLptElectron matching ────────────────────────────────────────────────
+    coll = events.AllLptElectron
+
+    dphi_e   = _dphi(coll.phi, events.GenEle.phi)
+    dphi_p   = _dphi(coll.phi, events.GenPos.phi)
+    dr_to_ge = np.sqrt((coll.eta - events.GenEle.eta)**2 + dphi_e**2)
+    dr_to_gp = np.sqrt((coll.eta - events.GenPos.eta)**2 + dphi_p**2)
+
+    pt_me = _pt_rel(coll.pt, events.GenEle.pt)
+    pt_mp = _pt_rel(coll.pt, events.GenPos.pt)
+    pt_ms = _pt_rel(coll.pt, gen_sum_pt)
+
+    dr_match_ge = (dr_to_ge < 0.1) & (coll.charge == -1) & pt_me
+    dr_match_gp = (dr_to_gp < 0.1) & (coll.charge == +1) & pt_mp
+
+    pt_ok_ge = pt_me | pt_ms
+    pt_ok_gp = pt_mp | pt_ms
+
+    merged_i = (dr_to_ge < 0.1) & (dr_to_gp < 0.1) & (
+        ((coll.charge == -1) & pt_ok_ge & ~dr_match_gp & ~_gp_any) |
+        ((coll.charge == +1) & pt_ok_gp & ~dr_match_ge & ~_ge_any)
+    )
+
+    only_ge_i = dr_match_ge & ~merged_i
+    only_gp_i = dr_match_gp & ~merged_i
+    matched_i = merged_i | dr_match_ge | dr_match_gp
+
+    has_merged = ak.any(merged_i,  axis=1)
+    n_matched  = ak.sum(matched_i, axis=1)
+
+    _A = ak.any(only_ge_i, axis=1)
+    _B = ak.any(only_gp_i, axis=1)
+
+    _cat_sep    = (_A & _B & ~has_merged) | (has_merged & (n_matched > 1))
+    _cat_merged = ~_cat_sep & has_merged & ~_ge_any & ~_gp_any
+
+    # ── Merged-electron fills ─────────────────────────────────────────────────
+    if ak.sum(_cat_merged) > 0:
+        me  = ak.firsts(coll[merged_i])[_cat_merged]
+        lxy = gen_lxy[_cat_merged]
+
+        hists['mele_gen_lxy_vs_dxy'].fill(
+            samp=samp, cut=cut, lxy=lxy, dxy=np.abs(me.dxy),
+        )
+        hists['mele_gen_lxy_vs_svProxyVxy'].fill(
+            samp=samp, cut=cut, lxy=lxy, svProxyVxy=me.svProxyVxy,
+        )
+
+        reco_dphi  = _dphi(me.phi, events.PFMET.phi[_cat_merged])
+        truth_dphi = _dphi(events.genEE.phi[_cat_merged], chi2.phi[_cat_merged])
+        hists['mele_dphi_reco_vs_truth'].fill(
+            samp=samp, cut=cut, dphi_reco=reco_dphi, dphi_truth=truth_dphi,
+        )
+
+        truth_dphi_genmet = _dphi(events.genEE.phi[_cat_merged], gen_met_phi[_cat_merged])
+        hists['mele_dphi_reco_vs_truth_genmet'].fill(
+            samp=samp, cut=cut, dphi_reco=reco_dphi, dphi_truth_genmet=truth_dphi_genmet,
+        )
+
+        lxy_est = np.abs(me.dxy) / np.sin(reco_dphi)
+        hists['mele_gen_lxy_vs_lxyEst'].fill(
+            samp=samp, cut=cut, lxy=lxy, lxyEst=lxy_est,
+        )
+
+        recoMET_genMET_dphi = _dphi(events.PFMET.phi[_cat_merged], gen_met_phi[_cat_merged])
+        hists['mele_dphi_recoMET_vs_genMET'].fill(
+            samp=samp, cut=cut, dphi=recoMET_genMET_dphi,
+        )
+
+        recoele_genee_dphi = _dphi(me.phi, events.genEE.phi[_cat_merged])
+        hists['mele_dphi_recoele_vs_genee'].fill(
+            samp=samp, cut=cut, dphi=recoele_genee_dphi,
+        )
+
+        hists['mele_dphi_genee_vs_chi2'].fill(
+            samp=samp, cut=cut, dphi_genee_chi2=truth_dphi,
+        )
+
+        chi2_genmet_dphi = _dphi(chi2.phi[_cat_merged], gen_met_phi[_cat_merged])
+        hists['mele_dphi_chi2_vs_genmet'].fill(
+            samp=samp, cut=cut, dphi_chi2_genmet=chi2_genmet_dphi,
+        )
+
+        # ak.where can't broadcast raw python strings against an array, so the
+        # population label is built with np.where on the plain numpy mask instead.
+        pop_label = np.where(ak.to_numpy(lxy) < POP_LXY_CUT, 'prompt', 'displaced')
+        hists['mele_gen_lxy'].fill(samp=samp, cut=cut, pop=pop_label, lxy=lxy)
+        for var, (axis, get_val) in _POP_COMPARE.items():
+            hists[f'mele_popcompare_{var}'].fill(
+                samp=samp, cut=cut, pop=pop_label, **{axis.name: get_val(me)},
+            )
+
+        # ── Lead/sublead resolution & separation (prompt vs displaced) ────────
+        # "Lead"/"sublead" assigned by gen pt, following the convention used in
+        # mergedmatch.py. Gen dxy (wrt PV) is not a stored branch, so it's
+        # derived here with the standard CMS dxy formula (same one used for
+        # gen-dxy resolution in recores.py): dxy = (-(vx-PVx)*py + (vy-PVy)*px)/pt.
+        gen_ele_sel = events.GenEle[_cat_merged]
+        gen_pos_sel = events.GenPos[_cat_merged]
+        pv_x_sel = events.PV.x[_cat_merged]
+        pv_y_sel = events.PV.y[_cat_merged]
+
+        gen_dxy_ele = (-(gen_ele_sel.vx - pv_x_sel) * gen_ele_sel.py + (gen_ele_sel.vy - pv_y_sel) * gen_ele_sel.px) / gen_ele_sel.pt
+        gen_dxy_pos = (-(gen_pos_sel.vx - pv_x_sel) * gen_pos_sel.py + (gen_pos_sel.vy - pv_y_sel) * gen_pos_sel.px) / gen_pos_sel.pt
+
+        lead_is_ele     = gen_ele_sel.pt >= gen_pos_sel.pt
+        gen_lead_pt     = ak.where(lead_is_ele, gen_ele_sel.pt, gen_pos_sel.pt)
+        gen_sublead_pt  = ak.where(lead_is_ele, gen_pos_sel.pt, gen_ele_sel.pt)
+        gen_lead_dxy    = ak.where(lead_is_ele, gen_dxy_ele, gen_dxy_pos)
+        gen_sublead_dxy = ak.where(lead_is_ele, gen_dxy_pos, gen_dxy_ele)
+
+        dr_reco_ele = ak.firsts(dr_to_ge[merged_i])[_cat_merged]
+        dr_reco_pos = ak.firsts(dr_to_gp[merged_i])[_cat_merged]
+        dr_lead     = ak.where(lead_is_ele, dr_reco_ele, dr_reco_pos)
+        dr_sublead  = ak.where(lead_is_ele, dr_reco_pos, dr_reco_ele)
+
+        genee_sel  = events.genEE[_cat_merged]
+        dr_ee_reco = _dr(genee_sel.eta, genee_sel.phi, me.eta, me.phi)
+
+        ptres_ee         = (me.pt - genee_sel.pt) / genee_sel.pt
+        ptres_lead       = (me.pt - gen_lead_pt) / gen_lead_pt
+        dpt_lead_sublead = gen_lead_pt - gen_sublead_pt
+
+        dxyres_lead    = (me.dxy - gen_lead_dxy) / gen_lead_dxy
+        dxyres_sublead = (me.dxy - gen_sublead_dxy) / gen_sublead_dxy
+
+        hists['mele_dr_ee_reco'      ].fill(samp=samp, cut=cut, pop=pop_label, dr=dr_ee_reco)
+        hists['mele_dr_lead_reco'    ].fill(samp=samp, cut=cut, pop=pop_label, dr=dr_lead)
+        hists['mele_dr_sublead_reco' ].fill(samp=samp, cut=cut, pop=pop_label, dr=dr_sublead)
+        hists['mele_ptres_ee'        ].fill(samp=samp, cut=cut, pop=pop_label, res=ptres_ee)
+        hists['mele_ptres_lead'      ].fill(samp=samp, cut=cut, pop=pop_label, res=ptres_lead)
+        hists['mele_dpt_lead_sublead'].fill(samp=samp, cut=cut, pop=pop_label, dpt=dpt_lead_sublead)
+        hists['mele_dxyres_lead'     ].fill(samp=samp, cut=cut, pop=pop_label, res=dxyres_lead)
+        hists['mele_dxyres_sublead'  ].fill(samp=samp, cut=cut, pop=pop_label, res=dxyres_sublead)

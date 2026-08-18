@@ -6,6 +6,14 @@ import awkward as ak
 import mplhep as hep
 
 import sys
+import os
+
+# Make the script runnable regardless of the caller's current working
+# directory by anchoring paths to the repo root (one level up from this file).
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
 from analysisTools.analysisTools import Analyzer
 from analysisTools.analysisTools import loadSchema
 import analysisTools.analysisTools as tools
@@ -14,10 +22,9 @@ import importlib
 import coffea.util as util
 import analysisTools.utils as utils
 import analysisTools.plotTools as ptools
-import os
 
-outdir = 'workarea'
-vers = 'May2026'
+outdir = os.path.join(REPO_ROOT, 'workarea')
+vers = 'Jul2026noID'
 selection = 'anmatchvtx'
 hists_tag = 'vtxvars-match'
 saved_signal_hists = f"{outdir}/hists_sig{vers}_{selection}-sel_{hists_tag}.coffea"
@@ -25,6 +32,9 @@ plottag = f'sig{vers}_{selection}-sel-best'
 
 s_hists = util.load(saved_signal_hists)[0]
 s_pts   = utils.get_signal_point_dict(s_hists)
+
+plotdir = os.path.join(REPO_ROOT, 'plots', 'vtxvars')
+os.makedirs(plotdir, exist_ok=True)
 
 size = (16, 12)
 cut  = 'cut9'
@@ -123,5 +133,5 @@ for title, outname, variables, doLogy, solid_label, dotted_label in plot_specs:
 
         plt.title(rf'{title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
         plt.tight_layout()
-        plt.savefig(f'plots/hist_{plottag}_{outname}_{tag}.png')
+        plt.savefig(f'{plotdir}/hist_{plottag}_{outname}_{tag}.png')
         plt.close()

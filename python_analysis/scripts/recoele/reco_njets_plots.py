@@ -18,6 +18,7 @@ import analysisTools.analysisTools as tools
 import analysisTools.analysisSubroutines as routines
 import importlib
 import coffea.util as util
+import mplhep as hep
 import analysisTools.utils as utils
 import analysisTools.plotTools as ptools
 import time
@@ -28,9 +29,12 @@ import glob
 #hists_config = "configs/hists/genstudy.py"
 #sample_config = "configs/samples/signal_2024_Apr2026_aEM.json"
 outdir = os.path.join(REPO_ROOT, 'workarea')
-plotdir = os.path.join(REPO_ROOT, 'plots', 'genstudy')
+plotdir = os.path.join(REPO_ROOT, 'plots', 'recoele')
 os.makedirs(plotdir, exist_ok=True)
-saved_signal_hists = f"{outdir}/hists_sigJul2026noID_anmatchvtx-sel_genstudy.coffea"
+saved_signal_hists = f"{outdir}/hists_sigJul2026noID_anmatchvtx-sel_recoeles.coffea"
+
+title = r'Reco $N_{jets}$'
+plottag = 'prevtx_reco-n-jets'
 
 # Signal
 s_hists = util.load(saved_signal_hists)[0]
@@ -45,34 +49,38 @@ s_cutsname = utils.get_signal_list_of_cuts(s_hists, get_cut_idx = False)
 
 df = utils.get_signal_cutflow_dict(s_hists, 'cutflow')
 
+#m1s = [0.05, 0.5, 5, 50]
+#deltas = [0.1, 0.2]
+#ctaus = [1]
+m1s = [0.05, 0.5, 5, 50]
+deltas = [0.1, 0.2]
+ctaus = [10]
+
 size = (16, 12)
 fig, ax = plt.subplots(figsize=size)
 
 # Plot settings
-plot_label = 'gen-diele-ctau'
-sel_label = 'prevtx'
-plot_title = r'Gen EE $c\tau$'
 plot_dict = {
-    'variable': ['gen_diele_ctau'],
+    'variable': 'reco_N_jets',
     'year': 2024,
-    'cut': 'cut1',
+    'cut': 'cut8',
 }
 
 style_dict = {
     'fig': fig, 'ax': ax,
     'rebin': 1j, 'xlim': None,     # if None, the default will show up; otherwise give as a list, i.e. [0, 10]
-    'doLogy': False, 'doLogx': False, 'doDensity': True, 'doYerr': False, 
+    'doLogy': False, 'doLogx': False, 'doDensity': True, 'doYerr': False,
     'xlabel': None,   # if None, the default will show up; otherwise give as a string, i.e. 'Electron dxy'
     'ylabel': None,   # if None, the default will show up; otherwise give as a string, i.e. 'Efficiency'
     'label': None,    # if None, the default will show up; otherwise give as a string, i.e. 'Highest ctau signal samples'
     'flow': None,     # overflow
     'doSave': False,
-    'ls': ['-'],
+    'ls': '-',
 }
 
 # signal points
 m1s = [1, 2, 5]
-deltas = [0.1, 0.2]
+deltas = [0.1]
 ctaus = [10]
 
 # Plot for variables signal points
@@ -83,13 +91,13 @@ for m1 in m1s:
             ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx)
             cmap_idx += 1
 
-plt.title(rf'{plot_title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
+plt.title(rf'{title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
 plt.legend()
-plt.savefig(f"{plotdir}/hist_{sel_label}_{plot_label}_ctau-{utils.stringfy_friendly(ctaus[0])}_m1-narrow.png")
+plt.savefig(f"{plotdir}/hist_{plottag}_delta-{utils.stringfy_friendly(deltas[0])}_ctau-{utils.stringfy_friendly(ctaus[0])}_m1-narrow.png")
 
 # signal points
-m1s = [0.05, 0.5, 5]
-deltas = [0.1, 0.2]
+m1s = [0.05, 0.5, 5, 50]
+deltas = [0.1]
 ctaus = [10]
 
 fig, ax = plt.subplots(figsize=size)
@@ -103,12 +111,12 @@ for m1 in m1s:
             ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx)
             cmap_idx += 1
 
-plt.title(rf'{plot_title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
+plt.title(rf'{title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
 plt.legend()
-plt.savefig(f"{plotdir}/hist_{sel_label}_{plot_label}_ctau-{utils.stringfy_friendly(ctaus[0])}_m1-wide.png")
+plt.savefig(f"{plotdir}/hist_{plottag}_delta-{utils.stringfy_friendly(deltas[0])}_ctau-{utils.stringfy_friendly(ctaus[0])}_m1-wide.png")
 
 # signal points
-m1s = [1, 2, 5]
+m1s = [5]
 deltas = [0.1]
 ctaus = [1, 10, 100]
 
@@ -123,14 +131,14 @@ for m1 in m1s:
             ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx)
             cmap_idx += 1
 
-plt.title(rf'{plot_title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
+plt.title(rf'{title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
 plt.legend()
-plt.savefig(f"{plotdir}/hist_{sel_label}_{plot_label}_delta-{utils.stringfy_friendly(deltas[0])}.png")
+plt.savefig(f"{plotdir}/hist_{plottag}_m1-{utils.stringfy_friendly(m1s[0])}_delta-{utils.stringfy_friendly(deltas[0])}.png")
 
 # signal points
 m1s = [5]
 deltas = [0.05, 0.1, 0.2]
-ctaus = [1, 10, 100]
+ctaus = [10]
 
 fig, ax = plt.subplots(figsize=size)
 style_dict['fig'] = fig; style_dict['ax'] = ax
@@ -143,7 +151,64 @@ for m1 in m1s:
             ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx)
             cmap_idx +=	1
 
-plt.title(rf'{plot_title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
+plt.title(rf'{title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
 plt.legend()
-plt.savefig(f"{plotdir}/hist_{sel_label}_{plot_label}_m1-{utils.stringfy_friendly(m1s[0])}.png")
+plt.savefig(f"{plotdir}/hist_{plottag}_m1-{utils.stringfy_friendly(m1s[0])}_ctau-{utils.stringfy_friendly(ctaus[0])}.png")
 
+# signal points
+m1s = [0.5]
+deltas = [0.1]
+ctaus = [1, 10, 100]
+
+fig, ax = plt.subplots(figsize=size)
+style_dict['fig'] = fig; style_dict['ax'] = ax
+
+# Plot for variables signal points
+cmap_idx = 0
+for m1 in m1s:
+    for delta in deltas:
+        for ctau in ctaus:
+            ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx)
+            cmap_idx += 1
+
+plt.title(rf'{title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
+plt.legend()
+plt.savefig(f"{plotdir}/hist_{plottag}_m1-{utils.stringfy_friendly(m1s[0])}_delta-{utils.stringfy_friendly(deltas[0])}.png")
+
+# signal points
+m1s = [0.5]
+deltas = [0.05, 0.1, 0.2]
+ctaus = [10]
+
+fig, ax = plt.subplots(figsize=size)
+style_dict['fig'] = fig; style_dict['ax'] = ax
+
+# Plot for variables signal points
+cmap_idx = 0
+for m1 in m1s:
+    for delta in deltas:
+        for ctau in ctaus:
+            ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx)
+            cmap_idx +=	1
+
+plt.title(rf'{title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
+plt.legend()
+plt.savefig(f"{plotdir}/hist_{plottag}_m1-{utils.stringfy_friendly(m1s[0])}_ctau-{utils.stringfy_friendly(ctaus[0])}.png")
+
+# All signal points summed
+fig, ax = plt.subplots(figsize=size)
+style_dict['fig'] = fig; style_dict['ax'] = ax
+
+histo_sum = None
+for _, row in s_pts.iterrows():
+    samp = row['name']
+    h = s_hists[plot_dict['variable']][{"samp": samp, "cut": plot_dict['cut']}]
+    histo_sum = h if histo_sum is None else histo_sum + h
+
+hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6')
+hep.histplot(histo_sum, ax=ax, histtype='step', label='All signal points', yerr=True)
+binwidth = histo_sum.axes.widths[0][0]
+ax.set_ylabel(f'Events/{binwidth:.3f}')
+plt.title(rf'{title}: All Signal Points')
+plt.legend()
+plt.savefig(f"{plotdir}/hist_{plottag}_allpoints.png")
