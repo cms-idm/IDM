@@ -46,6 +46,8 @@ def main():
     os.makedirs(flistdir, exist_ok=True)
 
     for subsample, dataset in subsamples.items():
+        if subsample.startswith("_comment"):
+            continue
         print(f"Querying DAS for {dataset}")
         files = query_das_files(dataset)
         if not files:
