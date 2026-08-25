@@ -633,6 +633,8 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    else {
       passesBkgSelection = (nt.PFMET_Pt_ >= metThreshold_);
    }
+   // Full readout also requires passing all MET filters, regardless of selectionMode.
+   passesBkgSelection = passesBkgSelection && (nt.METFiltersFailBits_ == 0);
    bool passesPtMiss = isSignal || passesBkgSelection;
    if (passesPtMiss) {
 

@@ -27,7 +27,7 @@ def main():
     parser.add_argument("--json", default="../../fileLists/background/MINIAOD/bkg_2024.json", help="Path to the background sample config JSON: {top_key: {subsample: DAS dataset}}")
     parser.add_argument("--year", default=None, help="MC year (default: parsed from the JSON filename, e.g. bkg_2024.json -> 2024)")
     parser.add_argument("--vers", default="Jul2026noID", help="Version tag used in the output EOS directory (background_<vers>) and split file list names")
-    parser.add_argument("--nsplit", type=int, default=50, help="Number of input files per condor job")
+    parser.add_argument("--nsplit", type=int, default=10, help="Number of input files per condor job")
     parser.add_argument("--nthreads", type=int, default=4, help="Number of threads per condor job")
     parser.add_argument("--dry-run", action="store_true", help="Query DAS and write file lists, but don't submit condor jobs")
     args = parser.parse_args()

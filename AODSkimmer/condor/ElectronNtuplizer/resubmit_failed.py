@@ -18,18 +18,19 @@ try:
 except ImportError:
     sys.exit("uproot not found — run inside a CMSSW environment or pip install uproot")
 
-VERS     = 'Jun2026noID'
+VERS     = 'Aug2026noIDSep'
 YEAR     = '2024'
 NTHREADS = 4
 IS_DATA  = 'False'
-IS_SIG   = 'True'
+IS_SIG   = 'False'
 CMSSW    = 'CMSSW_14_0_21'
 ENV_TAR  = 'ntuplizer_CMSSW_14_0_21_acrobert.tar.gz'
 
 XRD      = 'root://cmseos.fnal.gov/'
-EOS_BASE = f'/store/group/lpcmetx/iDMe/Samples/Ntuples/signal_{VERS}/{YEAR}'
+EOS_BASE      = f'/store/group/lpcmetx/iDMe/Samples/Ntuples/background_{VERS}/{YEAR}'
+EOS_BASE_SLIM = f'/store/group/lpcmetx/iDMe/Samples/Ntuples/background_{VERS}_slim/{YEAR}'
 TREE          = 'ntuples/outT'
-REQUIRED_BRANCH = 'GenEle_matchedAllLowPt'
+REQUIRED_BRANCH = 'PFJet_pt'
 SPLIT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'split_fileLists')
 
 def xrdfs_ls(path):
@@ -64,7 +65,7 @@ def collect_output_files():
     return files
 
 
-def resubmit(sublist_name, out_path, dry_run):
+def resubmit(sublist_name, out_path, out_path_slim, dry_run):
     split_file = os.path.join(SPLIT_DIR, sublist_name + '.txt')
     if not os.path.exists(split_file):
         print(f"  [SKIP] split file list not found: {split_file}")
@@ -73,7 +74,7 @@ def resubmit(sublist_name, out_path, dry_run):
     split_full = os.path.realpath(split_file)
     cmd = (
         f'condor_submit ElectronNtuplizer_config.jdl '
-        f'-append "Arguments = {sublist_name} {YEAR} {NTHREADS} {IS_DATA} {IS_SIG} {out_path} {CMSSW} {ENV_TAR}" '
+        f'-append "Arguments = {sublist_name} {YEAR} {NTHREADS} {IS_DATA} {IS_SIG} {out_path} {CMSSW} {ENV_TAR} {out_path_slim}" '
         f'-append "transfer_input_files = {split_full}" '
         f'-append "request_cpus = {NTHREADS}"'
     )
@@ -117,8 +118,11 @@ def main():
     for fpath in failed:
         fname = os.path.basename(fpath)                   # ntuples_..._flist_NN.root
         sublist_name = fname.removeprefix('ntuples_').removesuffix('.root')  # ..._flist_NN
-        out_path = os.path.dirname(fpath) + '/'           # /store/.../M1-.../ctau-N/
-        resubmit(sublist_name, out_path, args.dry_run)
+        out_dir = os.path.dirname(fpath)                  # /store/.../<group>/<subsample>
+        out_path = out_dir + '/'
+        rel_dir = os.path.relpath(out_dir, EOS_BASE)       # <group>/<subsample>
+        out_path_slim = f'{EOS_BASE_SLIM}/{rel_dir}/'
+        resubmit(sublist_name, out_path, out_path_slim, args.dry_run)
 
 
 if __name__ == '__main__':
