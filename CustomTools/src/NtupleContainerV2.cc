@@ -692,13 +692,13 @@ void NtupleContainerV2::CreateSlimTreeBranches() {
 
     outT_slim->Branch("METFiltersFailBits",&METFiltersFailBits_);
 
+    outT_slim->Branch("PFMET_ET",&PFMET_ET_);
+    outT_slim->Branch("PFMET_pt",&PFMET_Pt_);
+    outT_slim->Branch("PFMET_phi",&PFMET_Phi_);
+
     // Stored as Float16_t (leaflist "/f") -- these are event-level bookkeeping
     // quantities only (preselection efficiency/normalization), so the reduced
     // mantissa precision (~1e-4 relative) is not analysis-sensitive here.
-    outT_slim->Branch("PFMET_ET",&PFMET_ET_,"PFMET_ET/f");
-    outT_slim->Branch("PFMET_pt",&PFMET_Pt_,"PFMET_pt/f");
-    outT_slim->Branch("PFMET_phi",&PFMET_Phi_,"PFMET_phi/f");
-
     outT_slim->Branch("CaloMET_ET",&CaloMET_ET_,"CaloMET_ET/f");
     outT_slim->Branch("CaloMET_pt",&CaloMET_Pt_,"CaloMET_pt/f");
     outT_slim->Branch("CaloMET_phi",&CaloMET_Phi_,"CaloMET_phi/f");

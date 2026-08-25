@@ -58,11 +58,11 @@ options.register('outfile',
         VarParsing.VarParsing.varType.string,
         "Output file name")
 options.register('selectionMode',
-        "metThreshold",
+        "hlt",
         VarParsing.VarParsing.multiplicity.singleton,
         VarParsing.VarParsing.varType.string,
-        "Criterion gating the full-event background stream; irrelevant for signal. "
-        "'metThreshold': ptmiss >= metThreshold. 'hlt': OR of hltSelectionPaths.")
+        "Criterion gating the full-event background stream; background only, must not be "
+        "set when signal=1. 'metThreshold': ptmiss >= metThreshold. 'hlt': OR of hltSelectionPaths.")
 options.register('metThreshold',
         200.0,
         VarParsing.VarParsing.multiplicity.singleton,
@@ -85,6 +85,15 @@ options.register('slimOutfile',
         "If left empty, derived by inserting '_slim' before the '.root' extension of outfile.")
 
 options.parseArguments()
+
+# selectionMode (and its associated knobs, metThreshold/hltSelectionPaths) only gate the
+# full-readout background stream -- the plugin ignores it entirely for signal
+# (passesPtMiss = isSignal || passesBkgSelection in ElectronSkimmer.cc). Reject an explicit
+# override so a signal job doesn't silently carry a no-op selectionMode configuration.
+_explicitArgs = set(arg.split('=', 1)[0] for arg in sys.argv[1:])
+if options.signal and 'selectionMode' in _explicitArgs:
+    raise ValueError("selectionMode is a background-only option and has no effect on signal "
+                      "samples; remove it or set signal=0")
 
 # file list
 if ".txt" in options.flist:
