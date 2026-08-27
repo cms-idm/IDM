@@ -34,9 +34,10 @@ class myHisto:
         self.Res_GED = self.parse_axis(('Res_GED',700,-0.5,0.5)) 
         
         self.Gen_pt = self.parse_axis(('Gen_pt',[0,4,5,6,7,8,9,10,11,12,13,14,15,16,17,22,30])) 
-        self.Gen_pt_res = self.parse_axis(('Gen_pt_res',[0,4,5,6,7,8,9,10,11,12,13,14,15,16,17,22,30])) 
+        
+        self.Gen_pt_res = self.parse_axis(('Gen_pt_res',[0,1,3,6,15])) 
 
-        self.Gen_vxy = self.parse_axis(('Gen_vxy',[0,1,3,6,10,15])) 
+        self.Gen_vxy = self.parse_axis(('Gen_vxy',[0,1,3,6,15])) 
 
 
         

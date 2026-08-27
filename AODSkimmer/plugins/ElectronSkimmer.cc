@@ -1603,18 +1603,23 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          // assign match flags to electrons & vertices
          int iTarg_e = -1; int iTarg_p = -1;
          std::string mType_e = "None"; std::string mType_p = "None";
-         if (iMatch_e != -1) {
+         if (iMatch_e != -1) 
+         {
             nt.genEleMatched_ = true;
-            if (iMatch_e < n_reg_eles) {
+            if (iMatch_e < n_reg_eles) 
+            {
                nt.recoElectronGenMatched_[iMatch_e] = true;
                nt.recoElectronMatchType_[iMatch_e] = -1;
-	       iTarg_e = iMatch_e;
+    	       iTarg_e = iMatch_e;
                mType_e = "R";
-	       if (nt.recoElectronHasLptMatch_[iMatch_e]) {
+    	    if (nt.recoElectronHasLptMatch_[iMatch_e]) 
+            {
                   nt.recoLowPtElectronGEDisMatched_[nt.recoElectronLptMatchIdx_[iMatch_e]] = true;
-               }
-               for (size_t k = 0; k < nt.recoAllLowPtElectronGEDidx_.size(); k++) {
-                  if (nt.recoAllLowPtElectronGEDidx_[k] == iMatch_e) {
+            }
+               for (size_t k = 0; k < nt.recoAllLowPtElectronGEDidx_.size(); k++) 
+               {
+                  if (nt.recoAllLowPtElectronGEDidx_[k] == iMatch_e) 
+                  {
                      nt.recoAllLowPtElectronGEDisMatched_[k] = true;
                   }
                }

@@ -27,14 +27,15 @@ class myHisto:
         self.dR = self.parse_axis(('dR',50,0,5)) 
         self.mindR = self.parse_axis(('mindR',60,0,0.06)) 
         
-        self.dxy_gen = self.parse_axis(('dxy_gen',300,0,3))  #just added
+        self.dxy_gen = self.parse_axis(('dxy_gen',300,0,2))  #just added
         
         #For Resolution studies
         self.Res_LPT = self.parse_axis(('Res_LPT',700,-0.5,0.5))  #-0.5-0.5
         self.Res_GED = self.parse_axis(('Res_GED',700,-0.5,0.5)) 
         
         self.Gen_pt = self.parse_axis(('Gen_pt',[0,4,5,6,7,8,9,10,11,12,13,14,15,16,17,22,30])) 
-        self.Gen_pt_res = self.parse_axis(('Gen_pt_res',[0,4,5,6,7,8,9,10,11,12,13,14,15,16,17,22,30])) 
+        
+        self.Gen_pt_res = self.parse_axis(('Gen_pt_res',[0,0.2,0.4,0.6,0.8,1,1.2,1.4,2])) #MAIN
 
         self.Gen_vxy = self.parse_axis(('Gen_vxy',[0,1,3,6,10,15])) 
 
