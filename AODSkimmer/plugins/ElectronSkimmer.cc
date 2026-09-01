@@ -731,7 +731,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       nt.recoElectronPhoIso_.push_back(pfIso.sumPhotonEt);
       nt.recoElectronRhoEA_.push_back(rho*eA);
       // Filling track info
-      nt.recoElectronDxy_.push_back(abs(track->dxy(pv.position())));
+      nt.recoElectronDxy_.push_back((track->dxy(pv.position())));
       nt.recoElectronDxyError_.push_back(track->dxyError());
       nt.recoElectronDz_.push_back(track->dz(pv.position()));
       nt.recoElectronDzError_.push_back(track->dzError());
@@ -857,7 +857,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          nt.recoAllLowPtElectronRhoEA_.push_back(rho*eA);
       }
       // Filling tracks
-      nt.recoAllLowPtElectronDxy_.push_back(abs(track->dxy(pv.position())));
+      nt.recoAllLowPtElectronDxy_.push_back((track->dxy(pv.position())));
       nt.recoAllLowPtElectronDxyError_.push_back(track->dxyError());
       nt.recoAllLowPtElectronDz_.push_back(track->dz(pv.position()));
       nt.recoAllLowPtElectronDzError_.push_back(track->dzError());
@@ -949,7 +949,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          nt.recoLowPtElectronPhoIso_.push_back(pfIso.sumPhotonEt);
          nt.recoLowPtElectronRhoEA_.push_back(rho*eA);
          // Filling tracks
-         nt.recoLowPtElectronDxy_.push_back(abs(track->dxy(pv.position())));
+         nt.recoLowPtElectronDxy_.push_back((track->dxy(pv.position())));
          nt.recoLowPtElectronDxyError_.push_back(track->dxyError());
          nt.recoLowPtElectronDz_.push_back(track->dz(pv.position()));
          nt.recoLowPtElectronDzError_.push_back(track->dzError());
@@ -1165,76 +1165,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       nt.ootPhotonPhi_.push_back(ph.phi());
    }
 
-   /*std::cout << "filling conversions" << std::endl;
-   for (const auto & conv : *conversionsHandle_) {
-      if (conv.nTracks() < 2) continue;
-      nt.nConversions_++;
-
-      // fitted pair momentum
-      auto conv_p4 = conv.refittedPair4Momentum();
-      nt.conversionPt_.push_back(conv_p4.pt());
-      nt.conversionEta_.push_back(conv_p4.eta());
-      nt.conversionPhi_.push_back(conv_p4.phi());
-      nt.conversionE_.push_back(conv_p4.E());
-      nt.conversionPx_.push_back(conv_p4.px());
-      nt.conversionPy_.push_back(conv_p4.py());
-      nt.conversionPz_.push_back(conv_p4.py());
-
-      // conversion vertex info
-      auto conv_vtx = conv.conversionVertex();
-      nt.conversionVxy_.push_back(sqrt(conv_vtx.x()*conv_vtx.x() + conv_vtx.y()*conv_vtx.y()));
-      nt.conversionVz_.push_back(conv_vtx.z());
-      nt.conversionX_.push_back(conv_vtx.x());
-      nt.conversionY_.push_back(conv_vtx.y());
-      nt.conversionZ_.push_back(conv_vtx.z());
-
-      // conversion lxy/lz/dxy/dz
-      nt.conversionLxy_.push_back(conv.lxy());
-      nt.conversionLz_.push_back(conv.lz());
-      nt.conversionLxyPV_.push_back(conv.lxy(pv.position()));
-      nt.conversionLzPV_.push_back(conv.lz(pv.position()));
-      nt.conversionDxy_.push_back(conv.dxy());
-      nt.conversionDz_.push_back(conv.dz());
-      nt.conversionDxyPV_.push_back(conv.dxy(pv.position()));
-      nt.conversionDzPV_.push_back(conv.dz(pv.position()));
-
-      // other conversion properties
-      nt.conversionEoverP_.push_back(conv.EoverP());
-      nt.conversionEoverPrefit_.push_back(conv.EoverPrefittedTracks());
-      nt.conversionNSharedHits_.push_back(conv.nSharedHits());
-      nt.conversionM_.push_back(conv.pairInvariantMass());
-      nt.conversionChi2_.push_back(conv_vtx.normalizedChi2());
-
-      auto t1 = *(conv.tracks().at(0));
-      auto t2 = *(conv.tracks().at(1));
-      nt.conversionDr_.push_back(reco::deltaR(t1,t2));
-
-      nt.conversion_Trk1nHitsVtx_.push_back(conv.nHitsBeforeVtx().at(0));
-      nt.conversion_Trk1Pt_.push_back(t1.pt());
-      nt.conversion_Trk1Eta_.push_back(t1.eta());
-      nt.conversion_Trk1Phi_.push_back(t1.phi());
-      nt.conversion_Trk1Chi2_.push_back(t1.normalizedChi2());
-      nt.conversion_Trk1NValidHits_.push_back(t1.numberOfValidHits());
-      nt.conversion_Trk1numLostHits_.push_back(t1.numberOfLostHits());
-      nt.conversion_Trk1dxy_.push_back(t1.dxy());
-      nt.conversion_Trk1dxyPV_.push_back(t1.dxy(pv.position()));
-      nt.conversion_Trk1dxyBS_.push_back(t1.dxy(beamspot));
-      nt.conversion_Trk1dz_.push_back(t1.dz());
-      nt.conversion_Trk1dzPV_.push_back(t1.dz(pv.position()));
-
-      nt.conversion_Trk2nHitsVtx_.push_back(conv.nHitsBeforeVtx().at(1));
-      nt.conversion_Trk2Pt_.push_back(t2.pt());
-      nt.conversion_Trk2Eta_.push_back(t2.eta());
-      nt.conversion_Trk2Phi_.push_back(t2.phi());
-      nt.conversion_Trk2Chi2_.push_back(t2.normalizedChi2());
-      nt.conversion_Trk2NValidHits_.push_back(t2.numberOfValidHits());
-      nt.conversion_Trk2numLostHits_.push_back(t2.numberOfLostHits());
-      nt.conversion_Trk2dxy_.push_back(t2.dxy());
-      nt.conversion_Trk2dxyPV_.push_back(t2.dxy(pv.position()));
-      nt.conversion_Trk2dxyBS_.push_back(t2.dxy(beamspot));
-      nt.conversion_Trk2dz_.push_back(t2.dz());
-      nt.conversion_Trk2dzPV_.push_back(t2.dz(pv.position()));      
-   }*/
+  
 
    // Define vertex reco function 
    auto computeVertices = [&](vector<const pat::Electron*> coll_1, vector<const pat::Electron*> coll_2, std::string type1, std::string type2) {
