@@ -732,6 +732,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       nt.recoElectronRhoEA_.push_back(rho*eA);
       // Filling track info
       nt.recoElectronDxy_.push_back((track->dxy(pv.position())));
+      cout<<"Electron track->dxy(pv.position()="<<track->dxy(pv.position())<<endl;
       nt.recoElectronDxyError_.push_back(track->dxyError());
       nt.recoElectronDz_.push_back(track->dz(pv.position()));
       nt.recoElectronDzError_.push_back(track->dzError());
@@ -858,6 +859,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       }
       // Filling tracks
       nt.recoAllLowPtElectronDxy_.push_back((track->dxy(pv.position())));
+      // cout<<"AllLpt track->dxy(pv.position()="<<track->dxy(pv.position())<<endl;
       nt.recoAllLowPtElectronDxyError_.push_back(track->dxyError());
       nt.recoAllLowPtElectronDz_.push_back(track->dz(pv.position()));
       nt.recoAllLowPtElectronDzError_.push_back(track->dzError());

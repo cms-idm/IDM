@@ -27,7 +27,9 @@ class myHisto:
         self.dR = self.parse_axis(('dR',50,0,5)) 
         self.mindR = self.parse_axis(('mindR',60,0,0.06)) 
         
-        self.dxy_gen = self.parse_axis(('dxy_gen',300,0,3))  #just added
+        # self.dxy_gen = self.parse_axis(('dxy_gen',300,0,3))  #just added
+        self.dxy_gen = self.parse_axis(('dxy_gen',500,0,5))  #just added
+        self.GED_dxy_flat = self.parse_axis(('GED_dxy_flat',500,0,5)) 
         
         #For Resolution studies
         self.Res_LPT = self.parse_axis(('Res_LPT',1000,-10,10))  #-0.5-0.5
@@ -107,6 +109,9 @@ def make_histograms():
     h.make('res_GED_gen_ptbin', 'Gen_dxy_res', 'Res_GED')
     h.make('res_LPT_gen_ptbin', 'Gen_dxy_res', 'Res_LPT')
 
+    h.make('dxy_gen','dxy_gen')
+    h.make('GED_dxy_flat', 'GED_dxy_flat')
+
     
     return h
 
@@ -176,8 +181,8 @@ def fillHistos(events,h,samp,cut,info,sum_wgt=1):
         # h.fill("Gen_ElePos_pt", Gen_pt = GenEle_pt)
         # h.fill("Gen_ElePos_pt", Gen_pt = GenPos_pt)
 
-        # h.fill("dxy_gen", dxy_gen = Dxy_gen_ele)  #New added
-        # h.fill("dxy_gen", dxy_gen = Dxy_gen_pos)  #New added
+        h.fill("dxy_gen", dxy_gen = Dxy_gen_ele)  #New added
+        h.fill("dxy_gen", dxy_gen = Dxy_gen_pos)  #New added
 
         h.fill("res_GED_gen_ptbin", Gen_dxy_res=Gen_pt_FLAT, Res_GED=res_GED) #changed to dxy IMP
 

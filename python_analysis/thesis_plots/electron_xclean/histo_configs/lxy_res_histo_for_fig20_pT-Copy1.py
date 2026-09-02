@@ -27,7 +27,9 @@ class myHisto:
         self.dR = self.parse_axis(('dR',50,0,5)) 
         self.mindR = self.parse_axis(('mindR',60,0,0.06)) 
         
-        self.dxy_gen = self.parse_axis(('dxy_gen',300,0,3))  #just added
+        self.dxy_gen = self.parse_axis(('dxy_gen',500,0,5))  #just added
+        self.GED_dxy_flat = self.parse_axis(('GED_dxy_flat',500,0,5)) 
+
         
         #For Resolution studies
         self.Res_LPT = self.parse_axis(('Res_LPT',1000,-10,10))  #-0.5-0.5
@@ -39,9 +41,9 @@ class myHisto:
 
         self.Gen_vxy = self.parse_axis(('Gen_vxy',[0,1,3,6,15])) 
         
-        self.Gen_vxy_FLAT = self.parse_axis(('Gen_vxy_FLAT',300,0,15)) 
-        self.GED_vxy_flat = self.parse_axis(('GED_vxy_flat',300,0,15)) 
-        self.Lpt_vxy_flat = self.parse_axis(('Lpt_vxy_flat',300,0,15)) 
+        self.Gen_vxy_FLAT = self.parse_axis(('Gen_vxy_FLAT',100,0,10)) 
+        self.GED_vxy_flat = self.parse_axis(('GED_vxy_flat',100,0,10)) 
+        self.Lpt_vxy_flat = self.parse_axis(('Lpt_vxy_flat',100,0,10)) 
 
 
         
@@ -102,6 +104,7 @@ def make_histograms():
     h.make('Lpt_vxy_flat', 'Lpt_vxy_flat')
     
     h.make('dxy_gen','dxy_gen')
+    h.make('GED_dxy_flat', 'GED_dxy_flat')
     
 
     h.make("Gen_ElePos_pt", 'Gen_pt')
@@ -148,18 +151,15 @@ def fillHistos(events,h,samp,cut,info,sum_wgt=1):
         Gen_pt_FLAT  = ak.flatten(ak.concatenate(    [ev.GenEle.pt[:, None],  ev.GenPos.pt[:, None]],  axis=1))
         Gen_vxy_FLAT = ak.flatten(ak.concatenate(    [ev.GenEle.vxy[:, None], ev.GenPos.vxy[:, None]], axis=1))
 
-
-        def dxy(obj, ref=None):
-            """Return transverse distance between obj and ref at their point of closest approach"""
-            shape = ak.ones_like(obj.vx)
-            x_val = ak.flatten(ref.x) if ref is not None else 0.0
-            y_val = ak.flatten(ref.y) if ref is not None else 0.0
-            ref_x = x_val*shape
-            ref_y = y_val*shape
+        def dxy(obj, ref_x,ref_y):
+            """Return transverse distance between obj and ref at their point of closest approach"""            
             return (-(obj.vx - ref_x)*obj.py + (obj.vy - ref_y)*obj.px)/obj.pt
 
-        Dxy_gen_ele = dxy(ev.GenEle, None)
-        Dxy_gen_pos = dxy(ev.GenPos, None)
+        
+        Dxy_gen_ele = dxy(ev.GenEle, ev.PV.x, ev.PV.y)
+        print ("Dxy_gen_ele=", Dxy_gen_ele)
+        Dxy_gen_pos = dxy(ev.GenPos, ev.PV.x, ev.PV.y)
+        print ("Dxy_gen_pos=", Dxy_gen_pos)
 
         Gen_dxy_FLAT  = ak.flatten(ak.concatenate(    [Dxy_gen_ele[:, None],  Dxy_gen_pos[:, None]],  axis=1))
 
@@ -169,29 +169,35 @@ def fillHistos(events,h,samp,cut,info,sum_wgt=1):
         Lpt_vxy_flat = ak.flatten(ak.concatenate([    lpt[ak.singletons(ev.GenEle.matchIdxAllLowPt)],    lpt[ak.singletons(ev.GenPos.matchIdxAllLowPt)]], axis=1))
         GED_vxy_flat = ak.flatten(ak.concatenate([    ged[ak.singletons(ev.GenEle.matchIdxLocal)],    ged[ak.singletons(ev.GenPos.matchIdxLocal)]], axis=1))
 
+        GED_dxy_flat = ak.flatten(ak.concatenate([    ged[ak.singletons(ev.GenEle.matchIdxLocal)],    ged[ak.singletons(ev.GenPos.matchIdxLocal)]], axis=1))
+
         res_GED = (GED_vxy_flat - Gen_vxy_FLAT) / (Gen_vxy_FLAT)
         res_LPT = (Lpt_vxy_flat - Gen_vxy_FLAT) / (Gen_vxy_FLAT)
+
+        # Check ref for dxy. Where is the PV? Make sure PV is same for both gen and reco.
 
 
        
 
 
-        #Resolution plots
+        # Resolution plots
        
         # h.fill("res_GED_gen", Res_GED = res_GED)
         # h.fill("res_LPT_gen", Res_LPT = res_LPT)
         
 
-        h.fill("gen_ele_vxy", Gen_vxy_FLAT=Gen_vxy_FLAT)
-        h.fill("GED_vxy_flat", GED_vxy_flat=GED_vxy_flat)
-        h.fill("Lpt_vxy_flat", Lpt_vxy_flat=Lpt_vxy_flat)
+        # h.fill("gen_ele_vxy", Gen_vxy_FLAT=Gen_vxy_FLAT)
+        # h.fill("GED_vxy_flat", GED_vxy_flat=GED_vxy_flat)
+        # h.fill("Lpt_vxy_flat", Lpt_vxy_flat=Lpt_vxy_flat)
 
         # h.fill("dxy_gen", dxy_gen = Dxy_gen_ele)  #New added
         # h.fill("dxy_gen", dxy_gen = Dxy_gen_pos)  #New added
 
-        h.fill("res_GED_gen_ptbin", Gen_dxy_res=Gen_pt_FLAT, Res_GED=res_GED) #changed to dxy IMP
 
-        h.fill("res_LPT_gen_ptbin",    Gen_dxy_res=Gen_pt_FLAT,    Res_LPT=res_LPT) #changed to dxy IMP
+
+        # h.fill("res_GED_gen_ptbin", Gen_dxy_res=Gen_pt_FLAT, Res_GED=res_GED) #changed to dxy IMP
+
+        # h.fill("res_LPT_gen_ptbin",    Gen_dxy_res=Gen_pt_FLAT,    Res_LPT=res_LPT) #changed to dxy IMP
         
 
 
