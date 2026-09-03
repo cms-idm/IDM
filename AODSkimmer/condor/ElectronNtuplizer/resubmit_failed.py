@@ -3,7 +3,10 @@
 Check output ntuples on EOS for a failed/missing tree and resubmit those jobs.
 
 Usage:
-    python3 resubmit_failed.py [--dry-run]
+    python3 resubmit_failed.py <key> [--dry-run]
+
+    <key> is the top-level background key to check, e.g. Multiboson
+    (EOS_BASE/<key>/<subsample>/*.root).
 
 Must be run from the ElectronNtuplizer condor directory (where ElectronNtuplizer_config.jdl lives).
 """
@@ -54,14 +57,14 @@ def tree_ok(xrd_url):
         return False
 
 
-def collect_output_files():
-    """Return list of full EOS paths for every .root file under EOS_BASE."""
+def collect_output_files(key):
+    """Return list of full EOS paths for every .root file under EOS_BASE/<key>."""
     files = []
-    for mass_dir in xrdfs_ls(EOS_BASE):
-        for ctau_dir in xrdfs_ls(mass_dir):
-            for fpath in xrdfs_ls(ctau_dir):
-                if fpath.endswith('.root'):
-                    files.append(fpath)
+    key_dir = f'{EOS_BASE}/{key}'
+    for subsample_dir in xrdfs_ls(key_dir):
+        for fpath in xrdfs_ls(subsample_dir):
+            if fpath.endswith('.root'):
+                files.append(fpath)
     return files
 
 
@@ -87,6 +90,7 @@ def resubmit(sublist_name, out_path, out_path_slim, dry_run):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('key', help='Top-level background key to check, e.g. Multiboson')
     parser.add_argument('--dry-run', action='store_true',
                         help='Print what would be submitted without actually submitting')
     args = parser.parse_args()
@@ -95,8 +99,8 @@ def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     os.chdir(script_dir)
 
-    print(f"Scanning {EOS_BASE} ...")
-    all_files = collect_output_files()
+    print(f"Scanning {EOS_BASE}/{args.key} ...")
+    all_files = collect_output_files(args.key)
     print(f"Found {len(all_files)} output files\n")
 
     failed = []
