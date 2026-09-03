@@ -45,7 +45,7 @@ vxy_range = {1:[0,20],10:[0,50],100:[0,50],1000:[0,50]}
 vxy_rebin = {1:5,10:20,100:20,1000:20}
 
 class Analyzer:
-    def __init__(self,fileList,histoList,cuts,model_json=None,systematics=None,max_samples=-1,max_files_per_samp=-1,newCoffea=False,nJet_isNominal=None,isSFstudies=False,good_vtx='v11'):
+    def __init__(self,fileList,histoList,cuts,model_json=None,systematics=None,max_samples=-1,max_files_per_samp=-1,newCoffea=False,nJet_isNominal=None,isSFstudies=False,good_vtx='v11',slimFileList=None):
         # flag to see if we're using new coffea
         self.newCoffea = newCoffea
 
@@ -55,6 +55,18 @@ class Analyzer:
                 self.fileList = json.load(f)
         else:
             self.fileList = fileList
+
+        # load in companion "slim" config (bkg only): all-events, high-level-info-only
+        # ntuples paired with the full (HLT-passed-only) ones above. loadFiles() matches
+        # entries by sample name/year and registers a second "{name}__slim" dataset for
+        # each match, and replaces the full config's sum_wgt/num_events (which only cover
+        # the HLT-passed subset once a pairing exists) with the slim, whole-sample values
+        # -- stashing the originals as full_sum_wgt/full_num_events.
+        if slimFileList is not None and type(slimFileList) == str and ".json" in slimFileList:
+            with open(slimFileList) as f:
+                self.slimFileList = json.load(f)
+        else:
+            self.slimFileList = slimFileList
 
         # systematics
         if systematics != None:
@@ -94,7 +106,56 @@ class Analyzer:
         
         self.loadFiles()
     
+    def _resolveSampleFiles(self,sample):
+        # Resolves a sample dict's 'location'/'fileset' into an actual file collection,
+        # in whatever shape self.newCoffea expects. Shared between the main fileList and
+        # the companion slim fileList so both are resolved identically.
+        blacklist = sample.get('blacklist',[])
+        loc = sample['location']
+        if '.root' in loc:
+            # if the location is just a single file, load it in
+            if self.newCoffea:
+                return {'files':{sample['location']:'ntuples/outT'}}
+            else:
+                return [sample['location']]
+        elif 'fileset' in sample.keys():
+            if self.newCoffea:
+                files = {'files':{f:'ntuples/outT' for f in sample['fileset'] if f.split("/")[-1] not in blacklist}}
+                if self.max_files_per_samp > 0 and len(files['files']) > self.max_files_per_samp:
+                    files['files'] = {k:files['files'][k] for k in list(files['files'].keys())[:self.max_files_per_samp]}
+                return files
+            else:
+                flist = [f for f in sample['fileset'] if f.split("/")[-1] not in blacklist]
+                if self.max_files_per_samp > 0 and len(flist) > self.max_files_per_samp:
+                    flist = flist[:self.max_files_per_samp]
+                return flist
+        else:
+            # if the location is a directory, use the xrootd client to get a list of files
+            xrdClient = client.FileSystem("root://cmseos.fnal.gov")
+            if type(loc) != list:
+                status, flist = xrdClient.dirlist(loc)
+                fullList = ["root://cmsxrootd.fnal.gov/"+loc+"/"+item.name for item in flist if (('.root' in item.name) and (item.name not in blacklist))]
+            else:
+                fullList = []
+                for l in loc:
+                    status, flist = xrdClient.dirlist(l)
+                    fullList.extend(["root://cmsxrootd.fnal.gov/"+l+"/"+item.name for item in flist if (('.root' in item.name) and (item.name not in blacklist))])
+            if self.max_files_per_samp > 0 and len(fullList) > self.max_files_per_samp:
+                fullList = fullList[:self.max_files_per_samp]
+            if self.newCoffea:
+                return {'files':{f:'ntuples/outT' for f in fullList}}
+            else:
+                return fullList
+
     def loadFiles(self):
+        # index the companion slim config (bkg only) by the same name/year key used below,
+        # so each bkg sample can be paired up with its slim counterpart
+        slimByName = {}
+        if self.slimFileList is not None:
+            for slimSample in self.slimFileList:
+                slimName = "bkg_{0}_{1}".format(slimSample['year'],slimSample['name'])
+                slimByName[slimName] = slimSample
+
         loaded = 0
         for sample in self.fileList:
             if self.max_samples > 0 and loaded == self.max_samples:
@@ -109,7 +170,7 @@ class Analyzer:
                 name = "bkg_{0}_{1}".format(sample['year'],sample['name'])
             elif mode == 'data':
                 name = "data_{0}_{1}".format(sample['year'],sample['name'])
-            
+
             if self.mode is None:
                 self.mode = mode
             else:
@@ -117,44 +178,29 @@ class Analyzer:
                     print("Error! You're mixing samples of differing types (e.g. signal and bkg, signal and data, etc)")
                     print("Please split up different kinds of samples into different configs")
                     exit()
-            
-            loc = sample['location']
-            if '.root' in loc:
-                # if the location is just a single file, load it in
-                if self.newCoffea:
-                    self.sample_locs[name] = {'files':{sample['location']:'ntuples/outT'}}
-                else:
-                    self.sample_locs[name] = [sample['location']]
-            elif 'fileset' in sample.keys():
-                if self.newCoffea:
-                    self.sample_locs[name] = {'files':{f:'ntuples/outT' for f in sample['fileset'] if f.split("/")[-1] not in sample['blacklist']}}
-                    if self.max_files_per_samp > 0 and len(self.sample_locs[name]['files']) > self.max_files_per_samp:
-                        self.sample_locs[name]['files'] = {k:self.sample_locs[name]['files'][k] for k in list(self.sample_locs[name]['files'].keys())[:self.max_files_per_samp]}
-                else:
-                    self.sample_locs[name] = [f for f in sample['fileset'] if f.split("/")[-1] not in sample['blacklist']]
-                    if self.max_files_per_samp > 0 and len(self.sample_locs[name]) > self.max_files_per_samp:
-                        self.sample_locs[name] = self.sample_locs[name][:self.max_files_per_samp]
-            else:
-                # if the location is a directory, use the xrootd client to get a list of files
-                xrdClient = client.FileSystem("root://cmseos.fnal.gov")
-                if type(loc) != list:
-                    status, flist = xrdClient.dirlist(loc)
-                    fullList = ["root://cmsxrootd.fnal.gov/"+loc+"/"+item.name for item in flist if (('.root' in item.name) and (item.name not in sample['blacklist']))]
-                else:
-                    fullList = []
-                    for l in loc:
-                        status, flist = xrdClient.dirlist(l)
-                        fullList.extend(["root://cmsxrootd.fnal.gov/"+l+"/"+item.name for item in flist if (('.root' in item.name) and (item.name not in sample['blacklist']))])
-                if self.max_files_per_samp > 0 and len(fullList) > self.max_files_per_samp:
-                    fullList = fullList[:self.max_files_per_samp]
-                if self.newCoffea:
-                    self.sample_locs[name] = {'files':{f:'ntuples/outT' for f in fullList}}
-                else:
-                    self.sample_locs[name] = fullList
-            
+
+            self.sample_locs[name] = self._resolveSampleFiles(sample)
             self.sample_info[name] = sample
             self.sample_names.append(name)
             loaded += 1
+
+            # pair up with the companion slim (all-events) sample, if one was provided
+            if mode == 'bkg' and name in slimByName:
+                slimSample = slimByName[name]
+                slimName = f"{name}__slim"
+                self.sample_locs[slimName] = self._resolveSampleFiles(slimSample)
+                self.sample_info[slimName] = slimSample
+                self.sample_names.append(slimName)
+
+                # the full config's sum_wgt/num_events only cover the HLT-passed subset
+                # once ntuples are split this way -- stash them, and normalize against the
+                # true, whole-sample values from the slim config instead
+                sample['full_sum_wgt'] = sample.get('sum_wgt',0.0)
+                sample['full_num_events'] = sample.get('num_events',0)
+                sample['sum_wgt'] = slimSample['sum_wgt']
+                sample['num_events'] = slimSample['num_events']
+            elif mode == 'bkg' and self.slimFileList is not None:
+                print(f"Warning: no slim counterpart found for bkg sample {name}; sum_wgt/num_events are unmodified (HLT-passed subset only if this sample was ntuplized with the slim split)")
 
     def process(self,treename='ntuples/outT',execr="iterative",workers=4,merging=False,dask_client=None,procType='default',**kwargs):
         fileset = self.sample_locs
@@ -256,12 +302,23 @@ class iDMeProcessor(processor.ProcessorABC):
     def process(self,events):
         samp = events.metadata["dataset"]
         info = self.sampleInfo[samp]
+
+        # "{name}__slim" datasets carry the companion all-events, high-level-info-only
+        # ntuple for bkg samples (see Analyzer.loadFiles()) -- events here never passed
+        # through the background HLT/metThreshold preselection, so they don't have
+        # Electron/PFJet/vtx/etc branches at all. All we do with them is (1) fill
+        # cutflow['all'] as the true pre-selection denominator, keyed under the un-suffixed
+        # sample name so it merges into the same cutflow entry as the full-tree dataset,
+        # and (2) call an optional fillSlimHistos hook if the histoConfig defines one.
+        if samp.endswith("__slim"):
+            return self._processSlim(events,samp,info)
+
         isMC = info["type"] == "signal" or info["type"] == "bkg"
         info['defineGoodVertices'] = routines.defineGoodVertices
         info['selectBestVertex'] = routines.selectBestVertex
         for k,v in self.extraStuff.items():
             info[f"extras_{k}"] = v
-            
+
         histObj = self.histoMod.make_histograms()
         #histos['cutDesc'] = defaultdict(str)
         #istObj = self.histoMod.make_histograms(info)
@@ -294,18 +351,23 @@ class iDMeProcessor(processor.ProcessorABC):
         else:
             sum_wgt = info["num_events"]
 
-        # Initial number of events
+        # Initial number of events. For bkg samples with a paired "{name}__slim" dataset,
+        # this dataset only contains events that already passed the background HLT/MET
+        # preselection -- the true, unselected 'all' bin comes from _processSlim() instead,
+        # so this bin is named 'passHLT' to avoid claiming it's the full population.
+        has_slim_pair = f"{samp}__slim" in self.samples
+        firstBin = 'passHLT' if has_slim_pair else 'all'
         if isMC:
-            cutflow['all'] += ak.sum(events.genWgt)/sum_wgt
-            cutflow_wgts2['all'] += ak.sum(events.genWgt**2)/sum_wgt**2
+            cutflow[firstBin] += ak.sum(events.genWgt)/sum_wgt
+            cutflow_wgts2[firstBin] += ak.sum(events.genWgt**2)/sum_wgt**2
         else:
-            cutflow['all'] += len(events)/sum_wgt
-        cutflow_nevts['all'] += len(events)
+            cutflow[firstBin] += len(events)/sum_wgt
+        cutflow_nevts[firstBin] += len(events)
 
         if info['type'] == "signal":
-            cutflow_vtx_matched['all'] += 1 # dummy value before selecting a vertex
-            
-        cutDesc['all'] = 'No cuts@'
+            cutflow_vtx_matched[firstBin] += 1 # dummy value before selecting a vertex
+
+        cutDesc[firstBin] = ('Pass background HLT/MET preselection@' if has_slim_pair else 'No cuts@')
 
         #################################
         ## Calculating Additional Vars ##
@@ -473,18 +535,107 @@ class iDMeProcessor(processor.ProcessorABC):
 
         return histos
 
+    def _processSlim(self,events,samp,info):
+        # base_samp strips "__slim" so this merges into the same cutflow/cutDesc entry
+        # as the paired full-tree dataset (see process())
+        base_samp = samp[:-len("__slim")]
+
+        histObj = self.histoMod.make_histograms()
+        cutDesc = defaultdict(str)
+        cutflow = defaultdict(float)
+        cutflow_wgts2 = defaultdict(float)
+        cutflow_nevts = defaultdict(int)
+
+        sum_wgt = info["sum_wgt"]
+        lumi, unc = getLumi(info['year'])
+        xsec = info['xsec']
+        if 'DY' in info['name']:
+            if self.isSFstudies == False:
+                xsec = xsec * 1.23
+        elif 'WJet' in info['name']:
+            xsec = xsec * 1.21
+        elif 'ZJet' in info['name']:
+            xsec = xsec * 1.23
+        # register event weight branch
+        events.__setitem__("eventWgt",xsec*lumi*events.genWgt)
+
+        # true pre-selection denominator: every event, regardless of the background
+        # HLT/metThreshold preselection applied upstream in the ntuplizer
+        cutflow['all'] += ak.sum(events.genWgt)/sum_wgt
+        cutflow_wgts2['all'] += ak.sum(events.genWgt**2)/sum_wgt**2
+        cutflow_nevts['all'] += len(events)
+        cutDesc['all'] = 'No cuts@'
+
+        # let histoConfig modules opt into filling inclusive/pre-selection histograms
+        # (MET, HT, jet/electron counts, HLT turn-on curves, etc.) from the true,
+        # unselected population; configs that don't define this just get no slim histos
+        if hasattr(self.histoMod,"fillSlimHistos"):
+            self.histoMod.fillSlimHistos(events,histObj,base_samp,info,sum_wgt=sum_wgt)
+
+        cutflow_counts = defaultdict(float)
+        for k,v in cutflow.items():
+            cutflow_counts[k] = xsec*lumi*v
+
+        # Independent measurement of the first two cuts (MET filters, MET trigger) on
+        # the slim, all-events tree -- i.e. applied to the true pre-skim population
+        # rather than the full-tree dataset, which already sits downstream of the
+        # background HLT/MET preselection. These should numerically agree with the
+        # full-tree dataset's own recorded cut1/cut2 by the time the trigger cut is
+        # reached; stored under separate '..._slim' branches (not 'cut1'/'cut2') so
+        # they don't collide with the full-tree's cutflow entries when merged.
+        cutDesc_slim = defaultdict(str)
+        cutflow_slim = defaultdict(float)
+        cutflow_wgts2_slim = defaultdict(float)
+        cutflow_nevts_slim = defaultdict(int)
+
+        slim_events = events
+        for cut, cutName in zip(self.cuts[:2], self.cutNames[:2]):
+            slim_events, cName, cutDescription, _ = cut(slim_events,info)
+            cutflow_slim[cName] += ak.sum(slim_events.genWgt)/sum_wgt
+            cutflow_wgts2_slim[cName] += ak.sum(slim_events.genWgt**2)/sum_wgt**2
+            cutflow_nevts_slim[cName] += len(slim_events)
+            cutDesc_slim[cName] += cutDescription + "@"
+
+        cutflow_counts_slim = defaultdict(float)
+        for k,v in cutflow_slim.items():
+            cutflow_counts_slim[k] = xsec*lumi*v
+
+        histos = histObj
+        histos['cutDesc'] = cutDesc
+        histos['cutflow'] = {base_samp:cutflow}
+        histos['cutflow_cts'] = {base_samp:cutflow_counts}
+        histos['cutflow_nevts'] = {base_samp:cutflow_nevts}
+        histos['cutflow_wgts2'] = {base_samp:cutflow_wgts2}
+        histos['cutflow_vtx_matched'] = {base_samp:defaultdict(float)}
+
+        histos['cutDesc_slim'] = cutDesc_slim
+        histos['cutflow_slim'] = {base_samp:cutflow_slim}
+        histos['cutflow_cts_slim'] = {base_samp:cutflow_counts_slim}
+        histos['cutflow_nevts_slim'] = {base_samp:cutflow_nevts_slim}
+        histos['cutflow_wgts2_slim'] = {base_samp:cutflow_wgts2_slim}
+
+        return histos
+
     def postprocess(self, accumulator):
         # only need one description per cut name -- adds many during parallel execution
         for cutName in list(accumulator['cutDesc'].keys()):
             accumulator['cutDesc'][cutName] = accumulator['cutDesc'][cutName].split("@")[0]
+        if 'cutDesc_slim' in accumulator:
+            for cutName in list(accumulator['cutDesc_slim'].keys()):
+                accumulator['cutDesc_slim'][cutName] = accumulator['cutDesc_slim'][cutName].split("@")[0]
         return accumulator
 
 # processor for extracting gen/truth-matched signal plots - no selection
 class genProcessor(iDMeProcessor):
     def process(self,events):
         samp = events.metadata["dataset"]
+        # this processor assumes full-tree branches (PFJet, vtx, etc.) that don't exist
+        # in the companion "{name}__slim" bkg dataset (see Analyzer.loadFiles()) -- it isn't
+        # meant to run over slim datasets, so just skip them rather than crash
+        if samp.endswith("__slim"):
+            return {}
         info = self.sampleInfo[samp]
-        
+
         #histos = self.histoMod.make_histograms()
         #histos['cutDesc'] = defaultdict(str)
         histObj = self.histoMod.make_histograms(info)
@@ -579,6 +730,10 @@ class genProcessor(iDMeProcessor):
 class bareProcessor(iDMeProcessor):
     def process(self,events):
         samp = events.metadata["dataset"]
+        # not meant to run over the companion "{name}__slim" bkg dataset (see
+        # Analyzer.loadFiles()) -- it assumes full-tree branches that don't exist there
+        if samp.endswith("__slim"):
+            return {}
         info = self.sampleInfo[samp]
         isMC = info["type"] == "signal" or info["type"] == "bkg"
         info['defineGoodVertices'] = routines.defineGoodVertices
@@ -634,6 +789,13 @@ class bareProcessor(iDMeProcessor):
 class trigProcessor(iDMeProcessor):
     def process(self,events):
         samp = events.metadata["dataset"]
+        # this processor still assumes full-tree, per-object branches (Electron.pt,
+        # PFJet.pt, etc.) that don't exist in the companion "{name}__slim" bkg dataset
+        # (see Analyzer.loadFiles()) -- trigger turn-on studies over the slim, all-events
+        # population should go through a histoConfig's fillSlimHistos hook instead (see
+        # iDMeProcessor._processSlim()); skip slim datasets here rather than crash
+        if samp.endswith("__slim"):
+            return {}
 
         info = self.sampleInfo[samp]
         isMC = info["type"] == "signal" or info["type"] == "bkg"
