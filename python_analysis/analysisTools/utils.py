@@ -254,6 +254,34 @@ def get_bkg_cutflow_df(bkg_histos, branch, process = 'all', isLegacy = False):
     
     return cutflow
 
+def get_bkg_slim_cut_overrides(bkg_histos, branch='cutflow_cts_slim'):
+    '''
+    Aggregate the independent slim-tree cut1/cut2 measurements (see
+    Analyzer._processSlim -- MET filters and MET trigger applied directly to the
+    true, unskimmed all-events tree) into the same {process/'Total' -> value}
+    shape, per cut, as get_bkg_cutflow_df -- keyed by cut description so the
+    result lines up with that function's columns and can be used to overwrite
+    them (e.g. bkg_df_cts[col] = overrides[col]).
+    '''
+    cut_idx = list(bkg_histos['cutDesc_slim'].keys())
+    cut_name = [ptools.getCut(bkg_histos['cutDesc_slim'][c]) for c in cut_idx]
+
+    bkgCat = bkg_categories(bkg_histos['cutflow'])[0]
+
+    total_after_cut = {}
+    for process, subprocesses in bkgCat.items():
+        total_after_cut[process] = {cut: 0 for cut in cut_idx}
+        for subprocess in subprocesses:
+            for cut in cut_idx:
+                total_after_cut[process][cut] += bkg_histos[branch].get(subprocess, {}).get(cut, 0)
+
+    total_after_cut['Total'] = {cut: sum(total_after_cut[p][cut] for p in bkgCat) for cut in cut_idx}
+
+    df = pd.DataFrame.from_dict(total_after_cut, orient='index')
+    df.columns = cut_name
+
+    return df
+
 def get_s_over_sqrtB_cutflow_dict(sig_histo, bkg_histo):
     sig_df = get_signal_cutflow_dict(sig_histo, branch='cutflow_cts')
     bkg_df = get_bkg_cutflow_df(bkg_histo, branch='cutflow_cts')

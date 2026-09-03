@@ -163,7 +163,10 @@ def vtxElectronConnection(events):
     vtx = events.vtx
 
     # shitty fix for weird bug when there's just 1 event with 1 vertex
-    if len(events) == 1 and len(vtx.pt) == 1:
+    # (guard len(vtx.pt[0])==1 too -- an event with 0 vertices makes vtx.e1_typ[0][0] an
+    # out-of-bounds index into an empty per-event array; the general branch below already
+    # handles that case fine via elementwise/jagged indexing)
+    if len(events) == 1 and len(vtx.pt) == 1 and len(vtx.pt[0]) == 1:
         events["vtx","e1"] = events.LptElectron[vtx.e1_idx] if vtx.e1_typ[0][0]=="L" else events.Electron[vtx.e1_idx]
         events["vtx","e2"] = events.LptElectron[vtx.e2_idx] if vtx.e2_typ[0][0]=="L" else events.Electron[vtx.e2_idx]
     else:
