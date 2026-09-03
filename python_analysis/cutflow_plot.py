@@ -22,9 +22,9 @@ import glob
 #hists_config = "configs/hists/genstudy.py"
 #sample_config = "configs/samples/signal_2024_May2026_aEM.json"
 outdir = 'workarea'
-vers = 'Jun2026noID'
-selection = 'anmatchvtx'
-hists = 'mergedmatch'
+vers = 'Aug2026'
+selection = 'an'
+hists = 'vtxvars'
 saved_signal_hists = f"{outdir}/hists_sig{vers}_{selection}-sel_{hists}.coffea"
 plottag = f'sig{vers}_{selection}-sel'
 
