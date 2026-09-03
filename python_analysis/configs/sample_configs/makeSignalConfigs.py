@@ -165,9 +165,9 @@ elif mode == "bkg":
             output.append(info)
 
     if skimmed:
-        out_json = "skimmed_bkg_{0}_{1}.json".format(year,name)
+        out_json = "skimmed_bkg_{0}_{1}.json".format(year,versname)
     else:
-        out_json = "bkg_{0}_{1}.json".format(year,name)
+        out_json = "bkg_{0}_{1}.json".format(year,versname)
     with open(out_json,"w") as outfile:
         json.dump(output,outfile,indent=4)
 elif mode == "data":
@@ -217,8 +217,8 @@ elif mode == "data":
             output.append(info)
 
     if skimmed:
-        out_json = "skimmed_data_{0}_{1}.json".format(year,name)
+        out_json = "skimmed_data_{0}_{1}.json".format(year,versname)
     else:
-        out_json = "data_{0}_{1}.json".format(year,name)
+        out_json = "data_{0}_{1}.json".format(year,versname)
     with open(out_json,"w") as outfile:
         json.dump(output,outfile,indent=4)
