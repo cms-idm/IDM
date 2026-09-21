@@ -470,6 +470,13 @@ public:
     vector<int> pfMuonTrkNumValidPixelHits_;
     vector<int> pfMuonTrkNumValidStripHits_;
     vector<int> pfMuonNumMatchedStations_;
+    vector<int> pfMuonTrkNumMuonStations_;
+    vector<int> pfMuonTrkNumCSCHits_;
+    vector<int> pfMuonTrkNumDTHits_;
+    vector<float> pfMuonTrkNormalizedChi2_;
+    vector<float> pfMuonTrkPtError_;
+    vector<float> pfMuonTrkVxy_;
+    vector<float> pfMuonTrkVz_;
     vector<int> pfMuonPropSt1Status_;
     vector<int> pfMuonPropSt1Idx_;
     vector<int> pfMuonPropSt2Status_;

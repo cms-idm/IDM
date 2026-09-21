@@ -1095,6 +1095,21 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
             nt.pfMuonTrkNumValidStripHits_.push_back(
                hitPattern.numberOfValidStripHits()
             );
+            nt.pfMuonTrkNumMuonStations_.push_back(
+               hitPattern.muonStationsWithValidHits()
+            );
+            nt.pfMuonTrkNumCSCHits_.push_back(
+               hitPattern.numberOfValidMuonCSCHits()
+            );
+            nt.pfMuonTrkNumDTHits_.push_back(
+               hitPattern.numberOfValidMuonDTHits()
+            );
+            nt.pfMuonTrkNormalizedChi2_.push_back(
+               propagationTrack->normalizedChi2()
+            );
+            nt.pfMuonTrkPtError_.push_back(propagationTrack->ptError());
+            nt.pfMuonTrkVxy_.push_back(propagationTrack->vertex().rho());
+            nt.pfMuonTrkVz_.push_back(propagationTrack->vertex().z());
 
             const auto propSt1 = propagateRecoTrackToStation(
                *propagationTrack,
@@ -1147,6 +1162,13 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
             nt.pfMuonTrkNumValidTrackerHits_.push_back(-1);
             nt.pfMuonTrkNumValidPixelHits_.push_back(-1);
             nt.pfMuonTrkNumValidStripHits_.push_back(-1);
+            nt.pfMuonTrkNumMuonStations_.push_back(-1);
+            nt.pfMuonTrkNumCSCHits_.push_back(-1);
+            nt.pfMuonTrkNumDTHits_.push_back(-1);
+            nt.pfMuonTrkNormalizedChi2_.push_back(-999.0);
+            nt.pfMuonTrkPtError_.push_back(-999.0);
+            nt.pfMuonTrkVxy_.push_back(-999.0);
+            nt.pfMuonTrkVz_.push_back(-999.0);
             nt.pfMuonPropSt1Status_.push_back(kPropagationNotAttempted);
             nt.pfMuonPropSt1Idx_.push_back(-1);
             nt.pfMuonPropSt2Status_.push_back(kPropagationNotAttempted);

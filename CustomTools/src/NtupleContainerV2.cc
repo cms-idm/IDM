@@ -53,6 +53,13 @@ void NtupleContainerV2::CreateTreeBranches() {
     outT->Branch("PFMuon_trkNumValidPixelHits",&pfMuonTrkNumValidPixelHits_);
     outT->Branch("PFMuon_trkNumValidStripHits",&pfMuonTrkNumValidStripHits_);
     outT->Branch("PFMuon_numMatchedStations",&pfMuonNumMatchedStations_);
+    outT->Branch("PFMuon_trkNumMuonStations",&pfMuonTrkNumMuonStations_);
+    outT->Branch("PFMuon_trkNumCSCHits",&pfMuonTrkNumCSCHits_);
+    outT->Branch("PFMuon_trkNumDTHits",&pfMuonTrkNumDTHits_);
+    outT->Branch("PFMuon_trkNormalizedChi2",&pfMuonTrkNormalizedChi2_);
+    outT->Branch("PFMuon_trkPtError",&pfMuonTrkPtError_);
+    outT->Branch("PFMuon_trkVxy",&pfMuonTrkVxy_);
+    outT->Branch("PFMuon_trkVz",&pfMuonTrkVz_);
     outT->Branch("PFMuon_propSt1Status",&pfMuonPropSt1Status_);
     outT->Branch("PFMuon_propSt1Idx",&pfMuonPropSt1Idx_);
     outT->Branch("PFMuon_propSt2Status",&pfMuonPropSt2Status_);
@@ -1288,6 +1295,13 @@ void NtupleContainerV2::ClearTreeBranches() {
     pfMuonTrkNumValidPixelHits_.clear();
     pfMuonTrkNumValidStripHits_.clear();
     pfMuonNumMatchedStations_.clear();
+    pfMuonTrkNumMuonStations_.clear();
+    pfMuonTrkNumCSCHits_.clear();
+    pfMuonTrkNumDTHits_.clear();
+    pfMuonTrkNormalizedChi2_.clear();
+    pfMuonTrkPtError_.clear();
+    pfMuonTrkVxy_.clear();
+    pfMuonTrkVz_.clear();
     pfMuonPropSt1Status_.clear();
     pfMuonPropSt1Idx_.clear();
     pfMuonPropSt2Status_.clear();
