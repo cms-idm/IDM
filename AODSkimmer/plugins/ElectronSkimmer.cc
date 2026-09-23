@@ -1104,12 +1104,32 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
             nt.pfMuonTrkNumDTHits_.push_back(
                hitPattern.numberOfValidMuonDTHits()
             );
+            nt.pfMuonTrkPt_.push_back(propagationTrack->pt());
+            nt.pfMuonTrkEta_.push_back(propagationTrack->eta());
+            nt.pfMuonTrkEtaError_.push_back(propagationTrack->etaError());
+            nt.pfMuonTrkPhi_.push_back(propagationTrack->phi());
+            nt.pfMuonTrkPhiError_.push_back(propagationTrack->phiError());
+            const bool hasTrackExtra = propagationTrack->extra().isNonnull() &&
+               propagationTrack->extra().isAvailable();
+            nt.pfMuonTrkOuterEta_.push_back(
+               hasTrackExtra ? propagationTrack->outerEta() : -999.0
+            );
+            nt.pfMuonTrkOuterPhi_.push_back(
+               hasTrackExtra ? propagationTrack->outerPhi() : -999.0
+            );
             nt.pfMuonTrkNormalizedChi2_.push_back(
                propagationTrack->normalizedChi2()
             );
             nt.pfMuonTrkPtError_.push_back(propagationTrack->ptError());
             nt.pfMuonTrkVxy_.push_back(propagationTrack->vertex().rho());
             nt.pfMuonTrkVz_.push_back(propagationTrack->vertex().z());
+            nt.pfMuonTrkDxy_.push_back(propagationTrack->dxy(pv.position()));
+            nt.pfMuonTrkDxyError_.push_back(propagationTrack->dxyError());
+            nt.pfMuonTrkDz_.push_back(propagationTrack->dz(pv.position()));
+            nt.pfMuonTrkDzError_.push_back(propagationTrack->dzError());
+            nt.pfMuonTrkProb_.push_back(TMath::Prob(
+               propagationTrack->chi2(), static_cast<int>(propagationTrack->ndof())
+            ));
 
             const auto propSt1 = propagateRecoTrackToStation(
                *propagationTrack,
@@ -1165,10 +1185,22 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
             nt.pfMuonTrkNumMuonStations_.push_back(-1);
             nt.pfMuonTrkNumCSCHits_.push_back(-1);
             nt.pfMuonTrkNumDTHits_.push_back(-1);
+            nt.pfMuonTrkPt_.push_back(-999.0);
+            nt.pfMuonTrkEta_.push_back(-999.0);
+            nt.pfMuonTrkEtaError_.push_back(-999.0);
+            nt.pfMuonTrkPhi_.push_back(-999.0);
+            nt.pfMuonTrkPhiError_.push_back(-999.0);
+            nt.pfMuonTrkOuterEta_.push_back(-999.0);
+            nt.pfMuonTrkOuterPhi_.push_back(-999.0);
             nt.pfMuonTrkNormalizedChi2_.push_back(-999.0);
             nt.pfMuonTrkPtError_.push_back(-999.0);
             nt.pfMuonTrkVxy_.push_back(-999.0);
             nt.pfMuonTrkVz_.push_back(-999.0);
+            nt.pfMuonTrkDxy_.push_back(-999.0);
+            nt.pfMuonTrkDxyError_.push_back(-999.0);
+            nt.pfMuonTrkDz_.push_back(-999.0);
+            nt.pfMuonTrkDzError_.push_back(-999.0);
+            nt.pfMuonTrkProb_.push_back(-999.0);
             nt.pfMuonPropSt1Status_.push_back(kPropagationNotAttempted);
             nt.pfMuonPropSt1Idx_.push_back(-1);
             nt.pfMuonPropSt2Status_.push_back(kPropagationNotAttempted);
