@@ -449,6 +449,8 @@ public:
     //   1 = globalTrack
     //   2 = outerTrack / standAloneMuon
     //   3 = innerTrack
+    // Track quantities below use that selected track; dxy/dz are signed
+    // relative to the primary vertex. Missing track values use -999.
     //
     // Station-1/2 status:
     //   0 = no usable propagation track
@@ -473,10 +475,22 @@ public:
     vector<int> pfMuonTrkNumMuonStations_;
     vector<int> pfMuonTrkNumCSCHits_;
     vector<int> pfMuonTrkNumDTHits_;
+    vector<float> pfMuonTrkPt_;
+    vector<float> pfMuonTrkEta_;
+    vector<float> pfMuonTrkEtaError_;
+    vector<float> pfMuonTrkPhi_;
+    vector<float> pfMuonTrkPhiError_;
+    vector<float> pfMuonTrkOuterEta_;
+    vector<float> pfMuonTrkOuterPhi_;
     vector<float> pfMuonTrkNormalizedChi2_;
     vector<float> pfMuonTrkPtError_;
     vector<float> pfMuonTrkVxy_;
     vector<float> pfMuonTrkVz_;
+    vector<float> pfMuonTrkDxy_;
+    vector<float> pfMuonTrkDxyError_;
+    vector<float> pfMuonTrkDz_;
+    vector<float> pfMuonTrkDzError_;
+    vector<float> pfMuonTrkProb_;
     vector<int> pfMuonPropSt1Status_;
     vector<int> pfMuonPropSt1Idx_;
     vector<int> pfMuonPropSt2Status_;
