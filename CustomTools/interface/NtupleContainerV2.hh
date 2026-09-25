@@ -441,6 +441,31 @@ public:
     vector<int> recoMuonIsGlobalMuon_;
     vector<int> recoMuonIsStandAloneMuon_;
 
+    // Separate MiniAOD displaced products. A missing product has available=0;
+    // an available but empty collection has available=1 and n=0.
+    // Embedded track arrays align with their parent muons. Missing references
+    // have valid=0, zero p4, and -999 for floating track quantities.
+    struct DisplacedTrackFields {
+        int available = 0;
+        int n = 0;
+        vector<math::XYZTLorentzVector> p4;
+        vector<int> valid, charge, extraAvailable;
+        vector<float> ptError, vxy, vz, dxy, dz, normalizedChi2;
+        vector<int> nMuonHits, nCSCHits, nDTHits, nTrackerHits, nPixelHits, nStripHits;
+        void clear() { *this = DisplacedTrackFields{}; }
+    } displacedTrack_, displacedGlobalTrack_;
+
+    struct DisplacedMuonFields {
+        int available = 0;
+        int n = 0;
+        vector<math::XYZTLorentzVector> p4;
+        vector<int> charge, isStandAlone, isTracker, isGlobal, isPF, nMatchedStations;
+        vector<int> timeValid;
+        vector<float> timeAtIpInOut;
+        DisplacedTrackFields outer, inner, global;
+        void clear() { *this = DisplacedMuonFields{}; }
+    } slimmedMuon_, recoDisplacedMuon_, slimmedDisplacedMuon_;
+
     // Complete PF-muon view of slimmedMuons, with no pT or acceptance cuts.
     // pfMuonPatIdx_ is the index in the input slimmedMuons collection.
     //
@@ -679,6 +704,7 @@ public:
 
     // Standard standalone (STA) muons from standAloneMuons:UpdatedAtVtx.
     // The source collection is kept without kinematic or ID cuts.
+    int staMuonAvailable_;
     int nSTAMuon_;
     std::vector<float> recoSTAMuonPt_;
     std::vector<float> recoSTAMuonPtErr_;
@@ -742,6 +768,7 @@ public:
     std::vector<float> propSTAMuonSt2PositionPhi_;
 
     // DSA Muons
+    int dsaMuonAvailable_;
     int nDSAMuon_;
     std::vector<float> recoDSAMuonPt_;
     std::vector<float> recoDSAMuonPtErr_;

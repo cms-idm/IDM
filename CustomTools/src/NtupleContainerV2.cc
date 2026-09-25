@@ -36,6 +36,49 @@ void NtupleContainerV2::CreateTreeBranches() {
     outT->Branch("Muon_isGlobalMuon",&recoMuonIsGlobalMuon_);
     outT->Branch("Muon_isStandAloneMuon",&recoMuonIsStandAloneMuon_);
 
+    auto branchDisplacedTrack = [this](const std::string& name, DisplacedTrackFields& fields) {
+        outT->Branch((name + "_available").c_str(), &fields.available);
+        outT->Branch(("n" + name).c_str(), &fields.n);
+        outT->Branch((name + "_p4").c_str(), &fields.p4);
+        outT->Branch((name + "_valid").c_str(), &fields.valid);
+        outT->Branch((name + "_charge").c_str(), &fields.charge);
+        outT->Branch((name + "_extraAvailable").c_str(), &fields.extraAvailable);
+        outT->Branch((name + "_ptError").c_str(), &fields.ptError);
+        outT->Branch((name + "_vxy").c_str(), &fields.vxy);
+        outT->Branch((name + "_vz").c_str(), &fields.vz);
+        outT->Branch((name + "_dxy").c_str(), &fields.dxy);
+        outT->Branch((name + "_dz").c_str(), &fields.dz);
+        outT->Branch((name + "_normalizedChi2").c_str(), &fields.normalizedChi2);
+        outT->Branch((name + "_nMuonHits").c_str(), &fields.nMuonHits);
+        outT->Branch((name + "_nCSCHits").c_str(), &fields.nCSCHits);
+        outT->Branch((name + "_nDTHits").c_str(), &fields.nDTHits);
+        outT->Branch((name + "_nTrackerHits").c_str(), &fields.nTrackerHits);
+        outT->Branch((name + "_nPixelHits").c_str(), &fields.nPixelHits);
+        outT->Branch((name + "_nStripHits").c_str(), &fields.nStripHits);
+    };
+    auto branchDisplacedMuon = [this, &branchDisplacedTrack](
+        const std::string& name, DisplacedMuonFields& fields) {
+        outT->Branch((name + "_available").c_str(), &fields.available);
+        outT->Branch(("n" + name).c_str(), &fields.n);
+        outT->Branch((name + "_p4").c_str(), &fields.p4);
+        outT->Branch((name + "_charge").c_str(), &fields.charge);
+        outT->Branch((name + "_isStandAlone").c_str(), &fields.isStandAlone);
+        outT->Branch((name + "_isTracker").c_str(), &fields.isTracker);
+        outT->Branch((name + "_isGlobal").c_str(), &fields.isGlobal);
+        outT->Branch((name + "_isPF").c_str(), &fields.isPF);
+        outT->Branch((name + "_nMatchedStations").c_str(), &fields.nMatchedStations);
+        outT->Branch((name + "_timeValid").c_str(), &fields.timeValid);
+        outT->Branch((name + "_timeAtIpInOut").c_str(), &fields.timeAtIpInOut);
+        branchDisplacedTrack(name + "_outerTrack", fields.outer);
+        branchDisplacedTrack(name + "_innerTrack", fields.inner);
+        branchDisplacedTrack(name + "_globalTrack", fields.global);
+    };
+    branchDisplacedTrack("DisplacedTrack", displacedTrack_);
+    branchDisplacedTrack("DisplacedGlobalTrack", displacedGlobalTrack_);
+    branchDisplacedMuon("SlimmedMuon", slimmedMuon_);
+    branchDisplacedMuon("RecoDisplacedMuon", recoDisplacedMuon_);
+    branchDisplacedMuon("SlimmedDisplacedMuon", slimmedDisplacedMuon_);
+
     // All PF muons and successful Station-1/2 propagated PF-muon views.
     outT->Branch("nPFMuon",&nPFMuon_);
     outT->Branch("PFMuon_patMuonIdx",&pfMuonPatIdx_);
@@ -259,6 +302,7 @@ void NtupleContainerV2::CreateTreeBranches() {
     outT->Branch("AllLptElectron_gedIsMatched",&recoAllLowPtElectronGEDisMatched_);
 
     // Standard standalone (STA) muons.
+    outT->Branch("STAMuon_available", &staMuonAvailable_);
     outT->Branch("nSTAMuon", &nSTAMuon_);
     outT->Branch("recoSTAMuonPt", &recoSTAMuonPt_);
     outT->Branch("recoSTAMuonPtErr", &recoSTAMuonPtErr_);
@@ -319,6 +363,7 @@ void NtupleContainerV2::CreateTreeBranches() {
     outT->Branch("PropSTAMuonSt2_positionPhi", &propSTAMuonSt2PositionPhi_);
 
     // DSA muons
+    outT->Branch("DSAMuon_available", &dsaMuonAvailable_);
     outT->Branch("nDSAMuon", &nDSAMuon_);
     outT->Branch("recoDSAMuonPt", &recoDSAMuonPt_);
     outT->Branch("recoDSAMuonPtErr", &recoDSAMuonPtErr_);
@@ -1278,6 +1323,11 @@ void NtupleContainerV2::ClearTreeBranches() {
     recoMuonIsPFMuon_.clear();
     recoMuonIsGlobalMuon_.clear();
     recoMuonIsStandAloneMuon_.clear();
+    displacedTrack_.clear();
+    displacedGlobalTrack_.clear();
+    slimmedMuon_.clear();
+    recoDisplacedMuon_.clear();
+    slimmedDisplacedMuon_.clear();
 
     nPFMuon_ = 0;
     pfMuonPatIdx_.clear();
@@ -1506,6 +1556,7 @@ void NtupleContainerV2::ClearTreeBranches() {
     genputrue_ = -9999;
 
     // Standard standalone (STA) muons
+    staMuonAvailable_ = 0;
     nSTAMuon_ = 0;
     recoSTAMuonPt_.clear();
     recoSTAMuonPtErr_.clear();
@@ -1566,6 +1617,7 @@ void NtupleContainerV2::ClearTreeBranches() {
     propSTAMuonSt2PositionPhi_.clear();
 
     // DSA muons
+    dsaMuonAvailable_ = 0;
     nDSAMuon_ = 0;
     recoDSAMuonPt_.clear();
     recoDSAMuonEta_.clear();
