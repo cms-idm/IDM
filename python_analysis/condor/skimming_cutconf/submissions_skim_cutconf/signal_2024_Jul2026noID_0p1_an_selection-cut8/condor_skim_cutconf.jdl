@@ -1,0 +1,21 @@
+universe = vanilla
+executable = run_skim_cutconf.sh
+arguments = $(jobname).json
++DesiredOS = "EL9"
+
+use_x509userproxy = true
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = code.tar.gz, jobs/$(jobname).json
+transfer_output_files = ""
+notification = never
+
+output = logs/$(jobname).out
+error = logs/$(jobname).err
+log = logs/$(jobname).log
+
+request_cpus = 1
+request_memory = 4000
+request_disk = 4000000
+
+queue jobname from jobs.txt
