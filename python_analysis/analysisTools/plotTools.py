@@ -28,14 +28,13 @@ cmap = ["#3f90da", "#ffa90e", "#bd1f01", "#94a4a2", "#832db6", "#a96b59", "#e763
 # cms-recommended version of 10-color scheme
 
 bkg_cmap = {
-    "QCD":cmap_petroff[0],
-    "WJets":cmap_petroff[1],
-    "ZJets":cmap_petroff[2],
-    "DY":cmap_petroff[3],
-    "Top":cmap_petroff[4],
-    "Multiboson":cmap_petroff[5],
-    "ZGamma":"darkkhaki",
-    "DYLowMass":"tab:brown"
+    "DY":"#3f90da",
+    "Multiboson":"#ffa90e",
+    "QCD":"#832db6",
+    "TT":"#92dadd",
+    "WtoLNu":"#b9ac70",
+    "SingleT":"#717581",
+    "Zto2Nu":"#a96b59",
 }
 
 '''

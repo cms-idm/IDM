@@ -81,8 +81,21 @@ def get_signal_list_of_cuts(sig_histo, get_cut_idx = False):
         cut = cut_idx
     else:
         cut = cut_name
-    
+
     return cut
+
+def find_cut_idx_by_desc(sig_histo, keyword):
+    '''
+    Find the cutflow index (e.g. 'cut9') whose raw cutDesc text matches `keyword`
+    (case-insensitive substring), instead of hardcoding a cut index -- so callers
+    keep working if cut configs are reordered/renumbered.
+    '''
+    matches = [cname for cname, desc in sig_histo['cutDesc'].items() if keyword.lower() in desc.lower()]
+    if not matches:
+        raise RuntimeError(f"No cutflow stage found matching '{keyword}' in cutDesc: {dict(sig_histo['cutDesc'])}")
+    if len(matches) > 1:
+        raise RuntimeError(f"Multiple cutflow stages matched '{keyword}': {matches}")
+    return matches[0]
 
 # Data
 def get_data_cutflow_dict(data_histo, branch):
