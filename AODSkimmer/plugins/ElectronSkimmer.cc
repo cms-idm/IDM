@@ -1510,7 +1510,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
             reco::GsfTrackRef ele_j = ej.gsfTrack();
             if (ele_i == ele_j) continue; // skip if same ele is in reg and low-pT collections
             if (!ele_i.isNonnull() || !ele_j.isNonnull()) continue; // skip if there's a bad track
-            if (reco::deltaR(ei,ej) < 0.01) continue; // skip if they're likely to be the same electron un-cross-cleaned
+            if (reco::deltaR(ei,ej) < 0.001) continue; // skip if they're likely to be the same electron un-cross-cleaned
 
             TransientVertex tv;
             vector<reco::TransientTrack> transient_tracks{};
