@@ -45,7 +45,7 @@ vxy_range = {1:[0,20],10:[0,50],100:[0,50],1000:[0,50]}
 vxy_rebin = {1:5,10:20,100:20,1000:20}
 
 class Analyzer:
-    def __init__(self,fileList,histoList,cuts,model_json=None,systematics=None,max_samples=-1,max_files_per_samp=-1,newCoffea=False,nJet_isNominal=None,isSFstudies=False,good_vtx='v11',slimFileList=None):
+    def __init__(self,fileList,histoList,cuts,model_json=None,systematics=None,max_samples=-1,max_files_per_samp=-1,newCoffea=False,nJet_isNominal=None,isSFstudies=False,good_vtx='v11',slimFileList=None,processSlim=True):
         # flag to see if we're using new coffea
         self.newCoffea = newCoffea
 
@@ -67,6 +67,15 @@ class Analyzer:
                 self.slimFileList = json.load(f)
         else:
             self.slimFileList = slimFileList
+
+        # if False, still pair up bkg samples with their slim counterpart's sum_wgt/
+        # num_events metadata (needed for correct normalization), but never add the
+        # "{name}__slim" dataset to sample_locs/sample_names -- so the slim ntuples
+        # themselves are never opened/processed. Only the cutflow_slim histos (and the
+        # 'passHLT' pre-selection cutflow entry) rely on actually reading those files,
+        # so this is safe to skip when only the main histograms are needed.
+        self.processSlim = processSlim
+        self.slimPairedNames = set() # bkg sample names with a slim counterpart, regardless of processSlim
 
         # systematics
         if systematics != None:
@@ -134,12 +143,12 @@ class Analyzer:
             xrdClient = client.FileSystem("root://cmseos.fnal.gov")
             if type(loc) != list:
                 status, flist = xrdClient.dirlist(loc)
-                fullList = ["root://cmsxrootd.fnal.gov/"+loc+"/"+item.name for item in flist if (('.root' in item.name) and (item.name not in blacklist))]
+                fullList = ["root://cmseos.fnal.gov/"+loc+"/"+item.name for item in flist if (('.root' in item.name) and (item.name not in blacklist))]
             else:
                 fullList = []
                 for l in loc:
                     status, flist = xrdClient.dirlist(l)
-                    fullList.extend(["root://cmsxrootd.fnal.gov/"+l+"/"+item.name for item in flist if (('.root' in item.name) and (item.name not in blacklist))])
+                    fullList.extend(["root://cmseos.fnal.gov/"+l+"/"+item.name for item in flist if (('.root' in item.name) and (item.name not in blacklist))])
             if self.max_files_per_samp > 0 and len(fullList) > self.max_files_per_samp:
                 fullList = fullList[:self.max_files_per_samp]
             if self.newCoffea:
@@ -187,10 +196,12 @@ class Analyzer:
             # pair up with the companion slim (all-events) sample, if one was provided
             if mode == 'bkg' and name in slimByName:
                 slimSample = slimByName[name]
-                slimName = f"{name}__slim"
-                self.sample_locs[slimName] = self._resolveSampleFiles(slimSample)
-                self.sample_info[slimName] = slimSample
-                self.sample_names.append(slimName)
+                self.slimPairedNames.add(name)
+                if self.processSlim:
+                    slimName = f"{name}__slim"
+                    self.sample_locs[slimName] = self._resolveSampleFiles(slimSample)
+                    self.sample_info[slimName] = slimSample
+                    self.sample_names.append(slimName)
 
                 # the full config's sum_wgt/num_events only cover the HLT-passed subset
                 # once ntuples are split this way -- stash them, and normalize against the
@@ -205,7 +216,7 @@ class Analyzer:
     def process(self,treename='ntuples/outT',execr="iterative",workers=4,merging=False,dask_client=None,procType='default',**kwargs):
         fileset = self.sample_locs
         if procType == 'default':
-            proc = iDMeProcessor(self.sample_names,self.sample_info,self.sample_locs,self.histoFile,self.cuts,mode=self.mode,model_json=self.model,nJet_isNom=self.nJet_isNom,isSFstudies=self.isSFstudies,good_vtx=self.good_vtx,systematics=self.systematics,**kwargs)
+            proc = iDMeProcessor(self.sample_names,self.sample_info,self.sample_locs,self.histoFile,self.cuts,mode=self.mode,model_json=self.model,nJet_isNom=self.nJet_isNom,isSFstudies=self.isSFstudies,good_vtx=self.good_vtx,systematics=self.systematics,slimPairedNames=self.slimPairedNames,**kwargs)
         elif procType == 'gen':
             proc = genProcessor(self.sample_names,self.sample_info,self.sample_locs,self.histoFile,self.cuts,mode=self.mode,**kwargs)
         elif procType == 'trig':
@@ -227,7 +238,7 @@ class Analyzer:
             else:
                 print("Invalid executor type specification!")
                 return
-            runner = processor.Runner(executor=executor,schema=MySchema,savemetrics=True)
+            runner = processor.Runner(executor=executor,schema=MySchema,savemetrics=True,xrootdtimeout=180,skipbadfiles=True)
             accumulator = runner(fileset,
                                 treename=treename,
                                 processor_instance=proc)
@@ -246,7 +257,7 @@ class Analyzer:
                 print("Invalid executor type specification!")
                 return
 
-            runner = processor.Runner(executor=executor,schema=MySchema,savemetrics=True)
+            runner = processor.Runner(executor=executor,schema=MySchema,savemetrics=True,xrootdtimeout=180,skipbadfiles=True)
             accumulator = runner(fileset,
                                  #treename=treename,
                                  processor_instance=proc)
@@ -259,9 +270,12 @@ class Analyzer:
         return accumulator
 
 class iDMeProcessor(processor.ProcessorABC):
-    def __init__(self,samples,sampleInfo,fileSet,histoFile,cutFile,mode='signal',model_json=None,nJet_isNom=None,isSFstudies=False,good_vtx='v11',systematics=None,**kwargs):
+    def __init__(self,samples,sampleInfo,fileSet,histoFile,cutFile,mode='signal',model_json=None,nJet_isNom=None,isSFstudies=False,good_vtx='v11',systematics=None,slimPairedNames=None,**kwargs):
         self.samples = samples
         self.sampleInfo = sampleInfo
+        # bkg sample names with a slim counterpart, whether or not the slim ntuples
+        # themselves were actually registered for processing (see Analyzer.processSlim)
+        self.slimPairedNames = slimPairedNames if slimPairedNames is not None else set()
         self.sampleLocs = fileSet
         self.mode = mode
         self.model = model_json
@@ -355,7 +369,7 @@ class iDMeProcessor(processor.ProcessorABC):
         # this dataset only contains events that already passed the background HLT/MET
         # preselection -- the true, unselected 'all' bin comes from _processSlim() instead,
         # so this bin is named 'passHLT' to avoid claiming it's the full population.
-        has_slim_pair = f"{samp}__slim" in self.samples
+        has_slim_pair = samp in self.slimPairedNames
         firstBin = 'passHLT' if has_slim_pair else 'all'
         if isMC:
             cutflow[firstBin] += ak.sum(events.genWgt)/sum_wgt

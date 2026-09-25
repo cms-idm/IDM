@@ -262,7 +262,7 @@ def run_training(bdt_name,variables,sig_data_train,sig_data_test,sig_sf_arr,sig_
     grid_search = GridSearchCV(estimator=classifier, param_grid=param_grid, 
                                cv=3, scoring='neg_log_loss', verbose=2,refit=True,
                               n_jobs=-1,)
-    grid_search.fit(train, y_train)
+    grid_search.fit(train, y_train, sample_weight=train_sf)
     best_params = grid_search.best_params_
     print(f"Best parameters: {best_params}")
     bst = grid_search.best_estimator_

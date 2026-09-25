@@ -42,18 +42,22 @@ def process_signal_inputs(sig_files,variables):
             sig_point['delta'].append(fin['delta'][()][mask])
             sig_point['ctau'].append(fin['ctau'][()][mask])
 
-            # for loop for each signal point to get the sig_data_test and sig_data_train
-            for m1 in m1s:
-                for delta in deltas:
-                    for ctau in ctaus:
-                        mask_sig_point = (fin['m1'][()][mask] == m1) & (fin['delta'][()][mask] == delta) & (fin['ctau'][()][mask] == ctau)
-                        sig_data.append(np.concatenate([fin[v][()][mask][mask_sig_point][:].reshape(-1,1) for v in variables],axis=1))
-
-                        sig_point['m1'].append(fin['m1'][()][mask][mask_sig_point][:])
-                        sig_point['delta'].append(fin['delta'][()][mask][mask_sig_point][:])
-                        sig_point['ctau'].append(fin['ctau'][()][mask][mask_sig_point][:])
-
-                        sig_xsec_norm.append(fin['wgt_norm'][()][mask][mask_sig_point][:])
+            # NOTE: this loop is disabled. It was carried over from BDTutils.py (v1), where it built
+            # per-subprocess train/test splits ([:idx_train] / [idx_train:]). Here in v2 there is no
+            # train/test split, so mask_sig_point[:] selects the full subprocess slice, which is a subset
+            # of the full mask block already appended above -- re-appending it duplicated every signal
+            # event (and its m1/delta/ctau/wgt_norm entries) a second time.
+            # for m1 in m1s:
+            #     for delta in deltas:
+            #         for ctau in ctaus:
+            #             mask_sig_point = (fin['m1'][()][mask] == m1) & (fin['delta'][()][mask] == delta) & (fin['ctau'][()][mask] == ctau)
+            #             sig_data.append(np.concatenate([fin[v][()][mask][mask_sig_point][:].reshape(-1,1) for v in variables],axis=1))
+            #
+            #             sig_point['m1'].append(fin['m1'][()][mask][mask_sig_point][:])
+            #             sig_point['delta'].append(fin['delta'][()][mask][mask_sig_point][:])
+            #             sig_point['ctau'].append(fin['ctau'][()][mask][mask_sig_point][:])
+            #
+            #             sig_xsec_norm.append(fin['wgt_norm'][()][mask][mask_sig_point][:])
 
     sig_data = np.concatenate(sig_data,axis=0)
     sig_xsec_norm = np.concatenate(sig_xsec_norm,axis=0)
