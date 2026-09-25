@@ -120,6 +120,8 @@ elif mode == "bkg":
     else:
         status, bkgs = xrdClient.dirlist(f"{prefix}/{year}/")
     bkgs = [bkg.name for bkg in bkgs]
+    print(f"{prefix}/{year}/", bkgs)
+    
     output = []
     for bkg in bkgs:
         if skimmed:

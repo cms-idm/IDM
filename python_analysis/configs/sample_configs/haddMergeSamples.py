@@ -107,15 +107,41 @@ def group_by_events(files, target_events, treepath=TREEPATH):
     return groups
 
 
+def validate_hadd_output(out_file, treepath):
+    """Confirm hadd actually produced a readable tree -- hadd can exit 0 (or
+    get killed without a clean nonzero code) after being interrupted mid-write,
+    leaving a full-size file whose basket data was flushed but whose TFile
+    header/keys trailer (only written at Close()) never got updated, which
+    uproot sees as a keyless file."""
+    try:
+        with uproot.open(f"{out_file}:{treepath}"):
+            return True
+    except Exception as e:
+        print(f"  [warn] {out_file} failed validation: {e}")
+        return False
+
+
 def run_hadd(task):
-    out_file, in_files, env = task
+    out_file, in_files, env, treepath, max_retries = task
     os.makedirs(os.path.dirname(out_file), exist_ok=True)
     cmd = ["hadd", "-f", "-j", "1", out_file] + in_files
-    result = subprocess.run(cmd, env=env, capture_output=True, text=True)
-    ok = result.returncode == 0
-    if not ok:
-        print(f"[FAIL] {out_file}\n{result.stderr[-2000:]}")
-    return out_file, len(in_files), ok
+    attempt = 0
+    while True:
+        attempt += 1
+        result = subprocess.run(cmd, env=env, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"[FAIL] {out_file} (attempt {attempt}/{max_retries + 1}): "
+                  f"hadd exited {result.returncode}\n{result.stderr[-2000:]}")
+        elif validate_hadd_output(out_file, treepath):
+            return out_file, len(in_files), True
+        else:
+            print(f"[FAIL] {out_file} (attempt {attempt}/{max_retries + 1}): "
+                  f"hadd exited 0 but output didn't validate")
+        if os.path.exists(out_file):
+            os.remove(out_file)
+        if attempt > max_retries:
+            return out_file, len(in_files), False
+        print(f"  retrying {out_file}...")
 
 
 def main():
@@ -123,10 +149,16 @@ def main():
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     ap.add_argument("-c", "--config",
-                     default="bkg_2024_Aug2026.json",
+                     default="bkg_2024_Aug2026Full.json",
                      help="sample config JSON, a list of {'name', 'location', 'blacklist', ...} "
                           "entries as produced by makeSignalConfigs.py (default: "
                           "bkg_2024_Aug2026.json)")
+    ap.add_argument("-i", "--in-prefix",
+                     default="/store/group/lpcmetx/iDMe/Samples/Ntuples/background_Aug2026noIDSep",
+                     help="EOS base dir that samples' 'location' entries are under, xrootd-style; "
+                          "stripped off each location to get the <year>/<group>/<subgroup>/... "
+                          "tail that gets mirrored under --out-prefix (default: "
+                          "/store/group/lpcmetx/iDMe/Samples/Ntuples/background_Aug2026noIDSep)")
     ap.add_argument("-o", "--out-prefix",
                      default="/store/group/lpcmetx/iDMe/Samples/Ntuples/background_Aug2026noIDSep_merged",
                      help="new EOS base dir for merged files, xrootd-style (default: "
@@ -141,6 +173,9 @@ def main():
                           "(e.g. 'WtoLNu' selects WtoLNu_1J, WtoLNu_2J, ...); "
                           "alternative to --samples for grabbing a whole family at once")
     ap.add_argument("--workers", type=int, default=4, help="parallel hadd jobs (default: 4)")
+    ap.add_argument("--max-retries", type=int, default=2,
+                     help="re-run hadd this many times if the output fails validation "
+                          "(e.g. hadd got killed mid-write), before giving up (default: 2)")
     ap.add_argument("--dry-run", action="store_true", help="print the merge plan and exit")
     args = ap.parse_args()
 
@@ -152,6 +187,17 @@ def main():
     if not isinstance(samples, list) or (samples and not isinstance(samples[0], dict)):
         sys.exit(f"{args.config} is not a sample config (expected a JSON list of "
                  f"{{'name', 'location', ...}} entries, e.g. bkg_2024_Aug2026.json)")
+
+    # Some config entries have a non-string 'location' (e.g. "[]") when no
+    # files were found for that sample at config-generation time -- skip them
+    # here rather than letting them break the relpath below.
+    no_location = [s["name"] for s in samples if not isinstance(s.get("location"), str)]
+    if no_location:
+        print(f"[warn] skipping {len(no_location)} sample(s) with no location: {no_location}")
+        samples = [s for s in samples if isinstance(s.get("location"), str)]
+
+    in_base = args.in_prefix.rstrip("/")
+
     if args.samples:
         wanted = set(args.samples)
         samples = [s for s in samples if s["name"] in wanted]
@@ -164,12 +210,6 @@ def main():
             sys.exit(f"No sample names contain '{args.group}'")
 
     out_prefix = args.out_prefix.rstrip("/")
-
-    # Locations look like ".../background_Aug2026noIDSep/2024/QCD/HT2000toInf/";
-    # find the common base dir shared by all samples so we can mirror the
-    # <year>/<group>/<subgroup>/... structure under out_prefix instead of
-    # flattening everything into out_prefix/<sample_name>/.
-    in_base = os.path.commonpath([s["location"].rstrip("/") for s in samples])
 
     plan = []  # (out_file_xrootd_style, out_file_local, in_files, n_events)
     total_in_files = 0
@@ -185,6 +225,9 @@ def main():
             continue
         total_in_files += len(files)
         rel_dir = os.path.relpath(s["location"].rstrip("/"), in_base)
+        if rel_dir.startswith(".."):
+            sys.exit(f"{s['name']} location {s['location']} is not under --in-prefix "
+                      f"{args.in_prefix} -- pass the correct -i/--in-prefix for this config")
         for i, (group_files, n) in enumerate(groups):
             out_xrootd = f"{out_prefix}/{rel_dir}/{s['name']}_merged_{i:03d}.root"
             plan.append((out_xrootd, eos_local(out_xrootd), group_files, n))
@@ -206,7 +249,8 @@ def main():
     env = get_cmsenv()
 
     print(f"Running {len(plan)} hadd jobs with {args.workers} workers...")
-    tasks = [(out_local, group_files, env) for _, out_local, group_files, _ in plan]
+    tasks = [(out_local, group_files, env, args.treepath, args.max_retries)
+             for _, out_local, group_files, _ in plan]
     n_ok = n_fail = 0
     with ProcessPoolExecutor(max_workers=args.workers) as ex:
         futures = {ex.submit(run_hadd, t): t[0] for t in tasks}
