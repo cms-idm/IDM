@@ -30,11 +30,15 @@ hists_config = f"configs/histo_configs/{hists}.py"
 outdir = 'workarea'
 
 # ---- SIGNAL -------------------------------------
-sample_config = f"configs/sample_configs/bkg_2024_{vers}.json"
+sample_config = f"configs/sample_configs/bkg_2024_{vers}_skimmed.json"
 slimmed_config = f"configs/sample_configs/bkg_2024_{vers}-slim.json"
 
+# slim ntuples are only needed to fill the cutflow_slim/'passHLT' entries -- set to
+# False to skip opening them entirely when only the main histograms are needed
+process_slim = False
+
 #analyzer = Analyzer(sample_config, hists_config, cuts_config, model_config) # If using BDT in cuts
-analyzer = Analyzer(sample_config, hists_config, cuts_config, slimFileList=slimmed_config) # If not using BDT in cuts
+analyzer = Analyzer(sample_config, hists_config, cuts_config, slimFileList=slimmed_config, processSlim=process_slim) # If not using BDT in cuts
 
 t1 = time.time()
 #out = analyzer.process(execr='iterative')

@@ -22,7 +22,7 @@ outdir = 'workarea'
 bkg_vers = 'Aug2026'
 sig_vers = 'Jul2026noID'
 selection = 'an'
-hists = 'appearingtrack'
+hists = 'SR_minimal'
 
 saved_signal_hists = f"{outdir}/hists_sig{sig_vers}_{selection}-sel_{hists}.coffea"
 saved_bkg_hists = f"{outdir}/hists_bkg{bkg_vers}_{selection}-sel_{hists}.coffea"
@@ -106,7 +106,7 @@ def _auto_ylim(values, pad_decades=0.3):
     return [lo, hi]
 
 def plot_sig_bkg_yields(sig_histo, bkg_histos, sig_df_eff, sig_df_cts, bkg_df_cts, plot_dict,
-                         sig_df_wts=None, show=True):
+                         sig_df_wts=None, show=False):
     """
     Overlay combined-background cutflow yields (one line per background
     process category -- e.g. all QCD subprocesses summed into a single "QCD"
@@ -170,7 +170,7 @@ def plot_sig_bkg_yields(sig_histo, bkg_histos, sig_df_eff, sig_df_cts, bkg_df_ct
     for process in bkg_processes:
         color = ptools.bkg_cmap.get(process, 'gray')
         vals = bkg_df_cts.loc[process].values.astype(float)
-        ax.plot(x, vals, label=process, color=color, ls='--', lw=2.5)
+        ax.plot(x, vals, label=process, color=color, ls='--', lw=1.5, alpha=0.6)
         plotted_vals.extend(vals)
 
     if doTotal:
@@ -185,34 +185,46 @@ def plot_sig_bkg_yields(sig_histo, bkg_histos, sig_df_eff, sig_df_cts, bkg_df_ct
     sig_df_cts = sig_df_cts.sort_values(by=['m1'])
     sig_df_cts.pop('m1')
 
-    color_idx = 0
+    # Pick out the selected signal points first (sig_df_cts is already sorted
+    # by m1) so distinct shades of red can be assigned across exactly that
+    # many lines -- lightest shade for the lowest mass, darkest for the highest.
+    sig_points = []
     for point in sig_df_cts.index.values:
         sig_dict = ptools.signalPoint(point)
         m1 = round(sig_dict['m1'], 5)
         delta = round(sig_dict['delta'], 5)
-        dmchi = round(sig_dict['dmchi'], 5)
         ctau = int(sig_dict['ctau'])
 
         m1_disp = int(m1) if m1.is_integer() else m1
         delta_disp = int(delta) if delta.is_integer() else delta
 
         if (m1_disp in plot_dict['m1s']) and (delta_disp in plot_dict['deltas']) and (ctau in plot_dict['ctaus']):
-            label = rf"($M_1$, $\Delta$) = ({round(m1, 5)}, {round(dmchi, 5)}) GeV, c$\tau$ = {ctau}mm"
-            counts = sig_df_cts.loc[point].values.astype(float)
-            if sig_df_wts is not None:
-                eff = sig_df_eff.loc[point].values.astype(float)
-                W_0 = sig_df_eff.loc[point].iloc[0]         # cutflow['all'], guaranteed first in union_idx
-                sw2_all = sig_df_wts.loc[point].iloc[0]
-                yerr_eff = np.sqrt(eff * (1 - eff) * sw2_all) / W_0
-                norm = counts[0] / W_0                      # xsec * lumi for this signal point
-                yerr = yerr_eff * norm
-                ax.errorbar(x, counts, yerr=yerr, label=label, color=ptools.cmap[color_idx % len(ptools.cmap)],
-                            fmt='-o', markersize=4, capsize=3, lw=2)
-            else:
-                ax.plot(x, counts, label=label, color=ptools.cmap[color_idx % len(ptools.cmap)],
-                        lw=2, marker='o', markersize=4)
-            plotted_vals.extend(counts)
-            color_idx += 1
+            sig_points.append((point, sig_dict))
+
+    sig_colors = plt.cm.Reds(np.linspace(0.4, 0.95, max(len(sig_points), 1)))
+
+    for color_idx, (point, sig_dict) in enumerate(sig_points):
+        m1 = round(sig_dict['m1'], 5)
+        delta = round(sig_dict['delta'], 5)
+        dmchi = round(sig_dict['dmchi'], 5)
+        ctau = int(sig_dict['ctau'])
+        color = sig_colors[color_idx]
+
+        label = rf"($M_1$, $\Delta$) = ({round(m1, 5)}, {round(dmchi, 5)}) GeV, c$\tau$ = {ctau}mm"
+        counts = sig_df_cts.loc[point].values.astype(float)
+        if sig_df_wts is not None:
+            eff = sig_df_eff.loc[point].values.astype(float)
+            W_0 = sig_df_eff.loc[point].iloc[0]         # cutflow['all'], guaranteed first in union_idx
+            sw2_all = sig_df_wts.loc[point].iloc[0]
+            yerr_eff = np.sqrt(eff * (1 - eff) * sw2_all) / W_0
+            norm = counts[0] / W_0                      # xsec * lumi for this signal point
+            yerr = yerr_eff * norm
+            ax.errorbar(x, counts, yerr=yerr, label=label, color=color,
+                        fmt='-o', markersize=4, capsize=3, lw=2)
+        else:
+            ax.plot(x, counts, label=label, color=color,
+                    lw=2, marker='o', markersize=4)
+        plotted_vals.extend(counts)
 
     if plot_dict.get('doLog', True):
         ax.set_yscale('log')

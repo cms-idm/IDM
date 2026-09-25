@@ -9,15 +9,32 @@ import awkward as ak
 import vector
 vector.register_awkward()
 
+# --- local axes (override histobins.py's shared versions for this module) ---
+# Same ranges/transforms as the histobins.py axes they replace, but coarsened
+# to ~50 bins with edges landing on round numbers where the range allows it
+# (the log-transformed lxy axis can't have round edges by construction).
+ele_pt       = Regular(50, 0, 50,     name="pt",     label="$p_{T}$ [GeV]")
+ele_eta      = Regular(60, -3, 3,     name="eta",    label=r"$\eta$")
+lxy_coarse   = Regular(50, 0, 50,     name="lxy",    label="$L_{xy}$ [cm]")
+lxy_log      = Regular(60, 1e-4, 100, name="lxy",    label="$L_{xy}$ [cm]", transform=transform.log)
+vz_coarse    = Regular(50, 0, 50,     name="vz",     label="$v_{z}$ [cm]")
+ee_dr        = Regular(50, 0, 1,      name='dr',     label=r"$\Delta R$")
+ee_dr_narrow = Regular(40, 0, 0.2,    name='dr',     label=r"$\Delta R$")
+ee_mass      = Regular(40, 0, 4,      name="mass",   label="$m_{e^+e^-}$ [GeV]")
+ee_ctau      = Regular(50, 0, 1000,   name="ctau",   label=r"$c\tau$ [mm]")
+ee_ctau_pr   = Regular(50, 0, 500,    name="ctau",   label=r"$c\tau$ [mm]")
+ee_met_dphi  = Regular(50, 0, 0.5,    name="dphi",   label=r"$\Delta \phi$")
+met_pt       = Regular(40, 0, 400,    name="met_pt", label="$p_T^{miss}$ [GeV]")
+
 # --- axes for vertex-offset diagnostics ---
 # Floor is set far below any physical scale (down to 1e-9 cm) so that a
 # vertex pair that's numerically coincident (as opposed to genuinely close)
 # shows up as a visible peak near the floor rather than vanishing into
 # underflow (see gen_diele_lxy_flawed's low-mass-sample issue).
-voffset_xy_coarse = Regular(100, 0, 50,      name="voffset_xy", label=r"$|\Delta v_{xy}|$ [cm]")
-voffset_xy_log    = Regular(130, 1e-9, 100,  name="voffset_xy", label=r"$|\Delta v_{xy}|$ [cm]", transform=transform.log)
-voffset_z_coarse  = Regular(100, 0, 50,      name="voffset_z",  label=r"$|\Delta v_{z}|$ [cm]")
-voffset_z_log     = Regular(130, 1e-9, 100,  name="voffset_z",  label=r"$|\Delta v_{z}|$ [cm]", transform=transform.log)
+voffset_xy_coarse = Regular(50, 0, 50,      name="voffset_xy", label=r"$|\Delta v_{xy}|$ [cm]")
+voffset_xy_log    = Regular(55, 1e-9, 100,  name="voffset_xy", label=r"$|\Delta v_{xy}|$ [cm]", transform=transform.log)
+voffset_z_coarse  = Regular(50, 0, 50,      name="voffset_z",  label=r"$|\Delta v_{z}|$ [cm]")
+voffset_z_log     = Regular(55, 1e-9, 100,  name="voffset_z",  label=r"$|\Delta v_{z}|$ [cm]", transform=transform.log)
 
 def make_histograms():
     histograms = {

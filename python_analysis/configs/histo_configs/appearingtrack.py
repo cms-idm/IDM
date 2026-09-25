@@ -17,45 +17,76 @@ import awkward as ak
 #   - dR >= 1 to every PFJet with pt > 30 GeV in the same event
 # At most one candidate is kept per event: if several AllLptElectrons in the
 # same event pass, the one with the largest |dxy| is taken.
-# Works for both signal and background; the isMerged flag (signal only, see
-# _compute_merged_flag) additionally tags whether the selected electron
-# individually qualifies as a genuine merged electron under the mergedcats.py
-# definition.
+# Works for both signal and background; the isMerged flag (signal only, from
+# AllLptElectron.is_merged -- computeMergedCatVars in
+# analysisTools/analysisSubroutines.py, registered below via `subroutines`)
+# additionally tags whether the selected electron individually qualifies as a
+# genuine merged electron under the mergedcats.py definition.
 
 _LOG = hist.axis.transform.log
 
 # ── Extra axes not in histobins ──────────────────────────────────────────────
-_e_energy  = Regular(100,  0, 100,  name='e',        label='E [GeV]')
-_calIso    = Regular(100,  0, 100,  name='iso',       label='Calo Iso [GeV]')
-_calRelIso = Regular(100,  0,   5,  name='relIso',    label='Calo Relative Iso')
-_rhoEA     = Regular(100,  0,  20,  name='rhoEA',     label=r'$\rho \times EA$ [GeV]')
-_sieie     = Regular(100,  0,0.05,  name='sieie',     label=r'$\sigma_{i\eta i\eta}$')
-_dEtaSeed  = Regular(100,  0,0.01,  name='dEtaSeed',  label=r'$|\Delta\eta_\mathrm{seed}|$')
-_dPhiIn    = Regular(100,  0, 0.1,  name='dPhiIn',    label=r'$|\Delta\phi_\mathrm{in}|$')
-_HoE       = Regular(100,  0,   1,  name='HoE',       label='H/E')
-_invEmP    = Regular(100,  0, 0.1,  name='invEmP',    label=r'$|1/E - 1/p|$ [GeV$^{-1}$]')
+_e_energy  = Regular(50,  0, 100,  name='e',        label='E [GeV]')
+_calIso    = Regular(50,  0,  50,  name='iso',       label='Calo Iso [GeV]')
+_calRelIso = Regular(50,  0,   5,  name='relIso',    label='Calo Relative Iso')
+_rhoEA     = Regular(50,  0,  20,  name='rhoEA',     label=r'$\rho \times EA$ [GeV]')
+_sieie     = Regular(50,  0,0.05,  name='sieie',     label=r'$\sigma_{i\eta i\eta}$')
+_dEtaSeed  = Regular(50,  0,0.01,  name='dEtaSeed',  label=r'$|\Delta\eta_\mathrm{seed}|$')
+_dPhiIn    = Regular(50,  0, 0.1,  name='dPhiIn',    label=r'$|\Delta\phi_\mathrm{in}|$')
+_HoE       = Regular(50,  0,   1,  name='HoE',       label='H/E')
+_invEmP    = Regular(50,  0, 0.1,  name='invEmP',    label=r'$|1/E - 1/p|$ [GeV$^{-1}$]')
 _missHits  = Integer(0,    5,       name='missHits',  label='Exp. Missing Inner Hits')
 _charge    = IntCategory([-1, 1],   name='charge',    label='Charge')
+_ele_chi2  = Regular(50,0,25,name="chi2",label=r"Track $\chi^2/df$")
+_ele_angRes = Regular(50,0,0.04,name="angRes",label=r"Angular Resolution $\sqrt{\sigma_\eta^2 + \sigma_\phi^2}$")
+
+# Local overrides of the shared dR/dRj/dphiJ axes (histobins.py) with labels
+# spelling out what the delta is between, rather than the shared generic
+# "$\Delta R$"/"$\Delta \phi$" -- those objects are reused elsewhere for
+# different object pairs, so relabel locally instead of editing them.
+_minDRtoReg = Regular(50, 0, 5,   name='dr',    label=r'Min $\Delta R(e, e_{\mathrm{reg}})$')
+_drNearestEle = Regular(50, 0, 5, name='drNearestEle', label=r'Min $\Delta R(e, e_{\mathrm{other\ lpt}})$')
+_dRj        = Regular(50, 0, 5,   name='drj',   label=r'Min $\Delta R(e, j)$')
+_dPhiJ      = Regular(64,  0, 3.2, name='dphiJ', label=r'Min $\Delta \phi(e, j)$')
 
 # dxy floored at the selection cut (1e-4 cm) so the axis stays log-scale down
 # to that value; anything below the floor (shouldn't occur post-selection)
 # lands in underflow rather than being dropped.
-_dxy_log = Regular(140, 1e-4, 100, name='dxy', label=r'Electron Track $d_{xy}$ [cm]', transform=_LOG)
+_dxy_log = Regular(60, 1e-4, 100, name='dxy', label=r'Electron Track $d_{xy}$ [cm]', transform=_LOG)
 
 # Full-range linear dphi(e, ptmiss), plus a log-scale zoom toward the
 # collinear region (small dphi is the signature of a genuinely displaced
-# track pointing away from the hard-scatter PV).
-_dphi_log = Regular(100, 1e-4, 3.2, name='dphi', label=r'$\Delta\phi(e, p_{T}^{miss})$', transform=_LOG)
+# track pointing away from the hard-scatter PV). Local override of the
+# shared dphi_generic axis (histobins.py) so the label names both objects
+# instead of the shared generic "$\Delta \phi$".
+_dphi_lin = Regular(32, 0,    3.2, name='dphi', label=r'$\Delta\phi(e, p_{T}^{miss})$')
+_dphi_log = Regular(50, 1e-4, 3.2, name='dphi', label=r'$\Delta\phi(e, p_{T}^{miss})$', transform=_LOG)
+
+_cosdphi  = Regular(50, -1,   1,   name='cosdphi', label=r'$\cos(\Delta\phi(e, p_{T}^{miss}))$')
 
 # lxyEst = dxy / sin(dphi(e, ptmiss)): the same reco-only Lxy proxy used in
 # mergedeles.py's mele_gen_lxy_vs_lxyEst, without the gen-Lxy correlation
 # (which doesn't exist for background).
-_lxyEst_log = Regular(100, 1e-4, 100, name='lxyEst', label=r'$d_{xy}/\sin(\Delta\phi(e, p_{T}^{miss}))$ [cm]', transform=_LOG)
+_lxyEst_log = Regular(60, 1e-4, 100, name='lxyEst', label=r'$d_{xy}/\sin(\Delta\phi(e, p_{T}^{miss}))$ [cm]', transform=_LOG)
 
-# Tags whether the selected electron is a genuine merged electron (signal
-# only, via _compute_merged_flag below); always 'n/a' for background since
-# there's no gen truth to check against.
-isMerged = StrCategory(['merged', 'notMerged', 'n/a'], name='isMerged', label='Genuine Merged Electron (signal only)')
+# log10(dxy/dz) -- named 'log10dxydz' (rather than reusing histobins.py's
+# 'logdxydz', which vtxvars.py fills with a natural log) to be explicit about
+# the base. A tiny epsilon guards the dz denominator against division by zero.
+_log10dxydz = Regular(60, -3, 3, name='log10dxydz', label=r'$\log_{10}(d_{xy}/d_{z})$')
+
+# Tags the selected electron's relationship to the event's gen-matched merged
+# electron (signal only, via AllLptElectron.is_merged -- see fillHistos
+# below); always 'n/a' for background since there's no gen truth to check
+# against.
+#   mergedSelected    -- the event has a gen-matched merged electron and it IS
+#                        the selected reco candidate.
+#   mergedNotSelected -- the event has a gen-matched merged electron, but the
+#                        selected reco candidate is a different electron.
+#   notMerged         -- the event has no gen-matched merged electron at all.
+isMerged = StrCategory(
+    ['mergedSelected', 'mergedNotSelected', 'notMerged', 'n/a'],
+    name='isMerged', label='Genuine Merged Electron (signal only)',
+)
 
 # (field_name_on_AllLptElectron, hist_axis) -- same reco variables used for
 # the merged-electron category in mergedcats.py/mergedeles.py, so this config
@@ -72,7 +103,7 @@ _ELE_HISTS = [
     #('vz',                  vz_coarse),
     ('dxy',                 _dxy_log),
     ('dz',                  ele_dz),
-    ('trkChi2',             ele_chi2),
+    ('trkChi2',             _ele_chi2),
     ('trkIso',              ele_trkIso),
     ('trkRelIso',           ele_trkRelIso),
     ('calIso',              _calIso),
@@ -94,9 +125,10 @@ _ELE_HISTS = [
     ('numPixHits',          ele_pixHits),
     ('numStripHits',        ele_stripHits),
     #('charge',              _charge),
-    ('minDRtoReg',          dR),
-    ('mindRj',              dRj),
-    ('mindPhiJ',            dphiJ),
+    ('minDRtoReg',          _minDRtoReg),
+    ('drNearestEle',        _drNearestEle),
+    ('mindRj',              _dRj),
+    ('mindPhiJ',            _dPhiJ),
     ('full55sigmaIetaIeta', _sieie),
     ('absdEtaSeed',         _dEtaSeed),
     ('absdPhiIn',           _dPhiIn),
@@ -133,97 +165,15 @@ def make_histograms():
         histograms[f'AT_{field}'] = Hist(samp, cut, isMerged, axis, storage=hist.storage.Weight())
 
     histograms['AT_ptmiss']            = Hist(samp, cut, isMerged, met_pt,       storage=hist.storage.Weight())
-    histograms['AT_dphi_e_ptmiss']     = Hist(samp, cut, isMerged, dphi_generic, storage=hist.storage.Weight())
+    histograms['AT_dphi_e_ptmiss']     = Hist(samp, cut, isMerged, _dphi_lin,    storage=hist.storage.Weight())
     histograms['AT_dphi_e_ptmiss_log'] = Hist(samp, cut, isMerged, _dphi_log,    storage=hist.storage.Weight())
+    histograms['AT_cosdphi_e_ptmiss']  = Hist(samp, cut, isMerged, _cosdphi,     storage=hist.storage.Weight())
     histograms['AT_lxyEst']            = Hist(samp, cut, isMerged, _lxyEst_log,  storage=hist.storage.Weight())
+    histograms['AT_log10dxydz']        = Hist(samp, cut, isMerged, _log10dxydz,  storage=hist.storage.Weight())
     histograms['AT_dxy_vs_dphi']       = Hist(samp, cut, isMerged, _dxy_log, _dphi_log, storage=hist.storage.Weight())
     return histograms
 
-subroutines = []
-
-def _compute_merged_flag(events):
-    """Per-electron bool (jagged, same shape as events.AllLptElectron): is
-    this particular AllLptElectron a genuine merged electron, using the same
-    definition as the merged-electron category in mergedcats.py (quality-
-    matched to one gen electron, dR<0.1 to both gens, and no photon/track/
-    conversion alternative for either gen). Signal only -- requires
-    GenEle/GenPos and the photon/track/conversion collections.
-
-    Unlike mergedcats.py's event-level _cat_merged, this doesn't additionally
-    exclude events where a second AllLptElectron is also gen-matched
-    (_cat_sep there) -- that's an event-topology concept, not a property of
-    this one electron. The caller reduces to at most one candidate electron
-    per event (by |dxy|) before reading this flag off the chosen electron.
-    """
-    def _dphi(a, b):
-        d = np.abs(a - b)
-        return ak.where(d > np.pi, 2 * np.pi - d, d)
-
-    def _dr(eta1, phi1, eta2, phi2):
-        return np.sqrt((eta1 - eta2)**2 + _dphi(phi1, phi2)**2)
-
-    def _pt_rel(obj_pt, gen_pt):
-        return np.abs(obj_pt - gen_pt) / gen_pt < 0.2
-
-    gen_sum_pt = events.GenEle.pt + events.GenPos.pt
-
-    _pho_dr_ge  = _dr(events.Photon.eta,     events.Photon.phi,     events.GenEle.eta, events.GenEle.phi)
-    _pho_dr_gp  = _dr(events.Photon.eta,     events.Photon.phi,     events.GenPos.eta, events.GenPos.phi)
-    _oot_dr_ge  = _dr(events.ootPhoton.eta,  events.ootPhoton.phi,  events.GenEle.eta, events.GenEle.phi)
-    _oot_dr_gp  = _dr(events.ootPhoton.eta,  events.ootPhoton.phi,  events.GenPos.eta, events.GenPos.phi)
-    _trk_dr_ge  = _dr(events.IsoTrack.eta,   events.IsoTrack.phi,   events.GenEle.eta, events.GenEle.phi)
-    _trk_dr_gp  = _dr(events.IsoTrack.eta,   events.IsoTrack.phi,   events.GenPos.eta, events.GenPos.phi)
-    _conv_dr_ge = _dr(events.Conversion.eta, events.Conversion.phi, events.GenEle.eta, events.GenEle.phi)
-    _conv_dr_gp = _dr(events.Conversion.eta, events.Conversion.phi, events.GenPos.eta, events.GenPos.phi)
-
-    _pho_pt_ge  = _pt_rel(events.Photon.pt,     events.GenEle.pt)
-    _pho_pt_gp  = _pt_rel(events.Photon.pt,     events.GenPos.pt)
-    _oot_pt_ge  = _pt_rel(events.ootPhoton.pt,  events.GenEle.pt)
-    _oot_pt_gp  = _pt_rel(events.ootPhoton.pt,  events.GenPos.pt)
-    _trk_pt_ge  = _pt_rel(events.IsoTrack.pt,   events.GenEle.pt)
-    _trk_pt_gp  = _pt_rel(events.IsoTrack.pt,   events.GenPos.pt)
-    _conv_pt_ge = _pt_rel(events.Conversion.pt, events.GenEle.pt)
-    _conv_pt_gp = _pt_rel(events.Conversion.pt, events.GenPos.pt)
-
-    _ge_any = (
-        ak.any((_pho_dr_ge  < 0.1) & _pho_pt_ge,                                  axis=1) |
-        ak.any((_oot_dr_ge  < 0.1) & _oot_pt_ge,                                  axis=1) |
-        ak.any((_trk_dr_ge  < 0.1) & (events.IsoTrack.charge == -1) & _trk_pt_ge, axis=1) |
-        ak.any((_conv_dr_ge < 0.1) & _conv_pt_ge,                                 axis=1)
-    )
-    _gp_any = (
-        ak.any((_pho_dr_gp  < 0.1) & _pho_pt_gp,                                  axis=1) |
-        ak.any((_oot_dr_gp  < 0.1) & _oot_pt_gp,                                  axis=1) |
-        ak.any((_trk_dr_gp  < 0.1) & (events.IsoTrack.charge == +1) & _trk_pt_gp, axis=1) |
-        ak.any((_conv_dr_gp < 0.1) & _conv_pt_gp,                                 axis=1)
-    )
-
-    coll = events.AllLptElectron
-    dphi_e   = _dphi(coll.phi, events.GenEle.phi)
-    dphi_p   = _dphi(coll.phi, events.GenPos.phi)
-    dr_to_ge = np.sqrt((coll.eta - events.GenEle.eta)**2 + dphi_e**2)
-    dr_to_gp = np.sqrt((coll.eta - events.GenPos.eta)**2 + dphi_p**2)
-
-    pt_me = _pt_rel(coll.pt, events.GenEle.pt)
-    pt_mp = _pt_rel(coll.pt, events.GenPos.pt)
-    pt_ms = _pt_rel(coll.pt, gen_sum_pt)
-
-    dr_match_ge = (dr_to_ge < 0.1) & (coll.charge == -1) & pt_me
-    dr_match_gp = (dr_to_gp < 0.1) & (coll.charge == +1) & pt_mp
-
-    pt_ok_ge = pt_me | pt_ms
-    pt_ok_gp = pt_mp | pt_ms
-
-    merged_i = (dr_to_ge < 0.1) & (dr_to_gp < 0.1) & (
-        ((coll.charge == -1) & pt_ok_ge & ~dr_match_gp & ~_gp_any) |
-        ((coll.charge == +1) & pt_ok_gp & ~dr_match_ge & ~_ge_any)
-    )
-
-    # ~_ge_any/~_gp_any broadcast from event-level to per-electron here, on
-    # top of the ~_gp_any/~_ge_any already embedded above for the gen the
-    # electron did NOT match to -- this adds the check for the gen it DID
-    # match to, completing the full mergedcats.py exclusivity condition.
-    return merged_i & ~_ge_any & ~_gp_any
+subroutines = ['computeMergedCatVars']
 
 def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
     wgt_all = events.eventWgt / sum_wgt
@@ -235,11 +185,12 @@ def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
 
     coll = events.AllLptElectron
 
-    # Compute the merged-electron flag (signal only) up front, since it needs
-    # the full (unfiltered) AllLptElectron collection for the exclusivity
-    # checks -- same as mergedcats.py. Jagged, same shape as coll.
+    # Per-electron merged-electron flag (signal only), computed once per
+    # chunk by computeMergedCatVars (analysisTools/analysisSubroutines.py,
+    # registered above via `subroutines`) using the same definition as the
+    # merged-electron category in mergedcats.py. Jagged, same shape as coll.
     if info['type'] == 'signal':
-        per_ele_merged = _compute_merged_flag(events)
+        per_ele_merged = coll.is_merged
 
     def _dphi(a, b):
         d = np.abs(a - b)
@@ -254,14 +205,19 @@ def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
     dr_ee = _dr(coll.eta[:, :, None], coll.phi[:, :, None], coll.eta[:, None, :], coll.phi[:, None, :])
     dr_ee = ak.where(idx[:, :, None] == idx[:, None, :], np.inf, dr_ee)
     min_dr_ee = ak.fill_none(ak.min(dr_ee, axis=-1), 999)
-    ele_iso = min_dr_ee >= 1.0
+    ele_iso = min_dr_ee >= 0.4
+
+    # Stash on the collection (same convention as mindRj/mindPhiJ above) so
+    # the selected electron's value can be read via _fill_single/_ELE_HISTS.
+    events['AllLptElectron', 'drNearestEle'] = min_dr_ee
+    coll = events.AllLptElectron
 
     # dR to every PFJet with pt > 30 GeV in the same event.
     jets = events.PFJet
     jets = jets[jets.pt > 30]
     dr_ej = _dr(coll.eta[:, :, None], coll.phi[:, :, None], jets.eta[:, None, :], jets.phi[:, None, :])
     min_dr_ej = ak.fill_none(ak.min(dr_ej, axis=-1), 999)
-    jet_iso = min_dr_ej >= 1.0
+    jet_iso = min_dr_ej >= 0.4
 
     dxy_pass = np.abs(coll.dxy) >= 1e-4
 
@@ -285,9 +241,13 @@ def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
     wgt  = wgt_all[has_cand]
 
     if info['type'] == 'signal':
-        merged_best   = ak.firsts(per_ele_merged[ele_sel][order])
-        is_merged_sel = merged_best[has_cand]
-        isMerged_label = np.where(ak.to_numpy(is_merged_sel), 'merged', 'notMerged')
+        merged_best       = ak.firsts(per_ele_merged[ele_sel][order])
+        is_merged_sel     = ak.to_numpy(merged_best[has_cand])
+        event_has_merged  = ak.to_numpy(ak.any(per_ele_merged, axis=1)[has_cand])
+        isMerged_label = np.where(
+            is_merged_sel, 'mergedSelected',
+            np.where(event_has_merged, 'mergedNotSelected', 'notMerged'),
+        )
     else:
         isMerged_label = np.full(len(ele), 'n/a', dtype=object)
 
@@ -297,9 +257,14 @@ def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
     ptmiss     = evts.PFMET.pt
     dphi_e_met = _dphi(ele.phi, evts.PFMET.phi)
     lxyEst     = np.abs(ele.dxy) / np.sin(dphi_e_met)
+    # Epsilon guards the dz denominator against division by zero (same
+    # convention as vtxvars.py's e_dxydz).
+    log10dxydz = np.log10(np.abs(ele.dxy) / (np.abs(ele.dz) + 1e-9))
 
     hists['AT_ptmiss'           ].fill(samp=samp, cut=cut, isMerged=isMerged_label, met_pt=ptmiss,     weight=wgt)
     hists['AT_dphi_e_ptmiss'    ].fill(samp=samp, cut=cut, isMerged=isMerged_label, dphi=dphi_e_met,   weight=wgt)
     hists['AT_dphi_e_ptmiss_log'].fill(samp=samp, cut=cut, isMerged=isMerged_label, dphi=dphi_e_met,   weight=wgt)
+    hists['AT_cosdphi_e_ptmiss' ].fill(samp=samp, cut=cut, isMerged=isMerged_label, cosdphi=np.cos(dphi_e_met), weight=wgt)
     hists['AT_lxyEst'           ].fill(samp=samp, cut=cut, isMerged=isMerged_label, lxyEst=lxyEst,     weight=wgt)
+    hists['AT_log10dxydz'       ].fill(samp=samp, cut=cut, isMerged=isMerged_label, log10dxydz=log10dxydz, weight=wgt)
     hists['AT_dxy_vs_dphi'      ].fill(samp=samp, cut=cut, isMerged=isMerged_label, dxy=np.abs(ele.dxy), dphi=dphi_e_met, weight=wgt)

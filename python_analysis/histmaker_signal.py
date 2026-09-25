@@ -1,4 +1,4 @@
-7# imports
+# imports
 import numpy as np
 import matplotlib.pyplot as plt
 import awkward as ak
@@ -20,7 +20,7 @@ import glob
 # ---- SETTINGS ----
 vers = 'Jul2026noID'
 cuts = 'an'
-hists = 'appearingtrack'
+hists = 'vtxreco'
 
 
 # ---- FILES ----
@@ -37,7 +37,7 @@ analyzer = Analyzer(sample_config, hists_config, cuts_config) # If not using BDT
 
 t1 = time.time()
 #out = analyzer.process(execr='iterative')
-out = analyzer.process(execr='futures', workers=8)
+out = analyzer.process(execr='futures', workers=4)
 t2 = time.time()
 
 print("Runtime: {:.2f} minutes".format((t2-t1)/60))
