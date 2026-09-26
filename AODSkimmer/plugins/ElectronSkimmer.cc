@@ -214,6 +214,10 @@ class ElectronSkimmer : public edm::one::EDAnalyzer<edm::one::WatchRuns, edm::on
 
       const edm::EDGetTokenT<vector<reco::Track> > staMuonToken_;
       const edm::EDGetTokenT<vector<reco::Track> > dsaMuonToken_;
+      const edm::EDGetTokenT<vector<reco::Track> > displacedTrackToken_;
+      const edm::EDGetTokenT<vector<reco::Track> > displacedGlobalTrackToken_;
+      const edm::EDGetTokenT<vector<reco::Muon> > recoDisplacedMuonToken_;
+      const edm::EDGetTokenT<vector<pat::Muon> > slimmedDisplacedMuonToken_;
       // Added to allow "RECO" or "PAT" tags
       edm::EDGetTokenT<vector<reco::Conversion> > conversionsAltToken_;
       edm::EDGetTokenT<edm::TriggerResults> metFilterResultsAltToken_;
@@ -246,6 +250,10 @@ class ElectronSkimmer : public edm::one::EDAnalyzer<edm::one::WatchRuns, edm::on
       // Run3 addition
       edm::Handle<vector<reco::Track>> staMuonHandle_;
       edm::Handle<vector<reco::Track>> dsaMuonHandle_;
+      edm::Handle<vector<reco::Track>> displacedTrackHandle_;
+      edm::Handle<vector<reco::Track>> displacedGlobalTrackHandle_;
+      edm::Handle<vector<reco::Muon>> recoDisplacedMuonHandle_;
+      edm::Handle<vector<pat::Muon>> slimmedDisplacedMuonHandle_;
   
       // Trigger variables
       std::vector<std::string> trigPathsWithVersion_;
@@ -634,6 +642,10 @@ ElectronSkimmer::ElectronSkimmer(const edm::ParameterSet& ps)
       ps.getParameter<edm::ESInputTag>("stationPropagatorAlong"))),
    staMuonToken_(consumes<vector<reco::Track> >(ps.getParameter<edm::InputTag>("standAloneMuons"))),
    dsaMuonToken_(consumes<vector<reco::Track> >(ps.getParameter<edm::InputTag>("displacedStandAloneMuons"))),
+   displacedTrackToken_(mayConsume<vector<reco::Track> >(ps.getParameter<edm::InputTag>("displacedTracks"))),
+   displacedGlobalTrackToken_(mayConsume<vector<reco::Track> >(ps.getParameter<edm::InputTag>("displacedGlobalMuons"))),
+   recoDisplacedMuonToken_(mayConsume<vector<reco::Muon> >(ps.getParameter<edm::InputTag>("displacedMuons"))),
+   slimmedDisplacedMuonToken_(mayConsume<vector<pat::Muon> >(ps.getParameter<edm::InputTag>("slimmedDisplacedMuons"))),
    // Added to allow "RECO" or "PAT" tags
    conversionsAltToken_(mayConsume<vector<reco::Conversion> >(edm::InputTag("reducedEgamma","reducedConversions",
        ps.getParameter<edm::InputTag>("conversions").process() == "PAT" ? "RECO" : "PAT"))),
@@ -811,6 +823,10 @@ ElectronSkimmer::fillDescriptions(edm::ConfigurationDescriptions& descriptions) 
       edm::InputTag("standAloneMuons", "UpdatedAtVtx")
    );
    desc.add<edm::InputTag>("displacedStandAloneMuons",edm::InputTag("displacedStandAloneMuons"));
+   desc.add<edm::InputTag>("displacedTracks", edm::InputTag("displacedTracks", "", "RECO"));
+   desc.add<edm::InputTag>("displacedGlobalMuons", edm::InputTag("displacedGlobalMuons", "", "RECO"));
+   desc.add<edm::InputTag>("displacedMuons", edm::InputTag("displacedMuons", "", "RECO"));
+   desc.add<edm::InputTag>("slimmedDisplacedMuons", edm::InputTag("slimmedDisplacedMuons", "", "PAT"));
 
    // Propagators used for gen/reco muon matching at the muon stations.
    // genMuonPropagatorSt1 should use useStation2 = false.
@@ -860,6 +876,10 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    // Run3 additions
    iEvent.getByToken(staMuonToken_,staMuonHandle_);
    iEvent.getByToken(dsaMuonToken_,dsaMuonHandle_);
+   iEvent.getByToken(displacedTrackToken_,displacedTrackHandle_);
+   iEvent.getByToken(displacedGlobalTrackToken_,displacedGlobalTrackHandle_);
+   iEvent.getByToken(recoDisplacedMuonToken_,recoDisplacedMuonHandle_);
+   iEvent.getByToken(slimmedDisplacedMuonToken_,slimmedDisplacedMuonHandle_);
    // Added to allow "RECO" or "PAT" tags
    if (!conversionsHandle_.isValid())
       iEvent.getByToken(conversionsAltToken_,conversionsHandle_);
@@ -893,6 +913,96 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    nt.PV_x_ = pv.x();
    nt.PV_y_ = pv.y();
    nt.PV_z_ = pv.z();
+
+   // Keep each input product separate: the PAT displaced collection is a
+   // filtered view, while the retained RECO collection contains all objects.
+   auto fillMuonTrack = [&pv](const reco::Track* track,
+                              NtupleContainerV2::DisplacedTrackFields& fields) {
+      if (track) {
+         ++fields.n;
+         constexpr float muonMass = 0.10566;
+         const float p = track->p();
+         fields.p4.emplace_back(track->px(), track->py(), track->pz(),
+                                std::sqrt(p * p + muonMass * muonMass));
+         fields.valid.push_back(1);
+         fields.charge.push_back(track->charge());
+         fields.extraAvailable.push_back(track->extra().isNonnull() &&
+                                         track->extra().isAvailable());
+         fields.ptError.push_back(track->ptError());
+         fields.vxy.push_back(std::hypot(track->vx(), track->vy()));
+         fields.vz.push_back(track->vz());
+         fields.dxy.push_back(track->dxy(pv.position()));
+         fields.dz.push_back(track->dz(pv.position()));
+         fields.normalizedChi2.push_back(track->normalizedChi2());
+         const auto& hits = track->hitPattern();
+         fields.nMuonHits.push_back(hits.numberOfValidMuonHits());
+         fields.nCSCHits.push_back(hits.numberOfValidMuonCSCHits());
+         fields.nDTHits.push_back(hits.numberOfValidMuonDTHits());
+         fields.nTrackerHits.push_back(hits.numberOfValidTrackerHits());
+         fields.nPixelHits.push_back(hits.numberOfValidPixelHits());
+         fields.nStripHits.push_back(hits.numberOfValidStripHits());
+      } else {
+         fields.p4.emplace_back(0., 0., 0., 0.);
+         fields.valid.push_back(0);
+         fields.charge.push_back(0);
+         fields.extraAvailable.push_back(0);
+         fields.ptError.push_back(-999.);
+         fields.vxy.push_back(-999.);
+         fields.vz.push_back(-999.);
+         fields.dxy.push_back(-999.);
+         fields.dz.push_back(-999.);
+         fields.normalizedChi2.push_back(-999.);
+         fields.nMuonHits.push_back(-1);
+         fields.nCSCHits.push_back(-1);
+         fields.nDTHits.push_back(-1);
+         fields.nTrackerHits.push_back(-1);
+         fields.nPixelHits.push_back(-1);
+         fields.nStripHits.push_back(-1);
+      }
+   };
+   auto fillRawTracks = [&fillMuonTrack](const auto& handle,
+                                         NtupleContainerV2::DisplacedTrackFields& fields) {
+      fields.available = handle.isValid();
+      if (handle.isValid())
+         for (const auto& track : *handle)
+            fillMuonTrack(&track, fields);
+   };
+   fillRawTracks(displacedTrackHandle_, nt.displacedTrack_);
+   fillRawTracks(displacedGlobalTrackHandle_, nt.displacedGlobalTrack_);
+
+   auto fillMuonCollection = [&fillMuonTrack](const auto& handle,
+                                              NtupleContainerV2::DisplacedMuonFields& fields) {
+      fields.available = handle.isValid();
+      if (!handle.isValid()) return;
+      fields.outer.available = 1;
+      fields.inner.available = 1;
+      fields.global.available = 1;
+      for (const auto& mu : *handle) {
+         ++fields.n;
+         fields.p4.emplace_back(mu.px(), mu.py(), mu.pz(), mu.energy());
+         fields.charge.push_back(mu.charge());
+         fields.isStandAlone.push_back(mu.isStandAloneMuon());
+         fields.isTracker.push_back(mu.isTrackerMuon());
+         fields.isGlobal.push_back(mu.isGlobalMuon());
+         fields.isPF.push_back(mu.isPFMuon());
+         fields.nMatchedStations.push_back(mu.numberOfMatchedStations());
+         const auto& timing = mu.time();
+         fields.timeValid.push_back(timing.nDof > 0);
+         fields.timeAtIpInOut.push_back(timing.nDof > 0 ? timing.timeAtIpInOut : -999.);
+         const auto& outer = mu.outerTrack();
+         const auto& inner = mu.innerTrack();
+         const auto& global = mu.globalTrack();
+         fillMuonTrack(outer.isNonnull() && outer.isAvailable() ? outer.get() : nullptr,
+                       fields.outer);
+         fillMuonTrack(inner.isNonnull() && inner.isAvailable() ? inner.get() : nullptr,
+                       fields.inner);
+         fillMuonTrack(global.isNonnull() && global.isAvailable() ? global.get() : nullptr,
+                       fields.global);
+      }
+   };
+   fillMuonCollection(pfRecoMuHandle_, nt.slimmedMuon_);
+   fillMuonCollection(recoDisplacedMuonHandle_, nt.recoDisplacedMuon_);
+   fillMuonCollection(slimmedDisplacedMuonHandle_, nt.slimmedDisplacedMuon_);
       
    double nPV = 0;
    for (const auto & ele : *primaryVertexHandle_) {
@@ -1565,6 +1675,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
 
    const size_t nInputSTAMuons =
       staMuonHandle_.isValid() ? staMuonHandle_->size() : 0;
+   nt.staMuonAvailable_ = staMuonHandle_.isValid();
    for (size_t iSTA = 0; iSTA < nInputSTAMuons; ++iSTA) {
       const auto& track = staMuonHandle_->at(iSTA);
       const int staMuonIdx = nt.nSTAMuon_;
@@ -1697,7 +1808,9 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    std::vector<PropagatedMuonAtStation> dsa_muon_prop_st3;
    std::vector<PropagatedMuonAtStation> dsa_muon_prop_st4;
 
-   for (size_t iDSA = 0; iDSA < dsaMuonHandle_->size(); ++iDSA) {
+   const size_t nInputDSAMuons = dsaMuonHandle_.isValid() ? dsaMuonHandle_->size() : 0;
+   nt.dsaMuonAvailable_ = dsaMuonHandle_.isValid();
+   for (size_t iDSA = 0; iDSA < nInputDSAMuons; ++iDSA) {
       const auto& track = dsaMuonHandle_->at(iDSA);
       dsa_muonTracks.push_back(track);
       const int dsaMuonIdx = nt.nDSAMuon_;
