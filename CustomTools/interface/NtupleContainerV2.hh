@@ -193,24 +193,28 @@ public:
     float genSigMuonPropSt1Phi_;
     float genSigMuonPropSt1MomEta_;
     float genSigMuonPropSt1MomPhi_;
+    math::XYZTLorentzVector genSigMuonPropSt1P4_;
 
     int   genSigMuonPropSt2Valid_;
     float genSigMuonPropSt2Eta_;
     float genSigMuonPropSt2Phi_;
     float genSigMuonPropSt2MomEta_;
     float genSigMuonPropSt2MomPhi_;
+    math::XYZTLorentzVector genSigMuonPropSt2P4_;
 
     int   genSigMuonPropSt3Valid_;
     float genSigMuonPropSt3Eta_;
     float genSigMuonPropSt3Phi_;
     float genSigMuonPropSt3MomEta_;
     float genSigMuonPropSt3MomPhi_;
+    math::XYZTLorentzVector genSigMuonPropSt3P4_;
 
     int   genSigMuonPropSt4Valid_;
     float genSigMuonPropSt4Eta_;
     float genSigMuonPropSt4Phi_;
     float genSigMuonPropSt4MomEta_;
     float genSigMuonPropSt4MomPhi_;
+    math::XYZTLorentzVector genSigMuonPropSt4P4_;
 
     // Propagated same-sign STA matching diagnostics
     float genSigMuonMinDrToSTAMuonPropSt1_;
@@ -277,24 +281,28 @@ public:
     float genSigAntiMuonPropSt1Phi_;
     float genSigAntiMuonPropSt1MomEta_;
     float genSigAntiMuonPropSt1MomPhi_;
+    math::XYZTLorentzVector genSigAntiMuonPropSt1P4_;
 
     int   genSigAntiMuonPropSt2Valid_;
     float genSigAntiMuonPropSt2Eta_;
     float genSigAntiMuonPropSt2Phi_;
     float genSigAntiMuonPropSt2MomEta_;
     float genSigAntiMuonPropSt2MomPhi_;
+    math::XYZTLorentzVector genSigAntiMuonPropSt2P4_;
 
     int   genSigAntiMuonPropSt3Valid_;
     float genSigAntiMuonPropSt3Eta_;
     float genSigAntiMuonPropSt3Phi_;
     float genSigAntiMuonPropSt3MomEta_;
     float genSigAntiMuonPropSt3MomPhi_;
+    math::XYZTLorentzVector genSigAntiMuonPropSt3P4_;
 
     int   genSigAntiMuonPropSt4Valid_;
     float genSigAntiMuonPropSt4Eta_;
     float genSigAntiMuonPropSt4Phi_;
     float genSigAntiMuonPropSt4MomEta_;
     float genSigAntiMuonPropSt4MomPhi_;
+    math::XYZTLorentzVector genSigAntiMuonPropSt4P4_;
 
     // Propagated same-sign STA matching diagnostics
     float genSigAntiMuonMinDrToSTAMuonPropSt1_;
@@ -411,6 +419,7 @@ public:
 
     // Muons
     int nMuon_;
+    vector<int> recoMuonPatIdx_;
     vector<float> recoMuonPt_;
     vector<float> recoMuonPtErr_;
     vector<float> recoMuonEta_;
@@ -446,7 +455,7 @@ public:
     // Embedded track arrays align with their parent muons. Missing references
     // have valid=0, zero p4, and -999 for floating track quantities.
     // Arrays align with the source tracks (or parent muons for embedded tracks).
-    // Status: 0 = missing track/TrackExtra, 1 = failed, 2 = succeeded.
+    // Status: 0 = missing track, 1 = failed, 2 = succeeded.
     // Invalid states have zero p4 and position eta/phi = -999.
     struct DisplacedTrackPropagationFields {
         vector<int> status;
@@ -460,7 +469,7 @@ public:
         vector<int> valid, charge, extraAvailable;
         vector<float> ptError, vxy, vz, dxy, dz, normalizedChi2;
         vector<int> nMuonHits, nCSCHits, nDTHits, nTrackerHits, nPixelHits, nStripHits;
-        DisplacedTrackPropagationFields propSt1, propSt2;
+        DisplacedTrackPropagationFields propSt1, propSt2, propSt3, propSt4;
         void clear() { *this = DisplacedTrackFields{}; }
     } displacedTrack_, displacedGlobalTrack_;
 
@@ -486,7 +495,7 @@ public:
     // Track quantities below use that selected track; dxy/dz are signed
     // relative to the primary vertex. Missing track values use -999.
     //
-    // Station-1/2 status:
+    // Station-1/2/3/4 status:
     //   0 = no usable propagation track
     //   1 = propagation attempted but failed
     //   2 = propagation succeeded
@@ -544,6 +553,21 @@ public:
     vector<float> propPFMuonSt2PositionEta_;
     vector<float> propPFMuonSt2PositionPhi_;
     
+    vector<int> pfMuonPropSt3Status_;
+    vector<int> pfMuonPropSt3Idx_;
+    int nPropPFMuonSt3_;
+    vector<int> propPFMuonSt3PFMuonIdx_;
+    vector<math::XYZTLorentzVector> propPFMuonSt3P4_;
+    vector<float> propPFMuonSt3PositionEta_;
+    vector<float> propPFMuonSt3PositionPhi_;
+    vector<int> pfMuonPropSt4Status_;
+    vector<int> pfMuonPropSt4Idx_;
+    int nPropPFMuonSt4_;
+    vector<int> propPFMuonSt4PFMuonIdx_;
+    vector<math::XYZTLorentzVector> propPFMuonSt4P4_;
+    vector<float> propPFMuonSt4PositionEta_;
+    vector<float> propPFMuonSt4PositionPhi_;
+
     // Normal Electrons
     int nElectronDefault_;
     vector<float> recoElectronPt_;
@@ -761,7 +785,7 @@ public:
     std::vector<int> recoSTAMuonIdx_;
     std::vector<math::XYZTLorentzVector> recoSTAMuonP4_;
 
-    // STA tracks propagated to Station 1 and Station 2. The aligned arrays
+    // STA tracks propagated to Stations 1 through 4. The aligned arrays
     // have one entry per STAMuon; the compact PropSTAMuon collections contain
     // only successful propagations and are linked in both directions by index.
     std::vector<int>   recoSTAMuonPropSt1Valid_;
@@ -789,6 +813,29 @@ public:
     std::vector<math::XYZTLorentzVector> propSTAMuonSt2P4_;
     std::vector<float> propSTAMuonSt2PositionEta_;
     std::vector<float> propSTAMuonSt2PositionPhi_;
+
+    std::vector<int>   recoSTAMuonPropSt3Valid_;
+    std::vector<float> recoSTAMuonPropSt3Eta_;
+    std::vector<float> recoSTAMuonPropSt3Phi_;
+    std::vector<float> recoSTAMuonPropSt3MomEta_;
+    std::vector<float> recoSTAMuonPropSt3MomPhi_;
+    std::vector<int>   recoSTAMuonPropSt3Idx_;
+    int nPropSTAMuonSt3_;
+    std::vector<int> propSTAMuonSt3STAMuonIdx_;
+    std::vector<math::XYZTLorentzVector> propSTAMuonSt3P4_;
+    std::vector<float> propSTAMuonSt3PositionEta_;
+    std::vector<float> propSTAMuonSt3PositionPhi_;
+    std::vector<int>   recoSTAMuonPropSt4Valid_;
+    std::vector<float> recoSTAMuonPropSt4Eta_;
+    std::vector<float> recoSTAMuonPropSt4Phi_;
+    std::vector<float> recoSTAMuonPropSt4MomEta_;
+    std::vector<float> recoSTAMuonPropSt4MomPhi_;
+    std::vector<int>   recoSTAMuonPropSt4Idx_;
+    int nPropSTAMuonSt4_;
+    std::vector<int> propSTAMuonSt4STAMuonIdx_;
+    std::vector<math::XYZTLorentzVector> propSTAMuonSt4P4_;
+    std::vector<float> propSTAMuonSt4PositionEta_;
+    std::vector<float> propSTAMuonSt4PositionPhi_;
 
     // DSA Muons
     int dsaMuonAvailable_;
@@ -865,6 +912,19 @@ public:
     std::vector<math::XYZTLorentzVector> propDSAMuonSt2P4_;
     std::vector<float> propDSAMuonSt2PositionEta_;
     std::vector<float> propDSAMuonSt2PositionPhi_;
+
+    std::vector<int>   recoDSAMuonPropSt3Idx_;
+    int nPropDSAMuonSt3_;
+    std::vector<int> propDSAMuonSt3DSAMuonIdx_;
+    std::vector<math::XYZTLorentzVector> propDSAMuonSt3P4_;
+    std::vector<float> propDSAMuonSt3PositionEta_;
+    std::vector<float> propDSAMuonSt3PositionPhi_;
+    std::vector<int>   recoDSAMuonPropSt4Idx_;
+    int nPropDSAMuonSt4_;
+    std::vector<int> propDSAMuonSt4DSAMuonIdx_;
+    std::vector<math::XYZTLorentzVector> propDSAMuonSt4P4_;
+    std::vector<float> propDSAMuonSt4PositionEta_;
+    std::vector<float> propDSAMuonSt4PositionPhi_;
 
     // DSA outermost valid muon-hit diagnostics
     std::vector<int> recoDSAMuonOuterHitValid_;
