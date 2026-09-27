@@ -79,6 +79,29 @@ void NtupleContainerV2::CreateTreeBranches() {
     branchDisplacedMuon("RecoDisplacedMuon", recoDisplacedMuon_);
     branchDisplacedMuon("SlimmedDisplacedMuon", slimmedDisplacedMuon_);
 
+    auto branchDisplacedTrackPropagation = [this](
+        const std::string& name, DisplacedTrackFields& fields) {
+        auto branchStation = [this](const std::string& prefix,
+                                   DisplacedTrackPropagationFields& station) {
+            outT->Branch((prefix + "Status").c_str(), &station.status);
+            outT->Branch((prefix + "P4").c_str(), &station.p4);
+            outT->Branch((prefix + "PositionEta").c_str(), &station.positionEta);
+            outT->Branch((prefix + "PositionPhi").c_str(), &station.positionPhi);
+        };
+        branchStation(name + "_propSt1", fields.propSt1);
+        branchStation(name + "_propSt2", fields.propSt2);
+    };
+    branchDisplacedTrackPropagation("DisplacedTrack", displacedTrack_);
+    branchDisplacedTrackPropagation("DisplacedGlobalTrack", displacedGlobalTrack_);
+    auto branchDisplacedMuonPropagation = [&branchDisplacedTrackPropagation](
+        const std::string& name, DisplacedMuonFields& fields) {
+        branchDisplacedTrackPropagation(name + "_outerTrack", fields.outer);
+        branchDisplacedTrackPropagation(name + "_innerTrack", fields.inner);
+        branchDisplacedTrackPropagation(name + "_globalTrack", fields.global);
+    };
+    branchDisplacedMuonPropagation("RecoDisplacedMuon", recoDisplacedMuon_);
+    branchDisplacedMuonPropagation("SlimmedDisplacedMuon", slimmedDisplacedMuon_);
+
     // All PF muons and successful Station-1/2 propagated PF-muon views.
     outT->Branch("nPFMuon",&nPFMuon_);
     outT->Branch("PFMuon_patMuonIdx",&pfMuonPatIdx_);

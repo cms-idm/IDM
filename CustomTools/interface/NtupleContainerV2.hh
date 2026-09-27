@@ -445,6 +445,14 @@ public:
     // an available but empty collection has available=1 and n=0.
     // Embedded track arrays align with their parent muons. Missing references
     // have valid=0, zero p4, and -999 for floating track quantities.
+    // Arrays align with the source tracks (or parent muons for embedded tracks).
+    // Status: 0 = missing track/TrackExtra, 1 = failed, 2 = succeeded.
+    // Invalid states have zero p4 and position eta/phi = -999.
+    struct DisplacedTrackPropagationFields {
+        vector<int> status;
+        vector<math::XYZTLorentzVector> p4;
+        vector<float> positionEta, positionPhi;
+    };
     struct DisplacedTrackFields {
         int available = 0;
         int n = 0;
@@ -452,6 +460,7 @@ public:
         vector<int> valid, charge, extraAvailable;
         vector<float> ptError, vxy, vz, dxy, dz, normalizedChi2;
         vector<int> nMuonHits, nCSCHits, nDTHits, nTrackerHits, nPixelHits, nStripHits;
+        DisplacedTrackPropagationFields propSt1, propSt2;
         void clear() { *this = DisplacedTrackFields{}; }
     } displacedTrack_, displacedGlobalTrack_;
 

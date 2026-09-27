@@ -914,10 +914,16 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    nt.PV_y_ = pv.y();
    nt.PV_z_ = pv.z();
 
+   // Initialize before filling the displaced-track Station-1/2 states.
+   // These ES tokens use the Event transition.
+   genMuonPropagatorSt1_ = genMuonPropagatorSetupSt1_.init(iSetup);
+   genMuonPropagatorSt2_ = genMuonPropagatorSetupSt2_.init(iSetup);
+
    // Keep each input product separate: the PAT displaced collection is a
    // filtered view, while the retained RECO collection contains all objects.
-   auto fillMuonTrack = [&pv](const reco::Track* track,
-                              NtupleContainerV2::DisplacedTrackFields& fields) {
+   auto fillMuonTrack = [this, &pv](const reco::Track* track,
+                                    NtupleContainerV2::DisplacedTrackFields& fields,
+                                    bool propagate) {
       if (track) {
          ++fields.n;
          constexpr float muonMass = 0.10566;
@@ -959,19 +965,38 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          fields.nPixelHits.push_back(-1);
          fields.nStripHits.push_back(-1);
       }
+      if (propagate) {
+         auto fillStation = [track](const PropagateToMuon& propagator,
+                                    NtupleContainerV2::DisplacedTrackPropagationFields& station) {
+            PropagatedMuonAtStation state;
+            int status = kPropagationNotAttempted;
+            // PropagateToMuon may read inner/outer states from TrackExtra.
+            if (track && track->extra().isNonnull() && track->extra().isAvailable()) {
+               state = propagateRecoTrackToStation(*track, propagator);
+               status = state.valid ? kPropagationSucceeded : kPropagationFailed;
+            }
+            station.status.push_back(status);
+            station.p4.push_back(propagatedMomentumP4(state, 0.10566));
+            station.positionEta.push_back(state.valid ? state.eta : -999.);
+            station.positionPhi.push_back(state.valid ? state.phi : -999.);
+         };
+         fillStation(genMuonPropagatorSt1_, fields.propSt1);
+         fillStation(genMuonPropagatorSt2_, fields.propSt2);
+      }
    };
    auto fillRawTracks = [&fillMuonTrack](const auto& handle,
                                          NtupleContainerV2::DisplacedTrackFields& fields) {
       fields.available = handle.isValid();
       if (handle.isValid())
          for (const auto& track : *handle)
-            fillMuonTrack(&track, fields);
+            fillMuonTrack(&track, fields, true);
    };
    fillRawTracks(displacedTrackHandle_, nt.displacedTrack_);
    fillRawTracks(displacedGlobalTrackHandle_, nt.displacedGlobalTrack_);
 
    auto fillMuonCollection = [&fillMuonTrack](const auto& handle,
-                                              NtupleContainerV2::DisplacedMuonFields& fields) {
+                                              NtupleContainerV2::DisplacedMuonFields& fields,
+                                              bool propagate) {
       fields.available = handle.isValid();
       if (!handle.isValid()) return;
       fields.outer.available = 1;
@@ -993,16 +1018,16 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          const auto& inner = mu.innerTrack();
          const auto& global = mu.globalTrack();
          fillMuonTrack(outer.isNonnull() && outer.isAvailable() ? outer.get() : nullptr,
-                       fields.outer);
+                       fields.outer, propagate);
          fillMuonTrack(inner.isNonnull() && inner.isAvailable() ? inner.get() : nullptr,
-                       fields.inner);
+                       fields.inner, propagate);
          fillMuonTrack(global.isNonnull() && global.isAvailable() ? global.get() : nullptr,
-                       fields.global);
+                       fields.global, propagate);
       }
    };
-   fillMuonCollection(pfRecoMuHandle_, nt.slimmedMuon_);
-   fillMuonCollection(recoDisplacedMuonHandle_, nt.recoDisplacedMuon_);
-   fillMuonCollection(slimmedDisplacedMuonHandle_, nt.slimmedDisplacedMuon_);
+   fillMuonCollection(pfRecoMuHandle_, nt.slimmedMuon_, false);
+   fillMuonCollection(recoDisplacedMuonHandle_, nt.recoDisplacedMuon_, true);
+   fillMuonCollection(slimmedDisplacedMuonHandle_, nt.slimmedDisplacedMuon_, true);
       
    double nPV = 0;
    for (const auto & ele : *primaryVertexHandle_) {
@@ -1016,13 +1041,6 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    const MagneticField* magneticField = &iSetup.getData(magneticFieldToken_);
    const auto& muonGeometry = iSetup.getData(muonGeometryToken_);
    const auto& stationPropagatorAlong = iSetup.getData(stationPropagatorAlongToken_);
-
-   // Initialize the CMSSW muon-station propagators in the Event transition.
-   // PropagateToMuonSetup was constructed with consumesCollector(), whose
-   // default ESGetToken transition is Event, so init(iSetup) must be called
-   // here rather than in beginRun().
-   genMuonPropagatorSt1_ = genMuonPropagatorSetupSt1_.init(iSetup);
-   genMuonPropagatorSt2_ = genMuonPropagatorSetupSt2_.init(iSetup);
 
    KalmanVertexFitter kvf(true);
 
