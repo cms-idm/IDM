@@ -87,7 +87,6 @@ def electronID(events,info):
     """
     eles = events.Electron
     lpt_eles = events.LptElectron
-    all_lpt_eles = events.AllLptElectron
 
     # define branches with the same name to store relevant MVA ID score for electrons/low-pT electrons
     events['Electron','IDscore'] = ak.zeros_like(eles.pt) # 'loose' mva score for regular electrons (just a dummy value)
@@ -100,12 +99,15 @@ def electronID(events,info):
     events["LptElectron","passIDBasic"] = lpt_ele_kinematic_cut & lpt_ele_id_cut
 
     # AllLptElectron ID (same definition as LptElectron) -- needed for lptvtx good-vertex selection,
-    # since lptvtx.e1/e2 are always drawn from AllLptElectron rather than LptElectron
-    events['AllLptElectron','mindRj'] = ak.fill_none(ak.min(all_lpt_eles.dRJets,axis=-1),999)
-    alpt_ele_kinematic_cut = (all_lpt_eles.pt > 1) & (np.abs(all_lpt_eles.eta) < 2.4)
-    alpt_ele_id_cut = all_lpt_eles.pt > 0 # dummy always True
-    events["AllLptElectron","passID"] = alpt_ele_kinematic_cut & alpt_ele_id_cut & (events.AllLptElectron.mindRj > 0.4)
-    events["AllLptElectron","passIDBasic"] = alpt_ele_kinematic_cut & alpt_ele_id_cut
+    # since lptvtx.e1/e2 are always drawn from AllLptElectron rather than LptElectron.
+    # Not present in every ntuple era (e.g. 2018) -- skip rather than crash.
+    if 'AllLptElectron' in events.fields:
+        all_lpt_eles = events.AllLptElectron
+        events['AllLptElectron','mindRj'] = ak.fill_none(ak.min(all_lpt_eles.dRJets,axis=-1),999)
+        alpt_ele_kinematic_cut = (all_lpt_eles.pt > 1) & (np.abs(all_lpt_eles.eta) < 2.4)
+        alpt_ele_id_cut = all_lpt_eles.pt > 0 # dummy always True
+        events["AllLptElectron","passID"] = alpt_ele_kinematic_cut & alpt_ele_id_cut & (events.AllLptElectron.mindRj > 0.4)
+        events["AllLptElectron","passIDBasic"] = alpt_ele_kinematic_cut & alpt_ele_id_cut
 
     # regular ID
     """if info['type'] == 'signal':
@@ -861,7 +863,8 @@ def computeExtraVariables(events,info):
         genMatchRecoQuantities(events)
     # associate electrons to vertices after all electron-related stuff has been computed
     vtxElectronConnection(events) # associate electrons to vertices
-    lptvtxElectronConnection(events) # same, for the all-low-pT-only lptvtx pool
+    if 'AllLptElectron' in events.fields:
+        lptvtxElectronConnection(events) # same, for the all-low-pT-only lptvtx pool (not present in all ntuple eras)
     events['vtx','min_dxy'] = np.minimum(np.abs(events.vtx.e1.dxy),np.abs(events.vtx.e2.dxy))
     events['vtx','eleDphi'] = np.abs(deltaPhi(events.vtx.e1.phi,events.vtx.e2.phi))
     events['vtx','vxy_fromPV'] = ((events.vtx.vx-events.PV.x)**2+(events.vtx.vy-events.PV.y)**2)
