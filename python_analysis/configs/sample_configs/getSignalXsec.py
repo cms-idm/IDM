@@ -29,10 +29,12 @@ if kind == 'sig':
     unified_csv = False
     reporoot = subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()
     csvpath = os.path.join(reporoot, "python_analysis/configs/sample_configs/signal_r3xsec_filtereff_table.csv")
-    if os.path.isfile(csvpath):
+    alpha0 = samples[0]['alphaD'] if samples else None
+    if alpha0 == '0p1' and os.path.isfile(csvpath):
         df = pd.read_csv(csvpath)
         unified_csv = True
-    else:        
+    else:
+        # original (pre-Run3) csv, used e.g. for the official 2018 signal grid (alphaD="aEM")
         df = pd.read_csv('/uscms_data/d3/sbrightt/iDMe/signal_xsec/condor/signal_xsec_table.csv')
         with open("filter_effs_simple.json","r") as fin:
             effs = json.load(fin)

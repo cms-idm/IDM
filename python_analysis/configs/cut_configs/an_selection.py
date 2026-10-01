@@ -22,8 +22,14 @@ def cut2(events,info):
         cut = (events.trigFired16 & (1<<9)) == (1<<9)
     if info["year"] == 2017:
         cut = (events.trigFired17 & (1<<9)) == (1<<9)
-    if info["year"] == 2022:
-        cut = (events.trigFired18 & (1<<13)) == (1<<13)
+    if info["year"] in (2018, 2022):
+        if "trigFired18" in events.fields:
+            cut = (events.trigFired18 & (1<<13)) == (1<<13)
+        else:
+            # newer ntuples (NtupleContainerV2) don't fill trigFired18,
+            # so fall back to the named HLT branch (bit 13 of trigFired18
+            # corresponds to HLT_PFMET120_PFMHT120_IDTight)
+            cut = events.trig.HLT_PFMET120_PFMHT120_IDTight
     if info["year"] == 2024:
         #for f in events.trig.fields:
         #    if 'HLT' in f and 'PFMET' in f:
@@ -141,7 +147,7 @@ def cut13(events, info):
 
 def cut14(events, info):
     name = "cut14"
-    desc = "Refit Vtx $\Delta R(ee) < 1$"
+    desc = r"Refit Vtx $\Delta R(ee) < 1$"
     plots = False
     cut = events.sel_vtx.refit_dR < 1.
     return events[cut], name, desc, plots
@@ -162,7 +168,7 @@ def cut16(events, info):
 
 def cut17(events, info):
     name = "cut17"
-    desc = "$\Delta \phi(ee, p_T^{miss}) < 1$"
+    desc = r"$\Delta \phi(ee, p_T^{miss}) < 1$"
     plots = False
     dphi_ee_met = _dphi(events.sel_vtx.phi, events.PFMET.phi)
     cut = dphi_ee_met < 1.
@@ -170,7 +176,7 @@ def cut17(events, info):
 
 def cut18(events, info):
     name = "cut18"
-    desc = "$\eta(e_1)\times\eta(e_2) > 0$"
+    desc = r"$\eta(e_1)\dot\eta(e_2) > 0$"
     plots = True
     cut = events.sel_vtx.e1.eta * events.sel_vtx.e2.eta > 0.
     return events[cut], name, desc, plots

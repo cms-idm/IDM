@@ -58,10 +58,12 @@ NUMERATORS = {
     ("vtxreco_merged", "num_genmatch") : "merged_genmatch",
 }
 
-# 2D gen Lxy vs gen ee pT (coarse variable bins), same num/den scheme:
+# 2D gen Lxy vs gen ee pT (coarse variable bins), split into coarse gen ee dR bins
+# via a third axis (one eff map per dR bin), same num/den scheme:
 #   vtxreco_gen_lxy_vs_pt_den, <prefix>_gen_lxy_vs_pt_<suffix>
-gen_lxy_2d   = Variable([0, 1, 5, 10, 15, 100], name="lxy", label="Gen $L_{xy}$ [cm]")
-gen_ee_pt_2d = Variable([0, 5, 10, 20, 100],    name="pt",  label="Gen $p_{T}(e^+e^-)$ [GeV]")
+gen_lxy_2d   = Variable([0, 1, 5, 10, 15, 100],   name="lxy", label="Gen $L_{xy}$ [cm]")
+gen_ee_pt_2d = Variable([0, 5, 10, 20, 100],      name="pt",  label="Gen $p_{T}(e^+e^-)$ [GeV]")
+gen_ee_dr_2d = Variable([0, 0.01, 0.1, 1, 5],     name="dr",  label=r"Gen $\Delta R(e^+e^-)$")
 NAME_2D = "gen_lxy_vs_pt"
 
 def make_histograms():
@@ -70,9 +72,9 @@ def make_histograms():
         histograms[f"vtxreco_{name}_den"] = Hist(samp, cut, axis, storage=hist.storage.Weight())
         for prefix, suffix in NUMERATORS:
             histograms[f"{prefix}_{name}_{suffix}"] = Hist(samp, cut, axis, storage=hist.storage.Weight())
-    histograms[f"vtxreco_{NAME_2D}_den"] = Hist(samp, cut, gen_lxy_2d, gen_ee_pt_2d, storage=hist.storage.Weight())
+    histograms[f"vtxreco_{NAME_2D}_den"] = Hist(samp, cut, gen_lxy_2d, gen_ee_pt_2d, gen_ee_dr_2d, storage=hist.storage.Weight())
     for prefix, suffix in NUMERATORS:
-        histograms[f"{prefix}_{NAME_2D}_{suffix}"] = Hist(samp, cut, gen_lxy_2d, gen_ee_pt_2d, storage=hist.storage.Weight())
+        histograms[f"{prefix}_{NAME_2D}_{suffix}"] = Hist(samp, cut, gen_lxy_2d, gen_ee_pt_2d, gen_ee_dr_2d, storage=hist.storage.Weight())
     return histograms
 
 subroutines = []
@@ -98,15 +100,21 @@ def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
     }
 
     defineGoodVertices(events, version='v15acr')
-    defineGoodLptVertices(events, version='v15acr')
-    defineGoodMergedCandidates(events)
+    # AllLptElectron (and the lptvtx/merged_vtx pools built from it) isn't present in
+    # every ntuple era (e.g. 2018) -- skip those pieces and fill their masks as all-False
+    # rather than crashing, so the shared vtx-based hists still get filled.
+    has_lpt = 'AllLptElectron' in events.fields
+    if has_lpt:
+        defineGoodLptVertices(events, version='v15acr')
+        defineGoodMergedCandidates(events)
+    no_lpt = np.zeros(len(events), dtype=bool)
     masks = {
-        "lptvtx"          : events.nGoodLptVtx > 0,
-        "lptvtx_genmatch" : ak.any(events.good_lptvtx.isMatched, axis=1),
+        "lptvtx"          : events.nGoodLptVtx > 0 if has_lpt else no_lpt,
+        "lptvtx_genmatch" : ak.any(events.good_lptvtx.isMatched, axis=1) if has_lpt else no_lpt,
         "regvtx"          : events.nGoodVtx > 0,
         "regvtx_genmatch" : ak.any(events.good_vtx.isMatched, axis=1),
-        "merged"          : events.nMergedVtx > 0,
-        "merged_genmatch" : ak.any(events.merged_vtx.isGenMerged, axis=1),
+        "merged"          : events.nMergedVtx > 0 if has_lpt else no_lpt,
+        "merged_genmatch" : ak.any(events.merged_vtx.isGenMerged, axis=1) if has_lpt else no_lpt,
     }
 
     for name, (_, key) in VARIABLES.items():
@@ -117,7 +125,8 @@ def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
             hists[f"{prefix}_{name}_{suffix}"].fill(samp=samp, cut=cut, **{key: val[m]}, weight=wgt[m])
 
     pt = events.genEE.pt
-    hists[f"vtxreco_{NAME_2D}_den"].fill(samp=samp, cut=cut, lxy=lxy, pt=pt, weight=wgt)
+    dr = events.genEE.dr
+    hists[f"vtxreco_{NAME_2D}_den"].fill(samp=samp, cut=cut, lxy=lxy, pt=pt, dr=dr, weight=wgt)
     for (prefix, suffix), mask_key in NUMERATORS.items():
         m = masks[mask_key]
-        hists[f"{prefix}_{NAME_2D}_{suffix}"].fill(samp=samp, cut=cut, lxy=lxy[m], pt=pt[m], weight=wgt[m])
+        hists[f"{prefix}_{NAME_2D}_{suffix}"].fill(samp=samp, cut=cut, lxy=lxy[m], pt=pt[m], dr=dr[m], weight=wgt[m])

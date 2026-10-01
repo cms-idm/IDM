@@ -1,5 +1,6 @@
 # imports
 import os
+import re
 import copy
 import numpy as np
 import matplotlib.pyplot as plt
@@ -13,7 +14,7 @@ outdir = 'workarea'
 plotdir = './plots/vtxreco'
 os.makedirs(plotdir, exist_ok=True)
 
-sig_vers = 'Jul2026noID'
+sig_vers = 'Preapp2018'
 selection = 'an'
 hists = 'vtxreco'
 saved_signal_hists = f'{outdir}/hists_sig{sig_vers}_{selection}-sel_{hists}.coffea'
@@ -64,16 +65,30 @@ PLOTS = {
 }
 
 
+def cut_slice(h, cut):
+    """
+    Slice hist `h` to `cut` on its cut axis. The cut (and samp) axes only grow
+    when filled -- numerators that are never filled at all (e.g. lptvtx/merged on
+    eras without AllLptElectron, like 2018: see has_lpt in
+    configs/histo_configs/vtxreco.py) have an empty cut axis -- return a hist of
+    zeros with the same samp/var binning instead of KeyError-ing.
+    """
+    if cut in list(h.axes["cut"]):
+        return h[{"cut": cut}]
+    return Hist(*[ax for ax in h.axes if ax.name != "cut"], storage=Weight())
+
+
 def samp_slice(h, s, cut=None):
     """
     Slice hist `h` to sample `s` (and `cut`, if given). The samp axis only grows
     when a sample is filled, so a sample with no entries in `h` (e.g. no
     gen-matched vtx at all) is missing -- return an empty hist for it instead.
     """
-    idx = {} if cut is None else {"cut": cut}
+    if cut is not None:
+        h = cut_slice(h, cut)
     if s in list(h.axes["samp"]):
-        return h[{**idx, "samp": s}]
-    return h[{**idx, "samp": sum}] * 0
+        return h[{"samp": s}]
+    return h[{"samp": sum}] * 0
 
 
 def n_eff(h):
@@ -171,7 +186,7 @@ def plot_eff(sig_histo, var, cut, group):
     plt.close(fig)
 
 
-# 2D gen Lxy (x) vs gen ee pT (y) efficiency maps: one plot per numerator
+# 2D gen Lxy (x) vs gen ee pT (y) efficiency maps: one plot per numerator per gen ee dR bin
 # (prefix, suffix) -> (plot tag, title)
 VAR_2D = 'gen_lxy_vs_pt'
 PLOTS_2D = {
@@ -184,25 +199,54 @@ PLOTS_2D = {
 }
 
 
-def plot_eff_2d(sig_histo, cut, prefix, suffix):
+def sample_m1(samp):
     """
-    Weighted reco efficiency in bins of gen Lxy x gen ee pT, all signal samples
-    summed. Bins are drawn evenly sized regardless of their edge values (the
-    real edges are printed as tick labels), with the efficiency printed in each
-    bin.
+    Parse m1 = Mchi - dMchi/2 (the lighter mass eigenstate) from a signal
+    sample name like 'sig_2018_Mchi-105p0_dMchi-10p0_ctau-1' (decimal points
+    are replaced with 'p', per Analyzer.loadFiles in analysisTools.py).
+    """
+    mchi, dmchi = re.search(r'Mchi-([\d]+p[\d]+)_dMchi-([\d]+p[\d]+)', samp).groups()
+    return float(mchi.replace('p', '.')) - float(dmchi.replace('p', '.')) / 2
+
+
+def plot_eff_2d(sig_histo, cut, prefix, suffix, idr, run2range=False):
+    """
+    Weighted reco efficiency in bins of gen Lxy x gen ee pT, for gen ee dR bin
+    `idr`, all signal samples summed. Bins are drawn evenly sized regardless of
+    their edge values (the real edges are printed as tick labels), with the
+    efficiency printed in each bin.
+
+    If `idr` is None, all gen ee dR bins are summed together (no dR cut).
+
+    If `run2range`, only signal samples with m1 > 5 GeV (the mass range
+    covered by the Run 2 analysis) are combined, and the output is tagged
+    'run2range'. `run2range` is only meaningful with `idr=None`.
     """
     tag, title = PLOTS_2D[(prefix, suffix)]
     samples = list(sig_histo['cutflow'].keys())
-    h_num = sig_histo[f'{prefix}_{VAR_2D}_{suffix}'][{"cut": cut}]
-    h_den = sig_histo[f'vtxreco_{VAR_2D}_den'][{"cut": cut}]
+    if run2range:
+        samples = [s for s in samples if sample_m1(s) >= 5]
+    h_num = cut_slice(sig_histo[f'{prefix}_{VAR_2D}_{suffix}'], cut)
+    h_den = cut_slice(sig_histo[f'vtxreco_{VAR_2D}_den'], cut)
 
-    num = sum(n_eff(samp_slice(h_num, s)) for s in samples)
-    den = sum(n_eff(samp_slice(h_den, s)) for s in samples)
+    num_full = sum(n_eff(samp_slice(h_num, s)) for s in samples)  # shape (n_lxy, n_pt, n_dr)
+    den_full = sum(n_eff(samp_slice(h_den, s)) for s in samples)
+    if idr is None:
+        num, den = num_full.sum(axis=-1), den_full.sum(axis=-1)
+    else:
+        num, den = num_full[:, :, idr], den_full[:, :, idr]
     with np.errstate(invalid='ignore', divide='ignore'):
         eff = np.where(den > 0, num / den, np.nan)   # shape (n_lxy, n_pt)
 
     lxy_axis, pt_axis = h_den.axes['lxy'], h_den.axes['pt']
     n_lxy, n_pt = len(lxy_axis), len(pt_axis)
+    if idr is not None:
+        dr_lo, dr_hi = h_den.axes['dr'][idr]
+        dr_subtitle = '\n' + rf'${dr_lo:g} <$ Gen $\Delta R(e^+e^-) < {dr_hi:g}$'
+        dr_tag = f'dr{dr_lo:g}to{dr_hi:g}'
+    else:
+        dr_subtitle = ''
+        dr_tag = 'alldr'
 
     fig, ax = plt.subplots(figsize=(10, 8))
     mesh = ax.pcolormesh(np.arange(n_pt + 1), np.arange(n_lxy + 1), eff,
@@ -222,11 +266,13 @@ def plot_eff_2d(sig_histo, cut, prefix, suffix):
     ax.set_yticklabels([f'{e:g}' for e in lxy_axis.edges])
     ax.set_xlabel(r'Gen $p_{T}(e^+e^-)$ [GeV]', fontsize=20)
     ax.set_ylabel(r'Gen $L_{xy}$ [cm]', fontsize=20)
-    ax.set_title(f'{title} [{CUTS[cut].capitalize()}, All Signal Samples]', fontsize=16)
+    sample_tag = 'Run 2 Mass Range' if run2range else 'All Signal Samples'
+    ax.set_title(f'{title} [{CUTS[cut].capitalize()}, {sample_tag}]' + dr_subtitle, fontsize=16)
     ax.tick_params(axis='both', labelsize=14)
 
     plt.tight_layout()
-    outpath = f'{plotdir}/vtxreco2d_{tag}_{VAR_2D}_{CUTS[cut]}_{plottag}.png'
+    outtag = f'{plottag}_run2range' if run2range else plottag
+    outpath = f'{plotdir}/vtxreco2d_{tag}_{VAR_2D}_{dr_tag}_{CUTS[cut]}_{outtag}.png'
     plt.savefig(outpath)
     print(f'Saved: {outpath}')
     plt.close(fig)
@@ -240,5 +286,9 @@ for cut in CUTS:
     for var in VARIABLES:
         for group in PLOTS:
             plot_eff(s_hists, var, cut, group)
+    n_dr = len(s_hists[f'vtxreco_{VAR_2D}_den'].axes['dr'])
     for prefix, suffix in PLOTS_2D:
-        plot_eff_2d(s_hists, cut, prefix, suffix)
+        for idr in range(n_dr):
+            plot_eff_2d(s_hists, cut, prefix, suffix, idr)
+        plot_eff_2d(s_hists, cut, prefix, suffix, None)
+        plot_eff_2d(s_hists, cut, prefix, suffix, None, run2range=True)

@@ -17,9 +17,9 @@ plt.rcParams.update({
 
 outdir    = 'workarea'
 vers      = 'Jul2026noID'
-selection = 'an'
+selection = 'anabrv'
 seltag    = 'minjdphi'
-cut       = 'cut8'
+cut       = 'cut3'
 year      = 2024
 size      = (16, 12)
 
@@ -97,9 +97,17 @@ def _varbin_histplot(h, ax, **kwargs):
     hep.histplot((dens, edges), ax=ax, **kwargs)
 
 
-def _histplot(h, ax, varbin=False, **kwargs):
-    """Unified plot: variable-bin density or regular density."""
-    if varbin:
+def _histplot(h, ax, varbin=False, logx=False, **kwargs):
+    """Unified plot: variable-bin density or regular density. logx: bins are
+    uniform in log(x), so plot the per-bin fraction (unit sum) instead of a
+    bin-width density, which would suppress the wide high-x bins."""
+    if logx:
+        vals, edges = h.to_numpy()
+        tot = float(np.sum(vals))
+        if tot == 0:
+            return
+        hep.histplot((vals / tot, edges), ax=ax, **kwargs)
+    elif varbin:
         _varbin_histplot(h, ax, **kwargs)
     else:
         if np.sum(h.values()) == 0:
@@ -118,6 +126,8 @@ def _select(hkey, samp_sel):
     h = s_hists[hkey]
     if cut not in list(h.axes['cut']):
         return None
+    if isinstance(samp_sel, str) and samp_sel not in list(h.axes['samp']):
+        return None
     return h[{'cut': cut, 'samp': samp_sel}]
 
 
@@ -130,7 +140,7 @@ def _select(hkey, samp_sel):
 # has exactly one gen ee pair regardless of category).
 
 def _cats_overlay(field, cat_prefix, field_override=None, doLogy=False, varbin=False,
-                   fname_key=None, title_prefix=''):
+                   fname_key=None, title_prefix='', doLogx=False):
     """One category-overlay plot for `field`. cat_prefix: {cat: hist-key
     prefix}. field_override: optional {cat: field-name-to-use-instead}, for
     the handful of fields where mpho (Photon) uses a different literal field
@@ -153,7 +163,7 @@ def _cats_overlay(field, cat_prefix, field_override=None, doLogy=False, varbin=F
         if xlabel is None:
             xlabel = h.axes[-1].label
         cstyle = cat_styles[cat]
-        _histplot(h, ax, varbin=varbin, histtype='step', label=cstyle['label'],
+        _histplot(h, ax, varbin=varbin, logx=doLogx, histtype='step', label=cstyle['label'],
                   color=cstyle['color'], linestyle=cstyle['ls'], linewidth=2)
         any_drawn = True
     if not any_drawn:
@@ -162,7 +172,9 @@ def _cats_overlay(field, cat_prefix, field_override=None, doLogy=False, varbin=F
 
     xlabel = xlabel or field
     ax.set_xlabel(xlabel)
-    ax.set_ylabel('A.U.')
+    ax.set_ylabel('Fraction per bin' if doLogx else 'A.U.')
+    if doLogx:
+        ax.set_xscale('log')
     if doLogy:
         ax.set_yscale('log')
     ax.set_title(rf'{title_prefix}{xlabel} — all samples')
@@ -313,6 +325,9 @@ n_made = 0
 for field, doLogy, varbin in _PAIR_FIELDS:
     n_made += _cats_overlay(field, _PAIR_PREFIX, doLogy=doLogy, varbin=varbin,
                              fname_key=f'pair_{field}', title_prefix='Resolved vs. vertexed: ')
+# Log-binned reco dR (res_ee_dr_log / vtx_dr_log, 1e-5 to 1): log x-axis.
+n_made += _cats_overlay('dr_log', _PAIR_PREFIX, doLogx=True,
+                         fname_key='pair_dr_log', title_prefix='Resolved vs. vertexed: ')
 for hkey, doLogy in _VTX_ONLY_PAIR_FIELDS:
     h = _select(hkey, sum)
     if h is None or np.sum(h.values()) == 0:
@@ -480,6 +495,9 @@ print(f"  -> {n_made} per-series plots")
 # mele_nearestEle_oppQ_failreason (Section 3) and res_notVtx_reason (Section 4)
 # are each single-category diagnostics (no cross-category overlay to make),
 # plotted as a fraction-of-total bar chart -- one bar per reason category.
+# Category labels/order are read straight off the histogram's reason axis
+# (see resolvedcats._resNotVtxReasons, which splits the v15acr good-vertex
+# requirement into one category per sub-cut).
 # Each gets an all-samples-summed version plus one grouped-bar version per
 # PARAM_SETS series (one color per signal point in the series).
 
@@ -495,6 +513,15 @@ def _reason_fractions(hkey, samp_sel):
     return cats, fracs
 
 
+def _reason_xtick_style(ncats):
+    # res_notVtx_reason has one bar per v15acr sub-cut (11 categories), so
+    # rotate/shrink its tick labels further than the shorter reason plots to
+    # keep them from overlapping.
+    if ncats > 8:
+        return dict(rotation=40, ha='right', fontsize=14)
+    return dict(rotation=20, ha='right')
+
+
 def _reason_plot_allsamples(hkey, title, ylabel, fname):
     cats, fracs = _reason_fractions(hkey, sum)
     if cats is None:
@@ -502,11 +529,12 @@ def _reason_plot_allsamples(hkey, title, ylabel, fname):
     fig, ax = plt.subplots(figsize=size)
     hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
     ax.bar(cats, fracs, color='C0')
+    val_fs = 12 if len(cats) > 8 else None
     for i, f in enumerate(fracs):
-        ax.text(i, f, f'{f:.2f}', ha='center', va='bottom')
+        ax.text(i, f, f'{f:.2f}', ha='center', va='bottom', fontsize=val_fs)
     ax.set_ylabel(ylabel)
     ax.set_title(f'{title} — all samples')
-    plt.setp(ax.get_xticklabels(), rotation=20, ha='right')
+    plt.setp(ax.get_xticklabels(), **_reason_xtick_style(len(cats)))
     plt.tight_layout()
     plt.savefig(f'{plotdir}/hist_{seltag}_{fname}_allsamps.png')
     plt.close(fig)
@@ -548,7 +576,7 @@ def _reason_plot_series(hkey, pset, title, ylabel, fname):
         return False
 
     ax.set_xticks(x)
-    ax.set_xticklabels(ref_cats, rotation=20, ha='right')
+    ax.set_xticklabels(ref_cats, **_reason_xtick_style(len(ref_cats)))
     ax.set_ylabel(ylabel)
     ax.set_title(title)
     ax.legend(fontsize=13)

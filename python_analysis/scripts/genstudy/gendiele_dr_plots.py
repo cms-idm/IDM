@@ -30,7 +30,7 @@ import glob
 outdir = os.path.join(REPO_ROOT, 'workarea')
 plotdir = os.path.join(REPO_ROOT, 'plots', 'genstudy')
 os.makedirs(plotdir, exist_ok=True)
-saved_signal_hists = f"{outdir}/hists_sigJul2026noID_anmatchvtx-sel_genstudy.coffea"
+saved_signal_hists = f"{outdir}/hists_sigJul2026noID_anabrv-sel_genstudy.coffea"
 
 # Signal
 s_hists = util.load(saved_signal_hists)[0]
@@ -51,7 +51,7 @@ for m1_val in sorted(s_pts['m1'].unique()):
     rows = s_pts[np.isclose(s_pts['m1'], m1_val)]
     h_sum = None
     for _, row in rows.iterrows():
-        h = s_hists['gen_diele_dR'][{"samp": row['name'], "cut": "cut8"}]
+        h = s_hists['gen_diele_dR'][{"samp": row['name'], "cut": "cut1"}]
         h_sum = h if h_sum is None else h_sum + h
     vals  = h_sum.values()
     varis = h_sum.variances()
@@ -80,7 +80,7 @@ plot_title = r'Gen EE $\Delta R$'
 plot_dict = {
     'variable': ['gen_diele_dR'],
     'year': 2024,
-    'cut': 'cut8',
+    'cut': 'cut1',
 }
 
 style_dict = {
@@ -172,3 +172,34 @@ plt.title(rf'{plot_title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}
 plt.legend()
 plt.savefig(f"{plotdir}/hist_{sel_label}_{plot_label}_m1-{utils.stringfy_friendly(m1s[0])}.png")
 
+
+# Log-scale dR plots (1e-4 - 1), same signal-point scans as above
+log_plot_dict = dict(plot_dict)
+log_plot_dict['variable'] = ['gen_diele_dR_log']
+log_style_dict = dict(style_dict)
+log_style_dict['doLogx'] = True
+log_style_dict['doLogy'] = True
+
+log_scans = [
+    (dict(m1s=[1, 2, 5],       deltas=[0.1, 0.2],        ctaus=[10]),         lambda m1s, deltas, ctaus: f"ctau-{utils.stringfy_friendly(ctaus[0])}_m1-narrow"),
+    (dict(m1s=[0.05, 0.5, 5],  deltas=[0.1, 0.2],        ctaus=[10]),         lambda m1s, deltas, ctaus: f"ctau-{utils.stringfy_friendly(ctaus[0])}_m1-wide"),
+    (dict(m1s=[1, 2, 5],       deltas=[0.1],             ctaus=[1, 10, 100]), lambda m1s, deltas, ctaus: f"delta-{utils.stringfy_friendly(deltas[0])}"),
+    (dict(m1s=[5],             deltas=[0.05, 0.1, 0.2],  ctaus=[1, 10, 100]), lambda m1s, deltas, ctaus: f"m1-{utils.stringfy_friendly(m1s[0])}"),
+]
+
+for pts, tag in log_scans:
+    m1s, deltas, ctaus = pts['m1s'], pts['deltas'], pts['ctaus']
+
+    fig, ax = plt.subplots(figsize=size)
+    log_style_dict['fig'] = fig; log_style_dict['ax'] = ax
+
+    cmap_idx = 0
+    for m1 in m1s:
+        for delta in deltas:
+            for ctau in ctaus:
+                ptools.plot_signal_1D(s_hists, m1, delta, ctau, log_plot_dict, log_style_dict, cmap_idx = cmap_idx)
+                cmap_idx += 1
+
+    plt.title(rf'{plot_title} (log scale): $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
+    plt.legend()
+    plt.savefig(f"{plotdir}/hist_{sel_label}_{plot_label}-log_{tag(m1s, deltas, ctaus)}.png")

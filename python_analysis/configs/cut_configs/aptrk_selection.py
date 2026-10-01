@@ -161,7 +161,7 @@ def cut13(events,info):
 
 def cut14(events, info):
     name = "cut14"
-    desc = r"Log$(|d_{xy}/d_z|) > -1.25"
+    desc = r"Log$(|d_{xy}/d_z|) > -1.25$"
     plots = False
     cand = selectMergedElectronCandidates(events)
     cut = np.log10(np.abs(cand.dxy / cand.dz)) > -1.25

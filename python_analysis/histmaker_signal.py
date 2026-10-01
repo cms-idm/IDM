@@ -19,8 +19,8 @@ import glob
 
 # ---- SETTINGS ----
 vers = 'Jul2026noID'
-cuts = 'an'
-hists = 'vtxreco'
+cuts = 'anabrv'
+hists = 'resolvedcats'
 
 
 # ---- FILES ----
@@ -30,7 +30,8 @@ hists_config = f"configs/histo_configs/{hists}.py"
 outdir = 'workarea'
 
 # ---- SIGNAL -------------------------------------
-sample_config = f"configs/sample_configs/signal_2024_{vers}_0p1.json"
+sample_config = f"configs/sample_configs/signal_2024_{vers}_0p1_skimmed.json"
+#sample_config = f"configs/sample_configs/signal_2018_official_Preapproval_aEM.json"
 
 #analyzer = Analyzer(sample_config, hists_config, cuts_config, model_config) # If using BDT in cuts
 analyzer = Analyzer(sample_config, hists_config, cuts_config) # If not using BDT in cuts

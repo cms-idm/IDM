@@ -105,6 +105,32 @@ def _auto_ylim(values, pad_decades=0.3):
     hi = 10 ** (np.ceil(np.log10(max(finite))) + pad_decades)
     return [lo, hi]
 
+def _select_sig_points(sig_df, plot_dict):
+    """Return [(point, sig_dict), ...] for the signal points matching
+    plot_dict's m1s/deltas/ctaus, sorted by m1 so distinct shades of red can
+    be assigned across exactly that many lines -- lightest shade for the
+    lowest mass, darkest for the highest."""
+    sig_points = []
+    for point in sig_df.index.values:
+        sig_dict = ptools.signalPoint(point)
+        m1 = round(sig_dict['m1'], 5)
+        delta = round(sig_dict['delta'], 5)
+        ctau = int(sig_dict['ctau'])
+
+        m1_disp = int(m1) if m1.is_integer() else m1
+        delta_disp = int(delta) if delta.is_integer() else delta
+
+        if (m1_disp in plot_dict['m1s']) and (delta_disp in plot_dict['deltas']) and (ctau in plot_dict['ctaus']):
+            sig_points.append((point, sig_dict))
+
+    return sorted(sig_points, key=lambda p: round(p[1]['m1'], 5))
+
+def _sig_label(sig_dict):
+    m1 = round(sig_dict['m1'], 5)
+    dmchi = round(sig_dict['dmchi'], 5)
+    ctau = int(sig_dict['ctau'])
+    return rf"($M_1$, $\Delta$) = ({m1}, {dmchi}) GeV, c$\tau$ = {ctau}mm"
+
 def plot_sig_bkg_yields(sig_histo, bkg_histos, sig_df_eff, sig_df_cts, bkg_df_cts, plot_dict,
                          sig_df_wts=None, show=False):
     """
@@ -179,38 +205,13 @@ def plot_sig_bkg_yields(sig_histo, bkg_histos, sig_df_eff, sig_df_cts, bkg_df_ct
         plotted_vals.extend(vals)
 
     # signal lines, subset selected by m1/delta/ctau
-    sig_df_cts = sig_df_cts.copy()
-    m1_list = [round(ptools.signalPoint(point)['m1'], 5) for point in sig_df_cts.index.values]
-    sig_df_cts['m1'] = m1_list
-    sig_df_cts = sig_df_cts.sort_values(by=['m1'])
-    sig_df_cts.pop('m1')
-
-    # Pick out the selected signal points first (sig_df_cts is already sorted
-    # by m1) so distinct shades of red can be assigned across exactly that
-    # many lines -- lightest shade for the lowest mass, darkest for the highest.
-    sig_points = []
-    for point in sig_df_cts.index.values:
-        sig_dict = ptools.signalPoint(point)
-        m1 = round(sig_dict['m1'], 5)
-        delta = round(sig_dict['delta'], 5)
-        ctau = int(sig_dict['ctau'])
-
-        m1_disp = int(m1) if m1.is_integer() else m1
-        delta_disp = int(delta) if delta.is_integer() else delta
-
-        if (m1_disp in plot_dict['m1s']) and (delta_disp in plot_dict['deltas']) and (ctau in plot_dict['ctaus']):
-            sig_points.append((point, sig_dict))
-
+    sig_points = _select_sig_points(sig_df_cts, plot_dict)
     sig_colors = plt.cm.Reds(np.linspace(0.4, 0.95, max(len(sig_points), 1)))
 
     for color_idx, (point, sig_dict) in enumerate(sig_points):
-        m1 = round(sig_dict['m1'], 5)
-        delta = round(sig_dict['delta'], 5)
-        dmchi = round(sig_dict['dmchi'], 5)
-        ctau = int(sig_dict['ctau'])
         color = sig_colors[color_idx]
 
-        label = rf"($M_1$, $\Delta$) = ({round(m1, 5)}, {round(dmchi, 5)}) GeV, c$\tau$ = {ctau}mm"
+        label = _sig_label(sig_dict)
         counts = sig_df_cts.loc[point].values.astype(float)
         if sig_df_wts is not None:
             eff = sig_df_eff.loc[point].values.astype(float)
@@ -257,6 +258,101 @@ def plot_sig_bkg_yields(sig_histo, bkg_histos, sig_df_eff, sig_df_cts, bkg_df_ct
         plt.show()
 
     plt.close(fig)
+
+
+# ---- Signal / background ratio plot ------------------------------------
+
+def plot_sig_bkg_ratios(sig_histo, bkg_histos, sig_df_cts, bkg_df_cts, plot_dict, show=False):
+    """
+    For each selected signal point, plot S/B (solid) and S/sqrt(B) (dotted)
+    at every cut step, where B is the total background yield. Uses the same
+    signal-point selection, cut-column alignment and plot_dict keys as
+    plot_sig_bkg_yields ('bkg_processes' is ignored -- only 'Total' is used).
+    Cut steps where the total background or the signal is zero are left out (NaN).
+    """
+
+    union_idx, cut_labels, sig_desc_to_idx, bkg_desc_to_idx = align_sig_bkg_cut_columns(sig_histo, bkg_histos)
+    x = np.arange(len(union_idx))
+
+    bkg_df_cts = realign_cutflow_df(bkg_df_cts, bkg_desc_to_idx, union_idx)
+    sig_df_cts = realign_cutflow_df(sig_df_cts, sig_desc_to_idx, union_idx)
+
+    bkg_total = bkg_df_cts.loc['Total'].values.astype(float)
+    bkg_total = np.where(bkg_total > 0, bkg_total, np.nan)
+
+    size = (16, 12)
+    fig, ax = plt.subplots(figsize=size)
+
+    plotted_vals = []
+
+    sig_points = _select_sig_points(sig_df_cts, plot_dict)
+    sig_colors = plt.cm.Reds(np.linspace(0.4, 0.95, max(len(sig_points), 1)))
+
+    for color_idx, (point, sig_dict) in enumerate(sig_points):
+        color = sig_colors[color_idx]
+        counts = sig_df_cts.loc[point].values.astype(float)
+        counts = np.where(counts > 0, counts, np.nan)   # zero signal can't be shown on a log axis
+
+        s_over_b = counts / bkg_total
+        s_over_sqrtb = counts / np.sqrt(bkg_total)
+
+        ax.plot(x, s_over_b, label=_sig_label(sig_dict), color=color,
+                ls='-', lw=2, marker='o', markersize=4)
+        ax.plot(x, s_over_sqrtb, color=color,
+                ls=':', lw=2.5, marker='o', markersize=4)
+        plotted_vals.extend(s_over_b)
+        plotted_vals.extend(s_over_sqrtb)
+
+    if plot_dict.get('doLog', True):
+        ax.set_yscale('log')
+
+    ylim = plot_dict.get('ylim')
+    if ylim is None:
+        ylim = _auto_ylim(plotted_vals)
+    if ylim is not None:
+        ax.set_ylim(ylim[0], ylim[1])
+
+    ax.grid()
+
+    ax.set_ylabel(plot_dict.get('ylabel', r'$S/B$, $S/\sqrt{B}$'), fontsize=28)
+    ax.set_title(plot_dict.get('title', ''), fontsize=24)
+
+    ax.set_xticks(ticks=x, labels=cut_labels, rotation=45, ha='right')
+    ax.tick_params(axis='x', labelsize=17)
+    ax.tick_params(axis='y', labelsize=28)
+
+    # color legend for signal points, plus line-style proxies for the two ratios
+    handles, labels = ax.get_legend_handles_labels()
+    handles += [plt.Line2D([], [], color='gray', ls='-', lw=2),
+                plt.Line2D([], [], color='gray', ls=':', lw=2.5)]
+    labels += [r'$S/B$', r'$S/\sqrt{B}$']
+    ax.legend(handles, labels, loc='best', fontsize=14, ncol=1, framealpha=0.9)
+
+    if plot_dict.get('doSave', False):
+        os.makedirs(plot_dict['outDir'], exist_ok=True)
+        plt.tight_layout()
+        outpath = f"{plot_dict['outDir']}/{plot_dict['outName']}"
+        plt.savefig(outpath)
+        print(f"Saved: {outpath}")
+
+    if show:
+        plt.show()
+
+    plt.close(fig)
+
+
+def plot_sig_bkg_all(sig_histo, bkg_histos, sig_df_eff, sig_df_cts, bkg_df_cts, plot_dict, sig_df_wts=None):
+    """Make the yield cutflow plot and the matching S/B, S/sqrt(B) ratio plot
+    for the same signal points. The ratio plot is saved alongside the yield
+    plot with 'cutflow_sig-bkg' -> 'cutflow_sig-bkg-ratio' in its file name."""
+    plot_sig_bkg_yields(sig_histo, bkg_histos, sig_df_eff, sig_df_cts, bkg_df_cts, plot_dict, sig_df_wts=sig_df_wts)
+
+    ratio_dict = dict(plot_dict)
+    ratio_dict['ylabel'] = r'$S/B$ (solid), $S/\sqrt{B}$ (dotted)'
+    ratio_dict['ylim'] = None
+    ratio_dict['title'] = plot_dict['title'].replace('Signal + Background Cutflow', r'$S/B$ and $S/\sqrt{B}$')
+    ratio_dict['outName'] = plot_dict['outName'].replace('cutflow_sig-bkg', 'cutflow_sig-bkg-ratio')
+    plot_sig_bkg_ratios(sig_histo, bkg_histos, sig_df_cts, bkg_df_cts, ratio_dict)
 
 
 # ---- Load histograms -----------------------------------------------------
@@ -316,7 +412,7 @@ plot_dict['m1s'] = m1s; plot_dict['deltas'] = deltas; plot_dict['ctaus'] = ctaus
 plot_dict['title'] = rf"Signal + Background Cutflow [AN Selection, {lumi_tag}]: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm"
 plot_dict['outName'] = f'cutflow/cutflow_sig-bkg_{plottag}_ctau-{utils.stringfy_friendly(ctaus[0])}_delta-{utils.stringfy_friendly(deltas[0])}_m1-wide.png'
 
-plot_sig_bkg_yields(s_hists, b_hists, sig_df_eff, sig_df_cts, bkg_df_cts, plot_dict, sig_df_wts=sig_df_wts)
+plot_sig_bkg_all(s_hists, b_hists, sig_df_eff, sig_df_cts, bkg_df_cts, plot_dict, sig_df_wts=sig_df_wts)
 
 m1s = [0.5, 1, 2, 5]
 deltas = [0.1]
@@ -326,7 +422,7 @@ plot_dict['m1s'] = m1s; plot_dict['deltas'] = deltas; plot_dict['ctaus'] = ctaus
 plot_dict['title'] = rf"Signal + Background Cutflow [AN Selection, {lumi_tag}]: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm"
 plot_dict['outName'] = f'cutflow/cutflow_sig-bkg_{plottag}_ctau-{utils.stringfy_friendly(ctaus[0])}_delta-{utils.stringfy_friendly(deltas[0])}_m1-narrow.png'
 
-plot_sig_bkg_yields(s_hists, b_hists, sig_df_eff, sig_df_cts, bkg_df_cts, plot_dict, sig_df_wts=sig_df_wts)
+plot_sig_bkg_all(s_hists, b_hists, sig_df_eff, sig_df_cts, bkg_df_cts, plot_dict, sig_df_wts=sig_df_wts)
 
 m1s = [0.5]
 deltas = [0.1]
@@ -336,7 +432,7 @@ plot_dict['m1s'] = m1s; plot_dict['deltas'] = deltas; plot_dict['ctaus'] = ctaus
 plot_dict['title'] = rf"Signal + Background Cutflow [AN Selection, {lumi_tag}]: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm"
 plot_dict['outName'] = f'cutflow/cutflow_sig-bkg_{plottag}_m1-{utils.stringfy_friendly(m1s[0])}_delta-{utils.stringfy_friendly(deltas[0])}.png'
 
-plot_sig_bkg_yields(s_hists, b_hists, sig_df_eff, sig_df_cts, bkg_df_cts, plot_dict, sig_df_wts=sig_df_wts)
+plot_sig_bkg_all(s_hists, b_hists, sig_df_eff, sig_df_cts, bkg_df_cts, plot_dict, sig_df_wts=sig_df_wts)
 
 m1s = [5]
 deltas = [0.1]
@@ -346,4 +442,4 @@ plot_dict['m1s'] = m1s; plot_dict['deltas'] = deltas; plot_dict['ctaus'] = ctaus
 plot_dict['title'] = rf"Signal + Background Cutflow [AN Selection, {lumi_tag}]: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm"
 plot_dict['outName'] = f'cutflow/cutflow_sig-bkg_{plottag}_m1-{utils.stringfy_friendly(m1s[0])}_delta-{utils.stringfy_friendly(deltas[0])}.png'
 
-plot_sig_bkg_yields(s_hists, b_hists, sig_df_eff, sig_df_cts, bkg_df_cts, plot_dict, sig_df_wts=sig_df_wts)
+plot_sig_bkg_all(s_hists, b_hists, sig_df_eff, sig_df_cts, bkg_df_cts, plot_dict, sig_df_wts=sig_df_wts)

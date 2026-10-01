@@ -44,6 +44,7 @@ ele_dz      = Regular(50, 0, 5,   name="dz",     label="Electron Track $d_{z}$ [
 ele_id      = Regular(50, -1, 4,  name="ele_id", label="Low $p_T$ electron ID Score")
 
 ee_dr = Regular(50, 0, 1, name='dr', label=r"$\Delta R$")
+ee_dr_log = Regular(50, 1e-5, 1, name='dr', label=r"$\Delta R$", transform=hist.axis.transform.log)
 
 vxy_coarse = Regular(50, 0, 50, name="vxy", label="$v_{xy}$ [cm]")
 vz_coarse  = Regular(50, 0, 50, name="vz",  label="$v_{z}$ [cm]")
@@ -268,7 +269,11 @@ _resNotVtxReasons = [
     'no lptvtx object and dr > 0.01',
     'mass < 0.1 GeV',
     'conversion veto FP',
-    'other vertex criteria',
+    'electron ID',
+    'max miniRelIso > 0.9',
+    'reduced chi2 > 15',
+    'min refit |dxy| < 0.001',
+    'min log10|dxy/dz| < -2',
     'wrong lptvtx candidate',
     'truth-matching difference',
 ]
@@ -312,26 +317,35 @@ def _fillResNotVtxReasons(hists, events, cat_sep, ge_reco, gp_reco, ge_idx, gp_i
 
     candidate = ak.firsts(lptvtx_cs[match_mask])
 
-    # (3)-(5) The v15acr good-vertex sub-cuts (defineGoodLptVertices), split
-    # into their own dedicated categories (mass, conversion veto) plus a
-    # catch-all ('other') for every remaining sub-cut. Reuses
-    # candidate.isGood (rather than re-deriving the full v15acr formula
-    # here) so this stays in sync with any future change to that definition.
-    # mass is checked first so an event failing both mass and conversion
-    # veto lands only in reason_mass, keeping the categories exclusive.
-    cand_mass_ok     = ak.fill_none(candidate.refit_m > 0.1, False)
-    cand_convveto_ok = ak.fill_none(candidate.e1.conversionVeto & candidate.e2.conversionVeto, False)
-    cand_good        = ak.fill_none(candidate.isGood, False)
+    # (3)-(9) The v15acr good-vertex sub-cuts (defineGoodLptVertices, ele_id
+    # 'dR'), one category each. Checked in the order listed in
+    # _resNotVtxReasons and each candidate is assigned only to the first
+    # sub-cut it fails, keeping these categories exclusive. Keep the formulas
+    # below in sync with defineGoodLptVertices' v15acr branch.
+    c = candidate
+    _subcuts = [
+        c.refit_m > 0.1,                                                    # mass
+        c.e1.conversionVeto & c.e2.conversionVeto,                          # conversion veto
+        c.e1.passID & c.e2.passID,                                          # electron ID
+        np.maximum(c.e1.miniRelIsoEleCorr, c.e2.miniRelIsoEleCorr) < 0.9,   # miniIso
+        c.reduced_chi2 < 15,                                                # chi2
+        np.minimum(np.abs(c.e1.refit_dxy), np.abs(c.e2.refit_dxy)) > 0.001, # min refit dxy
+        np.minimum(np.log10(np.abs(c.e1.dxy / c.e1.dz)),
+                   np.log10(np.abs(c.e2.dxy / c.e2.dz))) > -2,              # log10(dxy/dz)
+    ]
+    reason_subcuts = []
+    passed_prev = has_cand
+    for sc in _subcuts:
+        sc_ok = ak.fill_none(sc, False)
+        reason_subcuts.append(passed_prev & ~sc_ok)
+        passed_prev = passed_prev & sc_ok
+    cand_good = ak.fill_none(candidate.isGood, False)
 
-    reason_mass     = has_cand & ~cand_mass_ok
-    reason_convVeto = has_cand & cand_mass_ok & ~cand_convveto_ok
-    reason_other    = has_cand & ~cand_good & cand_mass_ok & cand_convveto_ok
-
-    # (6)-(7) The candidate is a genuinely good vertex (so nGoodLptVtx>0 for
+    # (10)-(11) The candidate is a genuinely good vertex (so nGoodLptVtx>0 for
     # this event) -- but the event still landed in cat_sep, which by
     # computeMergedCatVars's definition can only mean either (6) it lost the
     # min-chi2 selectBestLptVertex race to some other good vertex in the
-    # event, or (7) it *was* selected but sel_lptvtx.isMatched came back
+    # event, or (11) it *was* selected but sel_lptvtx.isMatched came back
     # False -- i.e. the ntuple-level, dR-only/unique AllLowPt truth-match
     # assignment (ElectronSkimmer.cc) disagreed with the charge+pT-filtered
     # gen-match used to define ge_reco/gp_reco/cat_sep here.
@@ -343,8 +357,8 @@ def _fillResNotVtxReasons(hists, events, cat_sep, ge_reco, gp_reco, ge_idx, gp_i
     reason_wrongVtx  = has_cand & cand_good & ~is_sel
     reason_truthDiff = has_cand & cand_good & is_sel
 
-    _masks = [reason_dr, reason_noCand, reason_mass, reason_convVeto,
-              reason_other, reason_wrongVtx, reason_truthDiff]
+    _masks = [reason_dr, reason_noCand, *reason_subcuts,
+              reason_wrongVtx, reason_truthDiff]
     for reason, mask in zip(_resNotVtxReasons, _masks):
         n = ak.sum(mask)
         if n > 0:
@@ -489,6 +503,7 @@ def make_histograms():
     # (mirroring mele_pt/mpho_pt), a different quantity than the pair's own
     # pt/eta/phi, so reusing that bare name here would collide with it.
     histograms['res_ee_dr']      = Hist(samp, cut, ee_dr,    storage=_STORAGE)
+    histograms['res_ee_dr_log']  = Hist(samp, cut, ee_dr_log, storage=_STORAGE)
     histograms['res_ee_sign']    = Hist(samp, cut, vtx_sign, storage=_STORAGE)
     histograms['res_ee_eleDphi'] = Hist(samp, cut, _eleDphi, storage=_STORAGE)
     histograms['res_ee_mass']    = Hist(samp, cut, vtx_mass, storage=_STORAGE)
@@ -519,6 +534,7 @@ def make_histograms():
     histograms['vtx_eta']     = Hist(samp, cut, ele_eta,   storage=_STORAGE)
     histograms['vtx_phi']     = Hist(samp, cut, ele_phi,   storage=_STORAGE)
     histograms['vtx_dr']      = Hist(samp, cut, ee_dr,     storage=_STORAGE)
+    histograms['vtx_dr_log']  = Hist(samp, cut, ee_dr_log, storage=_STORAGE)
     histograms['vtx_min_dxy'] = Hist(samp, cut, dxy_fine,  storage=_STORAGE)
 
     # ── Vertexed category: every other vertex-level scalar field stored on
@@ -674,6 +690,7 @@ def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
         res_dphi_met  = _dphi(res_pair.phi, events.PFMET.phi[_cat_sep])
 
         hists['res_ee_dr'     ].fill(samp=samp, cut=cut, dr=res_dr_ll,          weight=w_res)
+        hists['res_ee_dr_log' ].fill(samp=samp, cut=cut, dr=res_dr_ll,          weight=w_res)
         hists['res_ee_sign'   ].fill(samp=samp, cut=cut, sign=res_sign_ll,      weight=w_res)
         hists['res_ee_eleDphi'].fill(samp=samp, cut=cut, eleDphi=res_dphi_ll,   weight=w_res)
         hists['res_ee_mass'   ].fill(samp=samp, cut=cut, mass=res_pair.mass,    weight=w_res)
@@ -722,6 +739,7 @@ def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
         hists['vtx_eta'    ].fill(samp=samp, cut=cut, eta=v.refit_eta,                     weight=w_vtx)
         hists['vtx_phi'    ].fill(samp=samp, cut=cut, phi=v.refit_phi,                     weight=w_vtx)
         hists['vtx_dr'     ].fill(samp=samp, cut=cut, dr=v.refit_dR,                        weight=w_vtx)
+        hists['vtx_dr_log' ].fill(samp=samp, cut=cut, dr=v.refit_dR,                        weight=w_vtx)
         hists['vtx_min_dxy'].fill(samp=samp, cut=cut,
                                    dxy=np.minimum(np.abs(v.e1_refit_dxy), np.abs(v.e2_refit_dxy)), weight=w_vtx)
 

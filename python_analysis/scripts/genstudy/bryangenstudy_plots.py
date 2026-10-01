@@ -42,11 +42,11 @@ size = (16, 12)
 sel_label = 'prevtx'
 
 # Requested plots, one entry per variable. 'log_variables'/'doLogx' are only
-# set for lxy, which has a dedicated log-spaced-binning histogram (matching
+# set for dR and lxy, which have dedicated log-spaced-binning histograms (matching
 # the convention in genele_vxy_plots.py); the other variables reuse their
 # linear histogram with just the y-axis switched to log scale.
 VARIABLES = [
-    dict(variables=['gen_diele_dR'], log_variables=None, cut='cut8',
+    dict(variables=['gen_diele_dR'], log_variables=['gen_diele_dR_log'], cut='cut8',
          title=r'Gen EE $\Delta R$', label='gen-ee-dr', ls=['-']),
     dict(variables=['gen_diele_pt'], log_variables=None, cut='cut1',
          title=r'Gen EE $p_T$', label='gen-ee-pt', ls=['-']),

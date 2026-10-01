@@ -20,6 +20,7 @@ lxy_log      = Regular(60, 1e-4, 100, name="lxy",    label="$L_{xy}$ [cm]", tran
 vz_coarse    = Regular(50, 0, 50,     name="vz",     label="$v_{z}$ [cm]")
 ee_dr        = Regular(50, 0, 1,      name='dr',     label=r"$\Delta R$")
 ee_dr_narrow = Regular(40, 0, 0.2,    name='dr',     label=r"$\Delta R$")
+ee_dr_log    = Regular(50, 1e-5, 1,   name='dr',     label=r"$\Delta R$", transform=transform.log)
 ee_mass      = Regular(40, 0, 4,      name="mass",   label="$m_{e^+e^-}$ [GeV]")
 ee_ctau      = Regular(50, 0, 1000,   name="ctau",   label=r"$c\tau$ [mm]")
 ee_ctau_pr   = Regular(50, 0, 500,    name="ctau",   label=r"$c\tau$ [mm]")
@@ -50,6 +51,7 @@ def make_histograms():
         "gen_leading_ele_vz" :       Hist(samp, cut, vz_coarse,     storage=hist.storage.Weight()),
         "gen_subleading_ele_vz" :    Hist(samp, cut, vz_coarse,     storage=hist.storage.Weight()),
         "gen_diele_dR" :             Hist(samp, cut, ee_dr,         storage=hist.storage.Weight()),
+        "gen_diele_dR_log" :         Hist(samp, cut, ee_dr_log,     storage=hist.storage.Weight()),
         "gen_diele_mass" :           Hist(samp, cut, ee_mass,       storage=hist.storage.Weight()),
         "gen_diele_pt" :             Hist(samp, cut, ele_pt,        storage=hist.storage.Weight()),
         "gen_diele_pt_vs_dr" :       Hist(samp, cut, ele_pt, ee_dr_narrow, storage=hist.storage.Weight()),
@@ -156,7 +158,8 @@ def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
         hists["genele_chi2_voffset_z_log" ].fill(samp = samp, cut = cut, voffset_z  = genele_chi2_voffset_z,  weight = wgt)
 
         hists["gen_diele_dR"           ].fill(samp = samp, cut = cut, dr = events.genEE.dr, weight = wgt)
-        hists["gen_diele_mass"         ].fill(samp = samp, cut = cut, mass = events.genEE.mass, weight = wgt)
+        hists["gen_diele_dR_log"       ].fill(samp = samp, cut = cut, dr = events.genEE.dr, weight = wgt)
+        hists["gen_diele_mass"       ].fill(samp = samp, cut = cut, mass = events.genEE.mass, weight = wgt)
         hists["gen_diele_pt"           ].fill(samp = samp, cut = cut, pt = events.genEE.pt, weight = wgt)
         hists["gen_diele_pt_vs_dr"     ].fill(samp = samp, cut = cut, pt = events.genEE.pt, dr = events.genEE.dr, weight = wgt)
         ctau_lab = np.sqrt(events.genEE.vxy**2 + events.genEE.vz**2) * 10
