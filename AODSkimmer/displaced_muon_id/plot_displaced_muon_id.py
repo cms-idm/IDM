@@ -33,11 +33,12 @@ if len(d["genPt"]) == 0:
     raise RuntimeError("No accepted signal gen rows")
 d["absD0"] = np.abs(d["genD0"])
 VARS = [
-    ("pt", "genPt", "gen p_{T} [GeV]", np.array([0, .5, 1, 2, 3, 4, 5, 7.5, 10, 15, 20, 30, 50, 70, 100.]), False),
+    ("pt", "genPt", "gen p_{T} [GeV]", np.array([0, .5, 1, 2, 3, 4, 5, 7.5, 10, 15, 20, 25, 30, 50, 70, 100.]), False),
     ("eta", "genEta", "gen #eta", np.linspace(-2.4, 2.4, 17), False),
-    ("lxy", "genVxy", "gen L_{xy} [cm]", np.array([.01, .03, .1, .3, 1, 3, 10, 20, 30, 45, 60, 80, 110, 200, 300, 500, 740.]), True),
-    ("d0", "absD0", "gen |d_{0}| [cm] (straight line to origin)", np.array([.001, .003, .01, .03, .1, .3, 1, 3, 10, 20, 40, 70, 110, 200, 400, 740.]), True),
+    ("lxy", "genVxy", "gen L_{xy} [cm]", np.array([0, .1, .3, 1, 3, 5, 10, 15, 20, 30, 40, 50, 60, 75, 80, 110, 200, 300, 500, 740.]), False),
+    ("d0", "absD0", "gen |d_{0}| [cm] (straight line to origin)", np.array([0, .1, .3, 1, 2, 3, 5, 7.5, 10, 15, 20, 25, 30, 40, 70, 110, 200, 400, 740.]), False),
 ]
+PLOT_MAX = {"pt": 30., "eta": 2.4, "lxy": 75., "d0": 30.}
 colors = [ROOT.kAzure+1, ROOT.kGreen+2, ROOT.kRed+1, ROOT.kMagenta+1, ROOT.kOrange+7,
           ROOT.kCyan+2, ROOT.kViolet+1]
 allsel = np.ones(len(d["genPt"]), dtype=bool)
@@ -132,6 +133,7 @@ summary = {"definitions": {
     "outer_id": "CSC+DT>12; CSC>0 or DT>18; normalizedChi2<2.5; pt>0 and ptError/pt<1",
     "mixed_single_id": "inclusive requirement; no veto on passing the other ID",
     "deduplication": "none; distinct reco objects remain distinct units",
+    "plot_axes": {"scale": "linear", "maxima": PLOT_MAX, "limits_are_data_cuts": False},
 }, "groups": {}}
 
 
@@ -183,11 +185,11 @@ def make(sel, label, group):
             legend = ROOT.TLegend(.12, .02, .97, .55)
             legend.SetNColumns(2); legend.SetTextSize(.080); legend.SetBorderSize(0); legend.SetFillStyle(0)
             top.cd()
-            fr = top.DrawFrame(edges[0], 0, edges[-1], 1.05)
+            fr = top.DrawFrame(edges[0], 0, PLOT_MAX[vname], 1.05)
             fr.GetYaxis().SetTitle("reco efficiency with ID")
             fr.GetXaxis().SetLabelSize(0)
             bottom.cd()
-            fb = bottom.DrawFrame(edges[0], 0, edges[-1], 1.05)
+            fb = bottom.DrawFrame(edges[0], 0, PLOT_MAX[vname], 1.05)
             fb.GetYaxis().SetTitle("ID efficiency | matched")
             fb.GetXaxis().SetTitle(xtitle); fb.GetXaxis().SetTitleSize(.07); fb.GetXaxis().SetLabelSize(.06)
             fb.GetXaxis().SetTitleOffset(1.3)
@@ -241,7 +243,7 @@ def make_matching_comparison(sel, label, group, report):
             pad = c.cd(panel)
             pad.SetLogx(logx); pad.SetGridy(); pad.SetLeftMargin(.13)
             pad.SetBottomMargin(.16); pad.SetTopMargin(.23)
-            fr = pad.DrawFrame(edges[0], 0, edges[-1], 1.05)
+            fr = pad.DrawFrame(edges[0], 0, PLOT_MAX[vname], 1.05)
             fr.GetXaxis().SetTitle(xtitle); fr.GetXaxis().SetTitleSize(.045); fr.GetXaxis().SetLabelSize(.04)
             fr.GetYaxis().SetTitle("reco efficiency"); fr.GetYaxis().SetTitleSize(.045)
             fr.GetYaxis().SetLabelSize(.04); fr.GetYaxis().SetTitleOffset(1.25)

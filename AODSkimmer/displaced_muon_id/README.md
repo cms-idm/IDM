@@ -43,8 +43,11 @@ The three requested sets are:
 All sets have pT (starting at zero), eta, Lxy and |d0| axes, per sample, per mass
 pair pooled over lifetime, per lifetime pooled over masses, and overall.
 Pooling is unweighted. Error bars are 68.27% Clopper-Pearson intervals; zero
-denominators have no point. Endpoint overflow/underflow is folded into end bins,
-including pT>=100 GeV and values below log-axis minima; canvases disclose this.
+denominators have no point. All plot axes are linear; pT is displayed to 30 GeV,
+|d0| to 30 cm, and Lxy to 75 cm. These are view limits only: the full-range
+histograms, JSON counts and ROOT rows retain tails without applying those cuts.
+Endpoint overflow/underflow of the stored histogram range is folded into end bins,
+including pT>=100 GeV; canvases disclose this. Plot limits coincide with bin edges.
 
 ## Running on LPC
 
