@@ -6,11 +6,13 @@
 #include <TTreeReader.h>
 #include <TTreeReaderValue.h>
 #include <TString.h>
+#include <TROOT.h>
 #include <Math/Vector4D.h>
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
@@ -118,7 +120,8 @@ void displaced_muon_id(const char* fileList,const char* outName,Long64_t maxEven
   std::ifstream input(fileList);
   if(!input) throw std::runtime_error("Cannot open file list");
   std::string line;
-  while(std::getline(input,line)) if(!line.empty()) chain.Add(line.c_str());
+  std::vector<std::string> sourceFiles;
+  while(std::getline(input,line)) if(!line.empty()) { chain.Add(line.c_str()); sourceFiles.push_back(line); }
   if(chain.GetNtrees()==0) throw std::runtime_error("Empty input chain");
   TTreeReader r(&chain);
   TTreeReaderValue<Bool_t> valid[2]={{r,"GenSigMuon_isValid"},{r,"GenSigAntiMuon_isValid"}};
@@ -277,6 +280,10 @@ void displaced_muon_id(const char* fileList,const char* outName,Long64_t maxEven
     throw std::runtime_error("TTreeReader stopped before end of input");
   out.cd(); tree.Write(); reco.Write();
   TTree totals("inputSummary","one row per processed chunk");
+  std::string revision=std::getenv("ID_STUDY_REVISION") ? std::getenv("ID_STUDY_REVISION") : "unspecified";
+  std::string rootVersion=gROOT->GetVersion();
+  totals.Branch("sourceFiles",&sourceFiles); totals.Branch("revision",&revision); totals.Branch("rootVersion",&rootVersion);
+  totals.Branch("maxEvents",&maxEvents);
   totals.Branch("events",&nEvents); totals.Branch("acceptedGen",&nAccepted); totals.Branch("propagatedGen",&nProp);
   totals.Fill(); totals.Write(); out.Close();
   std::cout<<"events="<<nEvents<<" acceptedGen="<<nAccepted<<" propagatedGen="<<nProp<<std::endl;

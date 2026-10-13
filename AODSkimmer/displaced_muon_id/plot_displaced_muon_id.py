@@ -256,6 +256,12 @@ summary["global_flag_audit"] = {"per_sample": audit, "overall": {
     k: sum(v[k] for v in audit.values()) for k in ["objects", "global_present", "global_present_flag_true", "global_present_flag_false", "global_flag_true_component_absent"]}}
 input_counts = ROOT.RDataFrame(f.Get("inputSummary")).AsNumpy(["events", "acceptedGen", "propagatedGen"])
 summary["input_counts"] = {k: int(v.sum()) for k, v in input_counts.items()}
+provenance = ROOT.RDataFrame(f.Get("inputSummary")).AsNumpy(["sourceFiles", "revision", "rootVersion", "maxEvents"])
+summary["provenance"] = {"input_files": sorted({str(p) for paths in provenance["sourceFiles"] for p in paths}),
+                         "revisions": sorted({str(p) for p in provenance["revision"]}),
+                         "root_versions": sorted({str(p) for p in provenance["rootVersion"]}),
+                         "chunk_event_limits": [int(p) for p in provenance["maxEvents"]],
+                         "input_root": os.path.abspath(args.input)}
 json_path = os.path.splitext(args.input)[0] + ".json"
 with open(json_path, "w") as out:
     json.dump(summary, out, indent=2, allow_nan=False)
