@@ -240,13 +240,14 @@ public:
         gemToken_(esConsumes()) {
     for (const auto& p : cfg.getParameter<std::vector<edm::ParameterSet>>("pairs"))
       pairs_.push_back({p.getParameter<std::string>("event"), p.getParameter<unsigned int>("A"),
-                        p.getParameter<unsigned int>("B"), p.getParameter<int>("genIndex")});
+                        p.getParameter<unsigned int>("B"), p.getParameter<unsigned int>("trackKey"),
+                        p.getParameter<int>("genIndex")});
   }
 
 private:
   struct Pair {
     std::string event;
-    unsigned int a, b;
+    unsigned int a, b, trackKey;
     int genIndex;
   };
 
@@ -291,6 +292,10 @@ private:
 
     for (const auto& pr : pairs_) {
       if (pr.event != id.str()) continue;
+      // run:lumi:event repeats across the signal samples: require the expected shared inner track
+      if (pr.a >= muons.size() || pr.b >= muons.size() || muons[pr.a].innerTrack().isNull() ||
+          muons[pr.a].innerTrack() != muons[pr.b].innerTrack() || muons[pr.a].innerTrack().key() != pr.trackKey)
+        continue;
       std::cout << std::setprecision(5) << "\n################ " << pr.event << "  displacedMuons A=" << pr.a
                 << " B=" << pr.b << " ################\n";
       if (pr.a >= muons.size() || pr.b >= muons.size()) {
