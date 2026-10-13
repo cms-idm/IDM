@@ -10,6 +10,9 @@
 <use name="CommonTools/UtilAlgos"/>
 
 <use name="DataFormats/TrackReco"/>
+<use name="DataFormats/MuonReco"/>
+<use name="DataFormats/MuonDetId"/>
+<use name="root"/>
 <use name="DataFormats/HLTReco"/>
 <use name="DataFormats/PatCandidates"/>
 <use name="DataFormats/HepMCCandidate"/>
@@ -55,4 +58,9 @@
 <use name="Geometry/Records"/>
 
 
+<use name="Geometry/DTGeometry"/>
+<use name="Geometry/CSCGeometry"/>
+<use name="Geometry/RPCGeometry"/>
+<use name="Geometry/GEMGeometry"/>
+<use name="TrackingTools/TrackAssociator"/>
 <flags EDM_PLUGIN="1"/>
