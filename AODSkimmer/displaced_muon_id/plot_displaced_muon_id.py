@@ -179,7 +179,7 @@ def make(sel, label, group):
             text.DrawLatex(.12, .89, f"#bf{{{label}}}   N_{{acc gen}} = {int(sel.sum())}")
             text.SetTextSize(.070)
             text.DrawLatex(.12, .75, "Same-charge St2 greedy 1-to-1; reco: select ID then match; ID: fixed baseline")
-            text.DrawLatex(.12, .63, "|#eta|<2.4, 0#leqL_{xy}<740 cm, |v_{z}|<960 cm; unweighted; edges folded")
+            text.DrawLatex(.12, .63, "|#eta|<2.4, 0#leqL_{xy}<740 cm, |v_{z}|<960 cm; no gen p_{T} cut; unweighted; edges folded")
             legend = ROOT.TLegend(.12, .02, .97, .55)
             legend.SetNColumns(2); legend.SetTextSize(.080); legend.SetBorderSize(0); legend.SetFillStyle(0)
             top.cd()
@@ -215,6 +215,56 @@ def make(sel, label, group):
             c.Close()
             report["sets"][setname][vname] = binreport
     summary["groups"][group] = report
+    make_matching_comparison(sel, label, group, report)
+
+
+def make_matching_comparison(sel, label, group, report):
+    """Six panels: baseline and each complete ID policy; any vs first-present component."""
+    modes = [("pre_id", "Before ID", matched, d["priorityIdx"] >= 0)] + [
+        (key, title, selected_idx[:, p] >= 0, priority_selected_idx[:, p] >= 0)
+        for p, (key, title) in enumerate(zip(summary["definitions"]["policy_order"],
+            ["All component IDs", "Hierarchy: mixed both", "Hierarchy: mixed tracker",
+             "Hierarchy: mixed DSA", "Hierarchy: mixed either"]))]
+    target = os.path.join(args.outdir, "matching_comparison", group)
+    os.makedirs(target, exist_ok=True)
+    report["matching_comparison"] = {}
+    for vname, branch, xtitle, edges, logx in VARS:
+        x = d[branch]
+        accepted = counts(x, sel, edges)
+        directory = numeric.mkdir(f"efficiencies/matching_comparison/{group}/{vname}", "", True)
+        store_hist(directory, "accepted_gen", accepted, edges)
+        c = ROOT.TCanvas("comparison", "", 1400, 1350)
+        c.Divide(2, 3, .001, .001)
+        keep = []
+        record = {"edges": edges.tolist(), "accepted_gen": accepted.tolist(), "policies": {}}
+        for panel, (key, title, any_match, priority_match) in enumerate(modes, 1):
+            pad = c.cd(panel)
+            pad.SetLogx(logx); pad.SetGridy(); pad.SetLeftMargin(.13)
+            pad.SetBottomMargin(.16); pad.SetTopMargin(.23)
+            fr = pad.DrawFrame(edges[0], 0, edges[-1], 1.05)
+            fr.GetXaxis().SetTitle(xtitle); fr.GetXaxis().SetTitleSize(.045); fr.GetXaxis().SetLabelSize(.04)
+            fr.GetYaxis().SetTitle("reco efficiency"); fr.GetYaxis().SetTitleSize(.045)
+            fr.GetYaxis().SetLabelSize(.04); fr.GetYaxis().SetTitleOffset(1.25)
+            text = ROOT.TLatex(); text.SetNDC(); text.SetTextSize(.034)
+            text.DrawLatex(.13, .95, label)
+            text.DrawLatex(.13, .90, title + "; same charge, St2, no gen p_{T} cut")
+            text.DrawLatex(.13, .85, "Unweighted; first present G#rightarrowI#rightarrowO; edges folded")
+            legend = ROOT.TLegend(.15, .65, .70, .76)
+            legend.SetBorderSize(0); legend.SetFillStyle(0); legend.SetTextSize(.032)
+            record["policies"][key] = {}
+            for match_sel, name, suffix, color, marker in [
+                    (any_match, "Any compatible component", "any", ROOT.kAzure+1, 20),
+                    (priority_match, "First present component", "priority", ROOT.kRed+1, 24)]:
+                k = counts(x, sel & match_sel, edges)
+                store_hist(directory, key+"_"+suffix, k, edges)
+                record["policies"][key][suffix] = k.tolist()
+                g = graph(k, accepted, edges, logx)
+                g.SetMarkerColor(color); g.SetLineColor(color); g.SetMarkerStyle(marker); g.SetMarkerSize(.65)
+                g.Draw("P same"); legend.AddEntry(g, name, "p"); keep.append(g)
+            legend.Draw(); keep.append(legend)
+        c.SaveAs(os.path.join(target, f"matching_vs_{vname}.png"))
+        c.Close()
+        report["matching_comparison"][vname] = record
 
 
 def fmt(v):

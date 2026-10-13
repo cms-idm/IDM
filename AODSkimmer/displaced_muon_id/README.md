@@ -83,6 +83,15 @@ match indices, and all numerator/denominator histograms. The JSON contains defin
 grouped binned counts, any-vs-priority count comparisons, and a per-sample/overall
 audit of global-component presence versus isGlobal. It is also embedded in ROOT.
 Priority matching has no fallback if the first present component fails propagation,
-charge or dR. No new comparison plots are made for the follow-up question yet.
+charge or dR. `matching_comparison` adds six-panel any-versus-priority reco-efficiency
+plots (pre-ID and the five complete ID policies), with all grouping/x-axis breakdowns.
+Changing the compatible pairs can change greedy assignments; per-gen priority-only
+and any-only counts are retained rather than assuming a pointwise subset relation.
 The plotting log contains pooled counts and efficiencies. Validate input completion
 before merging; a partial failed job must not enter the results.
+
+The saved `events.jdl` and `plots.jdl` in the actual run directory are the exact
+Condor submissions; reproduce with `condor_submit events.jdl`, verify successful
+completion, merge, then `condor_submit plots.jdl`. `condor_displaced_muon_id.sh`
+uses the CVMFS CMSSW_13_0_13 runtime on EL8 and transferred inputs; submit with a
+valid user-created CMS proxy. The run's logs record the source revisions actually used.
