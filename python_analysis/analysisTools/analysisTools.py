@@ -4,13 +4,6 @@ from coffea.nanoevents import NanoEventsFactory, NanoAODSchema, BaseSchema
 from mySchema import MySchema
 from coffea import processor
 
-#from coffea.dataset_tools import (
-#    apply_to_fileset,
-#    max_chunks,
-#    preprocess,
-#)
-#import dask
-
 import uproot
 import awkward as ak
 #import vector

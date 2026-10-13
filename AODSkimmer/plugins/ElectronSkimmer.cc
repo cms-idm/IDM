@@ -1437,9 +1437,11 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          nt.genMass_.push_back(genParticle.mass());
 
          if (isSignal) {
-            if ((abs(genParticle.pdgId()) == 11) && (motherID == 1000023)) {
+            if ((abs(genParticle.pdgId()) == 11) && (motherID == 1000023)) 
+            {
                // Recording basic info
-               if (genParticle.pdgId() == 11) {
+               if (genParticle.pdgId() == 11) 
+               {
                   gen_ele_p4 = genParticle.p4();
                   nt.genEleCharge_ = genParticle.charge();
                   nt.genEleMotherID_ = motherID;
@@ -1594,7 +1596,8 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
             nt.genPosMatchIdxLocal_ = iTarg_p;
          }
 
-         for (int iv = 0; iv < nt.nvtx_; iv++) {
+         for (int iv = 0; iv < nt.nvtx_; iv++) 
+         {
             if (nt.vtx_e1_type_[iv] == mType_e && nt.vtx_e1_idx_[iv] == iTarg_e) {
                nt.vtx_e1_isMatched_[iv] = true;
                nt.vtx_e1_matchType_[iv] = -1;

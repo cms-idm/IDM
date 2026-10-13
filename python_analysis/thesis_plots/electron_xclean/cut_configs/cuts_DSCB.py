@@ -4,28 +4,32 @@ import sys
 
 import analysisSubroutines as routines
 
-
-
-def cut1(events,info):
-    name = "cut1"
-    desc = r"Pass $\vec{p}_T^{miss}$ Filters"
+def cut0(events,info):
+    name = "cut0"
+    desc = "Dummy cut"
     plots = True
-    cut = events.METFiltersFailBits == 0
-    return events[cut], name, desc, plots
+    return events, name, desc, plots
+
+# def cut1(events,info):
+#     name = "cut1"
+#     desc = r"Pass $\vec{p}_T^{miss}$ Filters"
+#     plots = True
+#     cut = events.METFiltersFailBits == 0
+#     return events[cut], name, desc, plots
 
 # def cut2(events,info):
 #     name = "cut2"
-#     desc = "Lxy cut0"
+#     desc = "dR cut0"
 #     plots = True
-#     cut = (events.GenEle.vxy < 1) 
+#     cut = (events.genEE.dr > 0.01) & (events.genEE.dr < 0.1)
 #     return events[cut], name, desc, plots
 
 
 # def cut2(events,info):
 #     name = "cut2"
-#     desc = "Lxy cut0"
+#     desc = "dR cut0"
 #     plots = True
-#     cut = ((events.GenEle.vxy > 0) & (events.GenEle.vxy <1)) | ((events.GenPos.vxy >0)) & (events.GenPos.vxy <1) )
+#     cut = (events.genEE.dr > 0.01) & (events.genEE.dr < 0.1)
 #     return events[cut], name, desc, plots
 
 

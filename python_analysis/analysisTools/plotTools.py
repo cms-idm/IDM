@@ -511,7 +511,7 @@ def plot_signal_1D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
     # get signal point info
     si = utils.get_signal_point_dict(sig_histo)
     samp_df = si[(si.m1 == m1) & (si.delta == delta) & (si.ctau == ctau)]
-    print (samp_df)
+    # print (samp_df)
     
     samp = samp_df.name[0]
 
@@ -573,7 +573,8 @@ def plot_signal_1D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
         plt.tight_layout()
         plt.savefig(f"{style_dict['outDir']}/{style_dict['outName']}")
         print(f"Saved: {style_dict['outDir']}/{style_dict['outName']}")
-    return count, edges
+    return histo
+    # return count, edges
     # return count, edges, yerror
 
 
@@ -961,7 +962,6 @@ def plot_signal_2D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
     samp_df = si[(si.m1 == m1) & (si.delta == delta) & (si.ctau == ctau)]
     
     samp = samp_df.name[0]
-    print (samp)
 
     m1 = samp_df.m1[0]
     dmchi = samp_df.dmchi[0]
@@ -1011,11 +1011,11 @@ def plot_signal_2D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
         plt.tight_layout()
         plt.savefig(f"{style_dict['outDir']}/{style_dict['outName']}")
         print(f"Saved: {style_dict['outDir']}/{style_dict['outName']}")
-    # count = histo.values()
-    # edges0 = histo.axes[0].edges
-    # edges1 = histo.axes[1].edges
-    # return count, edges0, edges1
-    return histo
+    count = histo.values()
+    edges0 = histo.axes[0].edges
+    edges1 = histo.axes[1].edges
+    return count, edges0, edges1
+    # return histo
 
 
 def plot_signal_2D_match(sig_histo, m1, delta, ctau, plot_dict, style_dict,match_type='L', passID=1):

@@ -33,23 +33,26 @@ class myHisto:
 
         
         #For Resolution studies
-        self.Res_LPT = self.parse_axis(('Res_LPT',1000,-10,10))  #-0.5-0.5
-        self.Res_GED = self.parse_axis(('Res_GED',1000,-10,10)) 
+        self.Res_LPT = self.parse_axis(('Res_LPT',500,-1,1))  #-0.5-0.5
+        self.Res_GED = self.parse_axis(('Res_GED',500,-1,1)) 
         
         self.Gen_pt = self.parse_axis(('Gen_pt',[0,4,5,6,7,8,9,10,11,12,13,14,15,16,17,22,30])) 
         
-        self.Gen_dxy_res = self.parse_axis(('Gen_dxy_res',[0,4,5,6,7,8,9,10,11,12,13,14,15,16,17,22,30])) #Gen_pt_FLAT in this case
+        self.Gen_dxy_res = self.parse_axis(('Gen_dxy_res',[0,2,5,10])) #Gen_vxy_FLAT in this case
 
-        self.Gen_vxy = self.parse_axis(('Gen_vxy',[0,1,3,6,15])) 
+        self.Gen_vxy = self.parse_axis(('Gen_vxy',[0,3,8,30])) 
         
         self.Gen_vxy_FLAT = self.parse_axis(('Gen_vxy_FLAT',100,0,10)) 
         self.GED_dxy_flat = self.parse_axis(('GED_dxy_flat',500,-3,3)) 
         self.Lpt_dxy_flat = self.parse_axis(('Lpt_dxy_flat',500,-3,3)) 
+        
+        self.lxy = self.parse_axis(('lxy',[0,3,6,15]))  #Lxy 10, 100
+
 
 
         
         #For Eff studies
-        self.vxy1 = self.parse_axis(('vxy',[0,1,3,6,10,15]))  #Lxy 10, 100
+        self.vxy1 = self.parse_axis(('vxy',[0,3,8,30]))  #Lxy 10, 100
         self.ele_pt = self.parse_axis(("pt",[0,4,5,6,7,8,9,10,11,12,13,14,15,16,17,22,30])) 
         
         
@@ -104,6 +107,7 @@ def make_histograms():
     # h.make('Lpt_vxy_flat', 'Lpt_vxy_flat')
     
     h.make('dxy_gen','dxy_gen')
+    h.make('lxy','lxy')
     h.make('GED_dxy_flat', 'GED_dxy_flat')
     h.make('Lpt_dxy_flat', 'Lpt_dxy_flat')
     
@@ -177,8 +181,8 @@ def fillHistos(events,h,samp,cut,info,sum_wgt=1):
         
         print("GEN      GED       LPT       -GEN")
 
-        # for g, ged, lpt in zip(    Gen_dxy_FLAT,    GED_dxy_flat,    Lpt_dxy_flat):
-        #     print(g, ged, lpt, -g)
+        for g, ged, lpt in zip(    Gen_dxy_FLAT,    GED_dxy_flat,    Lpt_dxy_flat):
+            print(g, ged, lpt, -g)
         
 
         res_GED = (GED_dxy_flat - Gen_dxy_FLAT) / (Gen_dxy_FLAT)
@@ -191,6 +195,8 @@ def fillHistos(events,h,samp,cut,info,sum_wgt=1):
         h.fill("res_LPT_gen", Res_LPT = res_LPT)
         h.fill("DXY", DXY =DXY)
         
+        h.fill('lxy', lxy=Gen_vxy_FLAT) #Gen vxy flat
+        
 
         # h.fill("gen_ele_vxy", Gen_vxy_FLAT=Gen_vxy_FLAT)
         h.fill("GED_dxy_flat", GED_dxy_flat=GED_dxy_flat)
@@ -202,9 +208,9 @@ def fillHistos(events,h,samp,cut,info,sum_wgt=1):
 
 
 
-        h.fill("res_GED_gen_ptbin", Gen_dxy_res=Gen_pt_FLAT, Res_GED=res_GED) #changed to dxy IMP
+        h.fill("res_GED_gen_ptbin", Gen_dxy_res=Gen_vxy_FLAT, Res_GED=res_GED) #changed to vxy IMP
 
-        h.fill("res_LPT_gen_ptbin",    Gen_dxy_res=Gen_pt_FLAT,    Res_LPT=res_LPT) #changed to dxy IMP
+        h.fill("res_LPT_gen_ptbin",    Gen_dxy_res=Gen_vxy_FLAT,    Res_LPT=res_LPT) #changed to vxy IMP
         
 
 
