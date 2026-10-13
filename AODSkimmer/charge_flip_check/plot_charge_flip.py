@@ -8,7 +8,7 @@ mass points, per mass point pooled over lifetimes, per sample), one canvas with
           (the other gen muon's match) has the same charge as this reco
   bottom: sign-off St2 matching efficiency = N(sign-off match) / N(accepted signal gen)
 for displacedMuons inner tracks, global tracks and DSA. Intervals: 68.27% Clopper-Pearson.
-Underflow/overflow are clamped into the first/last bin.
+Linear axes; entries outside the x range (pT 5-30 GeV, Lxy 0-75 cm, |d0| 0-30 cm) are not shown.
 Usage: python3 plot_charge_flip.py out.root plots_dir
 """
 import os
@@ -33,19 +33,16 @@ COLL = [("in", "inner track (dR<0.06)", ROOT.kAzure + 1),
         ("gl", "global track (dR<0.06)", ROOT.kRed + 1),
         ("dsa", "DSA (dR<0.10)", ROOT.kGreen + 2)]
 VARS = [
-    ("pt", "genPt", "gen p_{T} [GeV]", np.array([5, 7.5, 10, 12.5, 15, 20, 25, 30, 40, 50, 70, 100.]), False),
+    ("pt", "genPt", "gen p_{T} [GeV]", np.linspace(5, 30, 11), False),
     ("eta", "genEta", "gen #eta", np.linspace(-2.4, 2.4, 17), False),
-    ("lxy", "genVxy", "gen L_{xy} [cm]",
-     np.array([0.01, 0.03, 0.1, 0.3, 1, 3, 10, 20, 30, 45, 60, 80, 110, 200, 300, 500, 740.]), True),
-    ("d0", "absD0", "gen |d_{0}| [cm]  (|v_{x}sin#phi - v_{y}cos#phi|)",
-     np.array([0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1, 3, 10, 20, 40, 70, 110, 200, 400, 740.]), True),
+    ("lxy", "genVxy", "gen L_{xy} [cm]", np.linspace(0, 75, 16), False),
+    ("d0", "absD0", "gen |d_{0}| [cm]  (|v_{x}sin#phi - v_{y}cos#phi|)", np.linspace(0, 30, 16), False),
 ]
 CL = 0.682689492
 
 
 def counts(x, sel, edges):
-    xi = np.clip(x[sel], edges[0], np.nextafter(edges[-1], -np.inf))
-    return np.histogram(xi, bins=edges)[0]
+    return np.histogram(x[sel], bins=edges)[0]
 
 
 def graph(k, n, edges, logx):
@@ -75,10 +72,8 @@ def make(sel, label, path):
         bot.SetTopMargin(0.03); bot.SetBottomMargin(0.30); bot.SetLeftMargin(0.12); bot.SetRightMargin(0.04)
         for p in (top, bot):
             p.SetLogx(logx); p.SetGridy(); p.Draw()
-        top.cd(); top.SetLogy()
-        fr = top.DrawFrame(edges[0], 1e-4, edges[-1], 20.0)  # headroom for the legend
-        fr.GetYaxis().SetTitle("fraction of sign-off matches"); fr.GetYaxis().SetTitleSize(0.05)
-        fr.GetYaxis().SetTitleOffset(1.1); fr.GetXaxis().SetLabelSize(0)
+        top.cd()
+        tops = []  # this variable's top-panel graphs
         leg = ROOT.TLegend(0.14, 0.66, 0.95, 0.86); leg.SetNColumns(2); leg.SetBorderSize(0)
         leg.SetFillStyle(0); leg.SetTextSize(0.032)
         effs = []
@@ -91,15 +86,23 @@ def make(sel, label, path):
             g2 = graph(counts(x, ss, edges), n, edges, logx)
             for g, ms in ((g1, 20), (g2, 24)):
                 g.SetMarkerStyle(ms); g.SetMarkerColor(color); g.SetLineColor(color); g.SetMarkerSize(1.0)
-                g.Draw("P same"); keep.append(g)
+                keep.append(g); tops.append(g)
             leg.AddEntry(g1, f"{name}: q_{{reco}} #neq q_{{gen}}", "p")
             leg.AddEntry(g2, "  same-sign reco pair", "p")
             effs.append((graph(n, counts(x, sel, edges), edges, logx), color))
+        # linear y: headroom above the largest central value for the legend
+        ymax = max([g.GetY()[i] for g in tops for i in range(g.GetN())] + [0.0])
+        ymax = min(1.05, max(0.01, 1.7 * ymax))
+        fr = top.DrawFrame(edges[0], 0, edges[-1], ymax)
+        fr.GetYaxis().SetTitle("fraction of sign-off matches"); fr.GetYaxis().SetTitleSize(0.05)
+        fr.GetYaxis().SetTitleOffset(1.1); fr.GetXaxis().SetLabelSize(0)
+        for g in tops:
+            g.Draw("P same")
         leg.Draw()
         t = ROOT.TLatex(); t.SetNDC(); t.SetTextSize(0.033)
         t.DrawLatex(0.12, 0.95, f"#bf{{{label}}}   N_{{acc gen}} = {int(sel.sum())}")
         t.SetTextSize(0.026)
-        t.DrawLatex(0.12, 0.90, "signal gen #mu, station 2, greedy 1-to-1, charge NOT required, unweighted")
+        t.DrawLatex(0.12, 0.90, "signal gen #mu, station 2, greedy 1-to-1, charge NOT required, unweighted, gen p_{T}>5 GeV")
         bot.cd()
         fb = bot.DrawFrame(edges[0], 0, edges[-1], 1.05)
         fb.GetXaxis().SetTitle(xtitle); fb.GetXaxis().SetTitleSize(0.10); fb.GetXaxis().SetLabelSize(0.09)
