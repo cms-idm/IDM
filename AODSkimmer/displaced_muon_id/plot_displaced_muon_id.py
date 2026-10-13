@@ -24,11 +24,17 @@ f = ROOT.TFile.Open(args.input, "UPDATE")
 if not f or f.IsZombie() or not f.Get("genMuons"):
     raise RuntimeError("Missing input genMuons tree")
 cols = ["genPt", "genEta", "genVxy", "genVz", "genD0", "genProp", "mchi", "dmchi", "ctau",
-        "objIdx", "objMask", "objIdBits", "objSelectedIdx", "objSelectedMask", "priorityIdx",
-        "prioritySelectedIdx", "prioritySelectedMask"]
+        "objIdx", "objMask", "objIdBits", "priorityIdx"]
 for name in ("inner", "outer", "global"):
     cols += [name + "_idx", name + "_pass", name + "_selectedIdx"]
-d = ROOT.RDataFrame(f.Get("genMuons")).AsNumpy(cols)
+frame = ROOT.RDataFrame(f.Get("genMuons"))
+# Flatten in C++: avoid creating millions of Python RVec proxy objects.
+for branch in ("objSelectedIdx", "objSelectedMask", "prioritySelectedIdx"):
+    for policy in range(5):
+        name = f"{branch}_{policy}"
+        frame = frame.Define(name, f"{branch}[{policy}]")
+        cols.append(name)
+d = frame.AsNumpy(cols)
 if len(d["genPt"]) == 0:
     raise RuntimeError("No accepted signal gen rows")
 d["absD0"] = np.abs(d["genD0"])
@@ -69,10 +75,9 @@ sets = {
     "hierarchy": [(matched, matched & (fixed | ((mask == 3) & passed)),
                    "Mixed objects: " + label, key) for passed, label, key in mixed_rules],
 }
-# NumPy represents ROOT fixed-size array branches as an object array of arrays.
-selected_idx = np.stack(d["objSelectedIdx"])
-selected_mask = np.stack(d["objSelectedMask"])
-priority_selected_idx = np.stack(d["prioritySelectedIdx"])
+selected_idx = np.column_stack([d[f"objSelectedIdx_{p}"] for p in range(5)])
+selected_mask = np.column_stack([d[f"objSelectedMask_{p}"] for p in range(5)])
+priority_selected_idx = np.column_stack([d[f"prioritySelectedIdx_{p}"] for p in range(5)])
 reco_sets = {
     "components": [d[n+"_selectedIdx"] >= 0 for n in ("inner", "outer", "global")],
     "all_components": [selected_idx[:, 0] >= 0] +
