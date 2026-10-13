@@ -251,8 +251,9 @@ def make_matching_comparison(sel, label, group, report):
             text.DrawLatex(.13, .95, label)
             text.DrawLatex(.13, .90, title + "; same charge, St2, no gen p_{T} cut")
             text.DrawLatex(.13, .85, "Unweighted; first present G#rightarrowI#rightarrowO; edges folded")
-            legend = ROOT.TLegend(.15, .65, .70, .76)
-            legend.SetBorderSize(0); legend.SetFillStyle(0); legend.SetTextSize(.032)
+            legend = ROOT.TLegend(.13, .775, .95, .825)
+            legend.SetNColumns(2)
+            legend.SetBorderSize(0); legend.SetFillStyle(0); legend.SetTextSize(.030)
             record["policies"][key] = {}
             for match_sel, name, suffix, color, marker in [
                     (any_match, "Any compatible component", "any", ROOT.kAzure+1, 20),
