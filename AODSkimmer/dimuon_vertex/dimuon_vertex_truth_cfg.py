@@ -5,7 +5,8 @@
 Input: Run3Summer22EE MiniAOD of the 2026-09-23 iDMmu production
 (AODSkimmer/fileLists/signal/2022EE/iDMmu/*_flist.txt), which keeps displacedMuons and the
 displaced track collections. flist may also be a single ROOT file.
-Station-2 propagation uses the ntuplizer's genMuonPropagatorSt2 settings.
+Station-2 and station-1 propagation use the ntuplizer's genMuonPropagatorSt2/St1 settings.
+Fallback for gen muons failing station 2: inner tracks at the ECAL inner boundary, global/outer at station 1.
 """
 import FWCore.ParameterSet.Config as cms
 from FWCore.ParameterSet.VarParsing import VarParsing
@@ -30,6 +31,7 @@ process.load("TrackingTools.TransientTrack.TransientTrackBuilder_cfi")
 process.load("TrackPropagation.SteppingHelixPropagator.SteppingHelixPropagatorAlong_cfi")
 process.load("TrackPropagation.SteppingHelixPropagator.SteppingHelixPropagatorOpposite_cfi")
 process.load("TrackPropagation.SteppingHelixPropagator.SteppingHelixPropagatorAny_cfi")
+process.load("TrackingTools.TrackAssociator.DetIdAssociatorESProducer_cff")  # ECAL inner boundary
 
 if options.flist.endswith(".root"):
     files = [options.flist]
@@ -49,7 +51,7 @@ process.dimuonVertexTruth = cms.EDAnalyzer(
     drInner=cms.double(0.06),
     drGlobal=cms.double(0.06),
     drOuter=cms.double(0.10),
-    # Same as genMuonPropagatorSt2 in scripts/ElectronNtuplizer_cfg.py.
+    # Same as genMuonPropagatorSt2 / genMuonPropagatorSt1 in scripts/ElectronNtuplizer_cfg.py.
     propagatorSt2=cms.PSet(
         useSimpleGeometry=cms.bool(True),
         useStation2=cms.bool(True),
@@ -63,4 +65,5 @@ process.dimuonVertexTruth = cms.EDAnalyzer(
         propagatorOpposite=cms.ESInputTag("", "SteppingHelixPropagatorOpposite"),
     ),
 )
+process.dimuonVertexTruth.propagatorSt1 = process.dimuonVertexTruth.propagatorSt2.clone(useStation2=False)
 process.p = cms.Path(process.dimuonVertexTruth)

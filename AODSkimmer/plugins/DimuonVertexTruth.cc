@@ -13,6 +13,12 @@
 // Matching: station-2 position eta/phi (same PropagateToMuon setup as the
 // ntuplizer), same charge, dR < 0.06 inner/global and < 0.10 outer, strict
 // one-to-one global-nearest greedy with compatible fallback, each type alone.
+// Fallback (second greedy pass, only gen muons whose station-2 propagation
+// failed, only tracks not taken in the station-2 pass, same charge and dR):
+//   inner         -> ECAL inner boundary (EcalDetIdAssociator volume, first
+//                    along-momentum crossing; reco from the track's reference state)
+//   global, outer -> muon station 1 (PropagateToMuon, useStation2=false)
+// Every match stores its surface and the gen/reco eta/phi there.
 //
 // Fits: KalmanVertexFitter(refit=true) for the 9 ordered combinations
 // (mu- type, mu+ type), index 3*typeMuMinus + typeMuPlus. No ID is applied;
@@ -20,6 +26,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
 #include <set>
 #include <tuple>
 #include <utility>
@@ -48,7 +55,14 @@
 #include "RecoVertex/VertexPrimitives/interface/TransientVertex.h"
 #include "TrackingTools/Records/interface/TransientTrackRecord.h"
 #include "TrackingTools/TransientTrack/interface/TransientTrackBuilder.h"
+#include "DataFormats/GeometrySurface/interface/Cylinder.h"
+#include "DataFormats/GeometrySurface/interface/Plane.h"
+#include "TrackingTools/GeomPropagators/interface/Propagator.h"
+#include "TrackingTools/Records/interface/DetIdAssociatorRecord.h"
+#include "TrackingTools/Records/interface/TrackingComponentsRecord.h"
+#include "TrackingTools/TrackAssociator/interface/DetIdAssociator.h"
 #include "TrackingTools/TrajectoryState/interface/FreeTrajectoryState.h"
+#include "TrackingTools/TrajectoryState/interface/TrajectoryStateTransform.h"
 
 #include "TMath.h"
 #include "TNamed.h"
@@ -61,19 +75,54 @@ constexpr int kNCombos = kNTypes * kNTypes;
 constexpr double kMuonMass = 0.1056583755;
 
 enum FitStatus { kNotMatched = 0, kSharedTrack = 1, kFitFailed = 2, kFitValid = 3 };
+enum MatchSurface { kNoMatch = 0, kStation2 = 1, kStation1Fallback = 2, kEcalFallback = 3 };
+enum EcalStatus { kEcalNotRun = 0, kEcalOk = 1, kEcalStartBeyond = 2, kEcalFailed = 3 };
 
-struct St2 {
+struct Pos {
   bool valid = false;
   float eta = -999.f;
   float phi = -999.f;
+  int status = 0;  // ECAL only: EcalStatus
 };
 
-St2 toSt2(const TrajectoryStateOnSurface& tsos) {
-  St2 out;
+Pos toPos(const TrajectoryStateOnSurface& tsos) {
+  Pos out;
   if (!tsos.isValid()) return out;
   out.valid = true;
   out.eta = tsos.globalPosition().eta();
   out.phi = tsos.globalPosition().phi();
+  return out;
+}
+
+// ECAL inner boundary, as in SharedTrackTrajectoryCheck.cc: barrel cylinder
+// rho = minR (|z| <= minZ) or endcap planes |z| = minZ (rho <= minR); first
+// along-momentum crossing.
+Pos toEcal(const FreeTrajectoryState& start, const Propagator& along, double minR, double minZ) {
+  Pos out;
+  out.status = kEcalFailed;
+  if (start.position().perp() >= minR || std::abs(start.position().z()) >= minZ) {
+    out.status = kEcalStartBeyond;
+    return out;
+  }
+  double bestPath = std::numeric_limits<double>::max();
+  auto consider = [&](const std::pair<TrajectoryStateOnSurface, double>& r, bool barrel) {
+    if (!r.first.isValid()) return;
+    const GlobalPoint p = r.first.globalPosition();
+    if (barrel ? std::abs(p.z()) > minZ : p.perp() > minR) return;
+    if (r.second < bestPath) {
+      bestPath = r.second;
+      out.valid = true;
+      out.status = kEcalOk;
+      out.eta = p.eta();
+      out.phi = p.phi();
+    }
+  };
+  const auto cylinder = Cylinder::build(minR, Cylinder::PositionType(0, 0, 0), Cylinder::RotationType());
+  consider(along.propagateWithPath(start, *cylinder), true);
+  for (const double z : {minZ, -minZ}) {
+    const auto plane = Plane::build(Plane::PositionType(0, 0, z), Plane::RotationType());
+    consider(along.propagateWithPath(start, *plane), false);
+  }
   return out;
 }
 
@@ -112,7 +161,8 @@ RefKey refKey(const reco::TrackRef& r) { return {r.id(), static_cast<unsigned in
 struct Unit {
   reco::TrackRef ref;
   int charge = 0;
-  St2 st2;
+  Pos st2;
+  Pos fallback;  // inner: ECAL; global/outer: station 1
   bool parentTracker = false;
   bool parentGlobal = false;
   int nParents = 0;
@@ -124,20 +174,25 @@ struct Unit {
 struct Gen {
   const reco::GenParticle* p = nullptr;
   bool accepted = false;
-  St2 st2;
+  Pos st2, st1, ecal;
 };
 
 // Strict one-to-one global-nearest greedy matching with compatible fallback.
+// genPos/unitPos give the surface positions; only eligible objects take part.
 std::array<int, 2> greedyMatch(const std::array<Gen, 2>& gen,
+                               const std::array<const Pos*, 2>& genPos,
+                               const std::array<bool, 2>& genEligible,
                                const std::vector<Unit>& units,
+                               const std::vector<const Pos*>& unitPos,
+                               const std::vector<bool>& unitEligible,
                                double threshold,
                                std::array<float, 2>& dROut) {
   std::vector<std::tuple<float, int, int>> pairs;
   for (int g = 0; g < 2; ++g) {
-    if (!gen[g].accepted || !gen[g].st2.valid) continue;
+    if (!genEligible[g] || !genPos[g]->valid) continue;
     for (size_t u = 0; u < units.size(); ++u) {
-      if (!units[u].st2.valid || units[u].charge != gen[g].p->charge()) continue;
-      const float dr = reco::deltaR(gen[g].st2.eta, gen[g].st2.phi, units[u].st2.eta, units[u].st2.phi);
+      if (!unitEligible[u] || !unitPos[u]->valid || units[u].charge != gen[g].p->charge()) continue;
+      const float dr = reco::deltaR(genPos[g]->eta, genPos[g]->phi, unitPos[u]->eta, unitPos[u]->phi);
       if (dr < threshold) pairs.emplace_back(dr, g, static_cast<int>(u));
     }
   }
@@ -171,6 +226,9 @@ private:
   const edm::ESGetToken<TransientTrackBuilder, TransientTrackRecord> ttbToken_;
   const edm::ESGetToken<MagneticField, IdealMagneticFieldRecord> magFieldToken_;
   const PropagateToMuonSetup propagatorSetup_;
+  const PropagateToMuonSetup propagatorSetupSt1_;
+  const edm::ESGetToken<Propagator, TrackingComponentsRecord> alongToken_;
+  const edm::ESGetToken<DetIdAssociator, DetIdAssociatorRecord> ecalToken_;
   const std::string sample_;
   const std::array<double, kNTypes> drThreshold_;
 
@@ -186,10 +244,17 @@ private:
   // Gen muons: index 0 = mu- (pdgId 13), 1 = mu+ (pdgId -13)
   float gPt_[2], gEta_[2], gPhi_[2], gVx_[2], gVy_[2], gVz_[2], gD0_[2], gSt2Eta_[2], gSt2Phi_[2];
   int gCharge_[2], gAccepted_[2], gSt2Valid_[2];
+  // Fallback surfaces, computed for every gen muon (used only when station 2 fails)
+  float gSt1Eta_[2], gSt1Phi_[2], gEcalEta_[2], gEcalPhi_[2];
+  int gSt1Valid_[2], gEcalStatus_[2];
   // Matches: index 3*g + type
   int nUnits_[kNTypes];
   int mMatched_[2 * kNTypes], mIdPass_[2 * kNTypes], mNParents_[2 * kNTypes], mCharge_[2 * kNTypes];
   float mDR_[2 * kNTypes], mPt_[2 * kNTypes], mEta_[2 * kNTypes], mPhi_[2 * kNTypes];
+  // Surface of the match (MatchSurface) and gen/reco eta/phi on it
+  int mSurface_[2 * kNTypes];
+  float mGenSurfEta_[2 * kNTypes], mGenSurfPhi_[2 * kNTypes], mRecoSurfEta_[2 * kNTypes],
+      mRecoSurfPhi_[2 * kNTypes];
   // Fits: index 3*typeMuMinus + typeMuPlus
   int fStatus_[kNCombos];
   float fVx_[kNCombos], fVy_[kNCombos], fVz_[kNCombos], fCxx_[kNCombos], fCyy_[kNCombos], fCzz_[kNCombos],
@@ -205,6 +270,9 @@ DimuonVertexTruth::DimuonVertexTruth(const edm::ParameterSet& ps)
       ttbToken_(esConsumes(edm::ESInputTag("", "TransientTrackBuilder"))),
       magFieldToken_(esConsumes()),
       propagatorSetup_(ps.getParameter<edm::ParameterSet>("propagatorSt2"), consumesCollector()),
+      propagatorSetupSt1_(ps.getParameter<edm::ParameterSet>("propagatorSt1"), consumesCollector()),
+      alongToken_(esConsumes(edm::ESInputTag("", "SteppingHelixPropagatorAlong"))),
+      ecalToken_(esConsumes(edm::ESInputTag("", "EcalDetIdAssociator"))),
       sample_(ps.getParameter<std::string>("sample")),
       drThreshold_{{ps.getParameter<double>("drInner"), ps.getParameter<double>("drGlobal"),
                     ps.getParameter<double>("drOuter")}} {
@@ -216,6 +284,10 @@ DimuonVertexTruth::DimuonVertexTruth(const edm::ParameterSet& ps)
                    "gen 0 = mu-, 1 = mu+; match index 3*g+type; fit index 3*typeMuMinus+typeMuPlus; "
                    "fitStatus 0 not both matched, 1 legs share a track, global legs incl. parent inner/outer (not fitted), 2 fit failed, 3 valid; "
                    "match: station 2 position, same charge, greedy 1-to-1, dR<0.06/0.06/0.10; "
+                   "fallback: 2nd greedy pass for gen muons failing station 2, unused tracks, same charge and dR, "
+                   "inner at ECAL inner boundary (reco from reference state), global/outer at station 1; "
+                   "matchSurface 0 none, 1 station 2, 2 station-1 fallback, 3 ECAL fallback; "
+                   "genEcalStatus 0 not run, 1 ok, 2 start beyond boundary, 3 failed; "
                    "residual = reco - gen decay vertex, along/perp = gen transverse flight direction (decay - gen PV); "
                    "idPass: inner parent isTracker, global parent isGlobal, outer DSA ID (OR over parents)");
   tree_ = fs->make<TTree>("events", "truth-matched dimuon vertex fits");
@@ -245,6 +317,12 @@ DimuonVertexTruth::DimuonVertexTruth(const edm::ParameterSet& ps)
   t.Branch("genSt2Valid", gSt2Valid_, "genSt2Valid[2]/I");
   t.Branch("genSt2Eta", gSt2Eta_, "genSt2Eta[2]/F");
   t.Branch("genSt2Phi", gSt2Phi_, "genSt2Phi[2]/F");
+  t.Branch("genSt1Valid", gSt1Valid_, "genSt1Valid[2]/I");
+  t.Branch("genSt1Eta", gSt1Eta_, "genSt1Eta[2]/F");
+  t.Branch("genSt1Phi", gSt1Phi_, "genSt1Phi[2]/F");
+  t.Branch("genEcalStatus", gEcalStatus_, "genEcalStatus[2]/I");
+  t.Branch("genEcalEta", gEcalEta_, "genEcalEta[2]/F");
+  t.Branch("genEcalPhi", gEcalPhi_, "genEcalPhi[2]/F");
   t.Branch("nUnits", nUnits_, "nUnits[3]/I");
   t.Branch("matched", mMatched_, "matched[6]/I");
   t.Branch("matchDR", mDR_, "matchDR[6]/F");
@@ -254,6 +332,11 @@ DimuonVertexTruth::DimuonVertexTruth(const edm::ParameterSet& ps)
   t.Branch("matchCharge", mCharge_, "matchCharge[6]/I");
   t.Branch("matchIdPass", mIdPass_, "matchIdPass[6]/I");
   t.Branch("matchNParents", mNParents_, "matchNParents[6]/I");
+  t.Branch("matchSurface", mSurface_, "matchSurface[6]/I");
+  t.Branch("matchGenSurfEta", mGenSurfEta_, "matchGenSurfEta[6]/F");
+  t.Branch("matchGenSurfPhi", mGenSurfPhi_, "matchGenSurfPhi[6]/F");
+  t.Branch("matchRecoSurfEta", mRecoSurfEta_, "matchRecoSurfEta[6]/F");
+  t.Branch("matchRecoSurfPhi", mRecoSurfPhi_, "matchRecoSurfPhi[6]/F");
   t.Branch("fitStatus", fStatus_, "fitStatus[9]/I");
   t.Branch("fitVx", fVx_, "fitVx[9]/F");
   t.Branch("fitVy", fVy_, "fitVy[9]/F");
@@ -290,11 +373,14 @@ void DimuonVertexTruth::resetBranches() {
   fill(genVtx_, 3, -999.f);
   fill(flightDirT_, 2, 0.f);
   genVtxSep_ = genLxy_ = genLxyPV_ = genDimuonPt_ = genDimuonEta_ = genDimuonMass_ = genDimuonDR_ = -999.f;
-  for (auto* a : {gPt_, gEta_, gPhi_, gVx_, gVy_, gVz_, gD0_, gSt2Eta_, gSt2Phi_}) fill(a, 2, -999.f);
-  for (auto* a : {gCharge_, gAccepted_, gSt2Valid_}) fill(a, 2, 0);
+  for (auto* a : {gPt_, gEta_, gPhi_, gVx_, gVy_, gVz_, gD0_, gSt2Eta_, gSt2Phi_, gSt1Eta_, gSt1Phi_, gEcalEta_,
+                  gEcalPhi_})
+    fill(a, 2, -999.f);
+  for (auto* a : {gCharge_, gAccepted_, gSt2Valid_, gSt1Valid_, gEcalStatus_}) fill(a, 2, 0);
   fill(nUnits_, kNTypes, 0);
-  for (auto* a : {mMatched_, mIdPass_, mNParents_, mCharge_}) fill(a, 2 * kNTypes, 0);
-  for (auto* a : {mDR_, mPt_, mEta_, mPhi_}) fill(a, 2 * kNTypes, -999.f);
+  for (auto* a : {mMatched_, mIdPass_, mNParents_, mCharge_, mSurface_}) fill(a, 2 * kNTypes, 0);
+  for (auto* a : {mDR_, mPt_, mEta_, mPhi_, mGenSurfEta_, mGenSurfPhi_, mRecoSurfEta_, mRecoSurfPhi_})
+    fill(a, 2 * kNTypes, -999.f);
   fill(fStatus_, kNCombos, static_cast<int>(kNotMatched));
   for (auto* a : {fVx_, fVy_, fVz_, fCxx_, fCyy_, fCzz_, fCxy_, fCxz_, fCyz_, fChi2_, fNdof_, fProb_, fResAlong_,
                   fResPerp_, fResZ_, fSigAlong_, fSigPerp_, fLxyBS_, fSigLxyBS_, fMass_, fMassRefit_})
@@ -323,6 +409,10 @@ void DimuonVertexTruth::analyze(const edm::Event& iEvent, const edm::EventSetup&
 
   const MagneticField* bField = &iSetup.getData(magFieldToken_);
   const PropagateToMuon propagator = propagatorSetup_.init(iSetup);
+  const PropagateToMuon propagatorSt1 = propagatorSetupSt1_.init(iSetup);
+  const Propagator& along = iSetup.getData(alongToken_);
+  const auto& ecalVolume = iSetup.getData(ecalToken_).volume();
+  const double ecalMinR = ecalVolume.minR(), ecalMinZ = ecalVolume.minZ();
 
   for (int g = 0; g < 2; ++g) {
     const reco::GenParticle& p = *gen[g].p;
@@ -330,7 +420,9 @@ void DimuonVertexTruth::analyze(const edm::Event& iEvent, const edm::EventSetup&
                       std::abs(p.vz()) < 960;
     const FreeTrajectoryState fts(GlobalPoint(p.vx(), p.vy(), p.vz()), GlobalVector(p.px(), p.py(), p.pz()),
                                   TrackCharge(p.charge()), bField);
-    gen[g].st2 = toSt2(propagator.extrapolate(fts));
+    gen[g].st2 = toPos(propagator.extrapolate(fts));
+    gen[g].st1 = toPos(propagatorSt1.extrapolate(fts));
+    gen[g].ecal = toEcal(fts, along, ecalMinR, ecalMinZ);
     gPt_[g] = p.pt();
     gEta_[g] = p.eta();
     gPhi_[g] = p.phi();
@@ -343,6 +435,12 @@ void DimuonVertexTruth::analyze(const edm::Event& iEvent, const edm::EventSetup&
     gSt2Valid_[g] = gen[g].st2.valid;
     gSt2Eta_[g] = gen[g].st2.eta;
     gSt2Phi_[g] = gen[g].st2.phi;
+    gSt1Valid_[g] = gen[g].st1.valid;
+    gSt1Eta_[g] = gen[g].st1.eta;
+    gSt1Phi_[g] = gen[g].st1.phi;
+    gEcalStatus_[g] = gen[g].ecal.status;
+    gEcalEta_[g] = gen[g].ecal.eta;
+    gEcalPhi_[g] = gen[g].ecal.phi;
   }
   if (gen[0].accepted && gen[1].accepted) {
     ++nBothAccepted_;
@@ -393,7 +491,10 @@ void DimuonVertexTruth::analyze(const edm::Event& iEvent, const edm::EventSetup&
         Unit u;
         u.ref = ref;
         u.charge = ref->charge();
-        u.st2 = toSt2(propagator.extrapolate(*ref));
+        u.st2 = toPos(propagator.extrapolate(*ref));
+        u.fallback = t == 0 ? toEcal(trajectoryStateTransform::initialFreeState(*ref, bField), along, ecalMinR,
+                                     ecalMinZ)
+                            : toPos(propagatorSt1.extrapolate(*ref));
         units[t].push_back(u);
         it = units[t].end() - 1;
       }
@@ -409,13 +510,44 @@ void DimuonVertexTruth::analyze(const edm::Event& iEvent, const edm::EventSetup&
 
   std::array<std::array<int, 2>, kNTypes> match;
   for (int t = 0; t < kNTypes; ++t) {
-    nUnits_[t] = units[t].size();
-    std::array<float, 2> dr;
-    match[t] = greedyMatch(gen, units[t], drThreshold_[t], dr);
+    const size_t n = units[t].size();
+    nUnits_[t] = n;
+    std::vector<const Pos*> unitSt2(n), unitFallback(n);
+    for (size_t u = 0; u < n; ++u) {
+      unitSt2[u] = &units[t][u].st2;
+      unitFallback[u] = &units[t][u].fallback;
+    }
+    // Pass 1: station 2.
+    std::array<float, 2> dr, drFallback;
+    match[t] = greedyMatch(gen, {{&gen[0].st2, &gen[1].st2}}, {{gen[0].accepted, gen[1].accepted}}, units[t],
+                           unitSt2, std::vector<bool>(n, true), drThreshold_[t], dr);
+    // Pass 2: gen muons that failed station 2, tracks not taken in pass 1.
+    std::vector<bool> unused(n, true);
+    for (int g = 0; g < 2; ++g)
+      if (match[t][g] >= 0) unused[match[t][g]] = false;
+    const Pos* gf0 = t == 0 ? &gen[0].ecal : &gen[0].st1;
+    const Pos* gf1 = t == 0 ? &gen[1].ecal : &gen[1].st1;
+    const auto fallback = greedyMatch(gen, {{gf0, gf1}},
+                                      {{gen[0].accepted && !gen[0].st2.valid, gen[1].accepted && !gen[1].st2.valid}},
+                                      units[t], unitFallback, unused, drThreshold_[t], drFallback);
     for (int g = 0; g < 2; ++g) {
-      if (match[t][g] < 0) continue;
-      const Unit& u = units[t][match[t][g]];
       const int i = 3 * g + t;
+      if (match[t][g] >= 0) {
+        mSurface_[i] = kStation2;
+      } else if (fallback[g] >= 0) {
+        match[t][g] = fallback[g];
+        dr[g] = drFallback[g];
+        mSurface_[i] = t == 0 ? kEcalFallback : kStation1Fallback;
+      } else {
+        continue;
+      }
+      const Unit& u = units[t][match[t][g]];
+      const Pos& genSurf = mSurface_[i] == kStation2 ? gen[g].st2 : *(g == 0 ? gf0 : gf1);
+      const Pos& recoSurf = mSurface_[i] == kStation2 ? u.st2 : u.fallback;
+      mGenSurfEta_[i] = genSurf.eta;
+      mGenSurfPhi_[i] = genSurf.phi;
+      mRecoSurfEta_[i] = recoSurf.eta;
+      mRecoSurfPhi_[i] = recoSurf.phi;
       mMatched_[i] = 1;
       mDR_[i] = dr[g];
       mPt_[i] = u.ref->pt();
