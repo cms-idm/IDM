@@ -18,7 +18,8 @@ fit efficiency (valid / both matched), 68% (solid) and 95% (dashed) containment 
 perpendicular to the gen transverse flight direction and in z, and 68% containment of |pull_along|
 (1 for Gaussian pulls with correct errors). Residual panels use a log y axis. Containment needs
 >= MIN_ENTRIES entries per bin and carries no uncertainty; efficiencies have 68.27% Clopper-Pearson
-intervals. x axes are linear; values beyond the shown range are kept in the JSON (overflow bin), not cut.
+intervals. x axes are linear; values outside the shown range are kept in the JSON (underflow/overflow
+bins), not cut.
 
 x-variables (gen): min pT, max |eta|, max |d0|, leading/subleading (by pT) pT, eta, |d0|, dimuon pT and
 eta, Lxy, dR(mu,mu). |d0| = |vx sin(phi) - vy cos(phi)|, straight line to (0,0); Lxy = vertex rho from
@@ -45,7 +46,7 @@ BRANCHES = ["genAccepted", "genPt", "genEta", "genD0", "genLxy", "genDimuonPt", 
             "matchSurface", "fitStatus", "fitResAlong", "fitResPerp", "fitResZ", "fitSigAlong", "fitProb",
             "fitChi2", "fitNdof"]
 
-XVARS = {  # name: (label, display edges); an overflow bin [last, inf) is added for the JSON
+XVARS = {  # name: (label, display edges); underflow (-inf, first) and overflow [last, inf) bins are added for the JSON
     "minPt": ("min gen p_T [GeV]", np.arange(0, 30.01, 2)),
     "maxAbsEta": ("max gen |eta|", np.linspace(0, 2.4, 13)),
     "maxAbsD0": ("max gen |d0| [cm]", np.arange(0, 30.01, 1)),
@@ -71,6 +72,8 @@ def load(pattern):
         a = f["dimuonVertexTruth/events"].arrays(BRANCHES, library="np")
         a = {k: np.asarray(v) for k, v in a.items()}
         keep = a["genAccepted"].sum(1) == 2
+        if sample in data:
+            raise RuntimeError(f"sample {sample} appears in more than one input file ({fn})")
         data[sample] = {k: v[keep] for k, v in a.items()}
     return data
 
@@ -150,10 +153,12 @@ def summarize_group(a, xvars):
                             "valid": int(valid.sum())}
     res["x"] = {}
     for name in xvars:
-        edges = np.append(XVARS[name][1], np.inf)
+        edges = np.concatenate([[-np.inf], XVARS[name][1], [np.inf]])
         x = xv[name]
         den = np.histogram(x, edges)[0]
-        entry = {"edges": [float(e) for e in edges[:-1]] + ["inf"], "bothAccepted": den.tolist(), "combos": {}}
+        assert den.sum() == len(x), name
+        entry = {"edges": ["-inf"] + [float(e) for e in edges[1:-1]] + ["inf"], "bothAccepted": den.tolist(),
+                 "combos": {}}
         for c in COMBOS:
             matched, valid, _ = combo_event_flags(a, c)
             p = combo_pairs(a, c, x)
@@ -175,13 +180,14 @@ def plot_group(a, summary, xv, title, outdir, xvars):
         e = summary["x"][name]
         nb = len(disp) - 1
         centers = 0.5 * (disp[:-1] + disp[1:])
-        den = np.array(e["bothAccepted"][:nb])
+        sl = slice(1, nb + 1)  # skip underflow/overflow bins
+        den = np.array(e["bothAccepted"][sl])
         fig, axs = plt.subplots(2, 3, figsize=(16, 9))
         for c in COMBOS:
             ce = e["combos"][c]
             col = COLORS[c]
-            m = np.array(ce["matched"][:nb])
-            v = np.array(ce["validGivenMatched"][:nb])
+            m = np.array(ce["matched"][sl])
+            v = np.array(ce["validGivenMatched"][sl])
             for ax, k, n in ((axs[0, 0], m, den), (axs[0, 1], v, m)):
                 eff, lo, hi = clopper_pearson(k, n)
                 ok = n > 0
@@ -189,9 +195,9 @@ def plot_group(a, summary, xv, title, outdir, xvars):
                             xerr=0.5 * np.diff(disp)[ok], fmt="o", ms=3, color=col, label=c)
             for ax, comp in ((axs[0, 2], "along"), (axs[1, 0], "perp"), (axs[1, 1], "z")):
                 for q, ls in ((68, "-"), (95, "--")):
-                    y = np.array([np.nan if t is None else t for t in ce[f"res_{comp}_q{q}_cm"][:nb]], float)
+                    y = np.array([np.nan if t is None else t for t in ce[f"res_{comp}_q{q}_cm"][sl]], float)
                     ax.plot(centers, y, ls, marker="o", ms=3, color=col, label=c if q == 68 else None)
-            y = np.array([np.nan if t is None else t for t in ce["pull_along_q68"][:nb]], float)
+            y = np.array([np.nan if t is None else t for t in ce["pull_along_q68"][sl]], float)
             axs[1, 2].plot(centers, y, "-", marker="o", ms=3, color=col, label=c)
         axs[0, 0].set_ylabel("pair-match efficiency (both matched / both accepted)")
         axs[0, 1].set_ylabel("fit efficiency (valid / both matched)")
@@ -292,10 +298,13 @@ def main():
     args = ap.parse_args()
     groups = args.groups.split(",")
     data = load(args.pattern)
-    rx = re.compile(r"(Mchi-[^_]+_dMchi-[^_]+)_(ctau-\w+)")
+    rx = re.compile(r"(Mchi-[^_]+_dMchi-[^_]+)_(ctau-[^_]+)$")
     by_mass, by_life = {}, {}
     for s in data:
-        m, l = rx.match(s).groups()
+        match = rx.match(s)
+        if not match:
+            raise RuntimeError(f"unexpected sample name {s}")
+        m, l = match.groups()
         by_mass.setdefault(m, []).append(s)
         by_life.setdefault(l, []).append(s)
     todo = []
