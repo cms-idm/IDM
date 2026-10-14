@@ -920,6 +920,123 @@ def plot_signal_1D_lxy(sig_histo, m1, delta, ctau, plot_dict, style_dict, match_
     return count, edges
 
 
+def plot_signal_2D_dr(sig_histo, m1, delta, ctau, plot_dict, style_dict, dr_bin):
+    """
+    Plot pT versus vxy for one existing delta-R bin.
+
+    dr_bin:
+        0 -> 0 <= delta-R < 0.01
+        1 -> 0.01 <= delta-R < 0.1
+        2 -> 0.1 <= delta-R < 1
+        3 -> 1 <= delta-R < 5
+
+    The ranges above apply to the current drEff.py configuration.
+    Actual ranges are read from the histogram.
+
+    Returns:
+        counts, edges_pt, edges_vxy
+
+    xlim and ylim control the displayed range only.
+    Returned counts include all regular pT and vxy bins.
+    """
+
+    fig = style_dict["fig"]
+    ax = style_dict["ax"]
+
+    # Select the signal sample, as in plot_signal_2D.
+    si = utils.get_signal_point_dict(sig_histo)
+    selected = si[  (si.m1 == m1)   & (si.delta == delta)         & (si.ctau == ctau)     ]
+    
+    samp = selected["name"].iloc[0]
+
+    # Select the sample and cut.
+    histo = sig_histo[plot_dict["variable"]][
+        {"samp": samp, "cut": plot_dict["cut"]}
+    ]
+    
+
+    # drEff.py defines delta-R as the third numerical axis.
+    # Its name may be dr_LL, dr_RR, dr_LR, or dr_den.
+    dr_axis = histo.axes[2]
+    
+    dr_low = dr_axis.edges[dr_bin]
+    dr_high = dr_axis.edges[dr_bin + 1]
+
+    # Remove the delta-R axis by selecting one bin.
+    histo = histo[{dr_axis.name: int(dr_bin)}]
+
+    # Rebin pT and vxy using the existing style convention.
+    histo = histo[
+        ::style_dict.get("xrebin"),
+        ::style_dict.get("yrebin")
+    ]
+
+    hep.cms.label(
+        "Preliminary",
+        data=False,
+        year=plot_dict["year"],
+        com="13.6",
+        ax=ax
+    )
+
+    # Plot counts, as in plot_signal_2D.
+    plot_kwargs = {
+        "ax": ax,
+        "flow": style_dict.get("flow"),
+        "cbarextend": True,
+    }
+
+    if style_dict.get("doLogz", False):
+        plot_kwargs["norm"] = mpl.colors.LogNorm()
+
+    hep.hist2dplot(histo, **plot_kwargs)
+
+    if style_dict.get("xlabel") is not None:
+        ax.set_xlabel(style_dict["xlabel"])
+
+    if style_dict.get("ylabel") is not None:
+        ax.set_ylabel(style_dict["ylabel"])
+
+    if style_dict.get("xlim") is not None:
+        ax.set_xlim(style_dict["xlim"])
+
+    if style_dict.get("ylim") is not None:
+        ax.set_ylim(style_dict["ylim"])
+
+    if style_dict.get("doLogx", False):
+        ax.set_xscale("log")
+
+    if style_dict.get("doLogy", False):
+        ax.set_yscale("log")
+
+    if style_dict.get("zlabel") is not None:
+        fig.axes[-1].set_ylabel(style_dict["zlabel"])
+
+    ax.set_title(
+        rf"${dr_low:g} \leq \mathrm{{Gen}}\,\Delta R"
+        rf"(e^+e^-) < {dr_high:g}$"
+    )
+
+    if style_dict.get("doSave", False):
+        os.makedirs(style_dict["outDir"], exist_ok=True)
+        fig.tight_layout()
+
+        output_path = os.path.join(
+            style_dict["outDir"],
+            style_dict["outName"]
+        )
+        fig.savefig(output_path)
+        print(f"Saved: {output_path}")
+
+    return (
+        histo.values(),
+        histo.axes[0].edges,
+        histo.axes[1].edges,
+    )
+
+
+
+
 def plot_signal_2D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
     """
     Example:
