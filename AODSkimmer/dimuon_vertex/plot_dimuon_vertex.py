@@ -201,6 +201,7 @@ def plot_group(a, summary, xv, title, outdir, xvars):
             ax.set_yscale("log")
             ax.set_ylabel(f"|reco - gen vertex| {comp} [cm]\n68% (solid), 95% (dashed) containment")
         axs[1, 2].axhline(1.0, color="gray", lw=0.8)
+        axs[1, 2].set_yscale("log")
         axs[1, 2].set_ylabel("68% containment of |pull_along|")
         for ax in axs.flat:
             ax.set_xlabel(label)
@@ -219,27 +220,28 @@ def plot_distributions(a, title, outdir):
     os.makedirs(outdir, exist_ok=True)
     dummy = np.zeros(len(a["genPt"]))
     fig, axs = plt.subplots(2, 3, figsize=(16, 9))
-    logbins = np.logspace(-4, 3, 71)
+    logbins = np.logspace(-5, 3, 81)
     for c in COMBOS:
         p = combo_pairs(a, c, dummy)
         if len(p["along"]) == 0:
             continue
-        kw = dict(histtype="step", density=True, color=COLORS[c], label=f"{c} ({len(p['along'])})")
+        w = np.full(len(p["along"]), 1.0 / len(p["along"]))  # fraction of pairs per bin
+        kw = dict(histtype="step", weights=w, color=COLORS[c], label=f"{c} ({len(p['along'])})")
         for ax, comp in ((axs[0, 0], "along"), (axs[0, 1], "perp"), (axs[0, 2], "z")):
-            ax.hist(np.abs(p[comp]), bins=logbins, **kw)
+            ax.hist(np.clip(np.abs(p[comp]), 1.01e-5, 9.9e2), bins=logbins, **kw)
         axs[1, 0].hist(np.clip(p["pull"], -10, 10), bins=np.linspace(-10, 10, 81), **kw)
         axs[1, 1].hist(p["prob"], bins=np.linspace(0, 1, 51), **kw)
         axs[1, 2].hist(np.clip(p["chi2ndof"], 0, 20), bins=np.linspace(0, 20, 81), **kw)
     g = np.linspace(-10, 10, 400)
-    axs[1, 0].plot(g, np.exp(-g * g / 2) / np.sqrt(2 * np.pi), color="k", lw=0.8, label="N(0,1)")
+    axs[1, 0].plot(g, 0.25 * np.exp(-g * g / 2) / np.sqrt(2 * np.pi), color="k", lw=0.8, label="N(0,1)")
     for ax, comp in ((axs[0, 0], "along flight dir."), (axs[0, 1], "perp. to flight dir."), (axs[0, 2], "z")):
         ax.set_xscale("log")
-        ax.set_xlabel(f"|reco - gen vertex| {comp} [cm]")
+        ax.set_xlabel(f"|reco - gen vertex| {comp} [cm] (clipped to [1e-5, 1e3])")
     axs[1, 0].set_xlabel("pull along flight dir. (clipped to +-10)")
     axs[1, 1].set_xlabel("fit probability")
     axs[1, 2].set_xlabel("chi2 / ndof (clipped to 20)")
     for ax in axs.flat:
-        ax.set_ylabel("pairs (unit area)")
+        ax.set_ylabel("fraction of pairs per bin")
         ax.grid(alpha=0.3)
     axs[0, 0].legend(fontsize=8)
     axs[1, 0].legend(fontsize=8)
