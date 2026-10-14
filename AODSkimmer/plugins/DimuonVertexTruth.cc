@@ -162,7 +162,7 @@ struct Unit {
   reco::TrackRef ref;
   int charge = 0;
   Pos st2;
-  Pos fallback;  // inner: ECAL; global/outer: station 1
+  Pos fallback;  // inner: ECAL; global/outer: station 1 (filled only when a gen muon needs it)
   bool parentTracker = false;
   bool parentGlobal = false;
   int nParents = 0;
@@ -478,6 +478,9 @@ void DimuonVertexTruth::analyze(const edm::Event& iEvent, const edm::EventSetup&
   flightDirT_[0] = ux;
   flightDirT_[1] = uy;
 
+  // Reco fallback positions are needed only if an accepted gen muon failed station 2.
+  const bool needFallback = (gen[0].accepted && !gen[0].st2.valid) || (gen[1].accepted && !gen[1].st2.valid);
+
   // Reco units, unique per track.
   const auto& muons = iEvent.get(muonToken_);
   std::array<std::vector<Unit>, kNTypes> units;
@@ -492,9 +495,10 @@ void DimuonVertexTruth::analyze(const edm::Event& iEvent, const edm::EventSetup&
         u.ref = ref;
         u.charge = ref->charge();
         u.st2 = toPos(propagator.extrapolate(*ref));
-        u.fallback = t == 0 ? toEcal(trajectoryStateTransform::initialFreeState(*ref, bField), along, ecalMinR,
+        if (needFallback)
+          u.fallback = t == 0 ? toEcal(trajectoryStateTransform::initialFreeState(*ref, bField), along, ecalMinR,
                                      ecalMinZ)
-                            : toPos(propagatorSt1.extrapolate(*ref));
+                              : toPos(propagatorSt1.extrapolate(*ref));
         units[t].push_back(u);
         it = units[t].end() - 1;
       }
