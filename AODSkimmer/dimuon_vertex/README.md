@@ -34,3 +34,12 @@ ls /uscms_data/d3/abdelham/CMSSW_13_0_13/src/iDMe/AODSkimmer/fileLists/signal/20
   | xargs -n1 basename | sed 's/_flist.txt//' > samples.txt
 condor_submit DIMUVTX_REVISION=$(git -C $code rev-parse --short HEAD) $code/dimuon_vertex_truth.jdl
 ```
+
+Plots and JSON (overall / mass / lifetime / sample; ~14 min on an interactive node for 72 samples):
+
+```bash
+python3 $code/plot_dimuon_vertex.py "$run/dimuon_vertex_*.root" $run/plots
+```
+
+Definitions (pooling of mixed combinations, panels, bins) are in the script docstring and in
+`plots/dimuon_vertex_summary.json`.
