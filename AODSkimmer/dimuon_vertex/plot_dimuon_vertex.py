@@ -34,6 +34,9 @@ groups): composition of valid HIER fits by representative pair, and the merging 
 muon: whether a DSA-ID'd raw standalone track matched to the same gen muon is an outer track of the
 representative's objects (hierOuterCheck 1 none matched, 2 own, 3 not own but objects have an outer, 4
 objects have no outer); counts in the JSON. --require-id does not change HIER (its IDs are built in).
+merging.png (overall only, files with the dsa* branches): per matched gen muon with a DSA-ID'd standalone
+matched to it, inner representatives split by hierOuterCheck 2 (own) / 3 / 4, global representatives with
+2 as the merged reference; distributions normalized to unit area, plus the owner and other-gen fractions.
 
 --require-id (component-level ID): a leg counts as matched only if its matched track passes the ID of
 its type (matchIdPass: inner -> a parent muon isTracker, global -> a parent isGlobal, outer -> DSA ID;
@@ -64,6 +67,9 @@ HIER_FIT = {"fitStatus": "hierFitStatus", "fitResAlong": "hierFitResAlong", "fit
             "fitResZ": "hierFitResZ", "fitSigAlong": "hierFitSigAlong", "fitProb": "hierFitProb",
             "fitChi2": "hierFitChi2", "fitNdof": "hierFitNdof"}
 HIER_EXTRA = ["hierSurface", "hierType", "hierMatched", "hierOuterCheck"]
+MERGE = ["dsaDR", "dsaDROtherGen", "hierDsaDRSt2", "hierDROtherGen", "dsaPt", "hierPt", "dsaNStations",
+         "dsaOwnerN", "dsaOwnerTracker", "dsaOwnerGlobal", "dsaOwnerInner", "dsaOfOtherRep", "hierNMatchedStations",
+         "hierDR"]
 BRANCHES = ["genAccepted", "genPt", "genEta", "genD0", "genLxy", "genDimuonPt", "genDimuonEta", "genDimuonDR",
             "matchSurface", "fitStatus", "fitResAlong", "fitResPerp", "fitResZ", "fitSigAlong", "fitProb",
             "fitChi2", "fitNdof", "matchIdPass"]
@@ -96,6 +102,8 @@ def load(pattern):
         if data and hier != ("HIER" in COMBOS):
             raise RuntimeError(f"{fn}: inputs mix files with and without the hierarchy branches")
         names = BRANCHES + (list(HIER_FIT.values()) + HIER_EXTRA if hier else [])
+        if "dsaDR" in tree.keys():
+            names += MERGE
         a = {k: np.asarray(v) for k, v in tree.arrays(names, library="np").items()}
         if hier:  # the hierarchy fit becomes column 9 of the fit arrays
             COMBOS["HIER"] = [9]
@@ -359,6 +367,69 @@ def plot_hierarchy(a, title, outdir):
     plt.close(fig)
 
 
+def plot_merging(a, title, outdir):
+    """Is the DSA matched to a gen muon of an inner representative wrongly matched, or unmerged?"""
+    def per_gen(k):
+        return np.concatenate([a[k][:, 0], a[k][:, 1]])
+    genpt = per_gen("genPt")
+    m, t, oc = per_gen("hierMatched") == 1, per_gen("hierType"), per_gen("hierOuterCheck")
+    cats = [("inner rep, DSA own (2)", m & (t == 0) & (oc == 2), "#1f77b4"),
+            ("inner rep, DSA of another object, own outer exists (3)", m & (t == 0) & (oc == 3), "#d62728"),
+            ("inner rep, DSA of another object, no own outer (4)", m & (t == 0) & (oc == 4), "#7f7f7f"),
+            ("global rep, DSA own (2), reference", m & (t == 1) & (oc == 2), "#ff7f0e")]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        dvars = [("dsaDR", "station-2 dR(DSA, its gen muon)", np.linspace(0, 0.1, 41), per_gen("dsaDR")),
+                 ("dsaDROtherGen", "station-2 dR(DSA, other gen muon) (clipped to 2)", np.linspace(0, 2, 41),
+                  np.clip(per_gen("dsaDROtherGen"), -1, 1.999)),
+                 ("hierDsaDRSt2", "station-2 dR(representative, DSA) (clipped to 0.5)", np.linspace(0, 0.5, 51),
+                  np.clip(per_gen("hierDsaDRSt2"), -1, 0.4999)),
+                 ("ptRatio", "DSA p_T / gen p_T (clipped to 5)", np.linspace(0, 5, 51),
+                  np.clip(per_gen("dsaPt") / genpt, 0, 4.999)),
+                 ("repPtRatio", "representative p_T / gen p_T (clipped to 5)", np.linspace(0, 5, 51),
+                  np.clip(per_gen("hierPt") / genpt, 0, 4.999)),
+                 ("nStations", "DSA muon stations with valid hits", np.arange(-0.5, 5.5, 1), per_gen("dsaNStations"))]
+    fig, axs = plt.subplots(2, 4, figsize=(20, 9))
+    flat = axs.flat
+    for (name, lab, edges, x), ax in zip(dvars, flat):
+        for cl, sel, col in cats:
+            v = x[sel & (x > -900)]
+            if len(v):
+                ax.hist(v, bins=edges, histtype="step", color=col, weights=np.full(len(v), 1.0 / len(v)),
+                        label=f"{cl}: {len(v)}")
+        ax.set_xlabel(lab)
+        ax.set_ylabel("fraction per bin")
+        ax.grid(alpha=0.3)
+    axs[0, 0].legend(fontsize=7)
+    ax = axs[1, 2]
+    fr = {"owner tracker": per_gen("dsaOwnerTracker"), "owner global": per_gen("dsaOwnerGlobal"),
+          "owner has inner": per_gen("dsaOwnerInner"), "DSA of other gen's rep": per_gen("dsaOfOtherRep"),
+          "DSA closer to other gen": (per_gen("dsaDROtherGen") > -900) & (per_gen("dsaDROtherGen") < per_gen("dsaDR"))}
+    w = 0.2
+    for j, (cl, sel, col) in enumerate(cats):
+        n = max(int(sel.sum()), 1)
+        ax.bar(np.arange(len(fr)) + (j - 1.5) * w, [float((v[sel] > 0).sum()) / n for v in fr.values()], w,
+               color=col)
+    ax.set_xticks(np.arange(len(fr)))
+    ax.set_xticklabels(list(fr), rotation=20, fontsize=7)
+    ax.set_ylabel("fraction of gen muons in category")
+    ax.grid(alpha=0.3)
+    ax = axs[1, 3]
+    ms = per_gen("hierNMatchedStations")
+    for cl, sel, col in cats:
+        v = ms[sel & (ms >= 0)]
+        if len(v):
+            ax.hist(v, bins=np.arange(-0.5, 6.5, 1), histtype="step", color=col, weights=np.full(len(v), 1.0 / len(v)))
+    ax.set_xlabel("representative's matched muon stations (tracker-muon segments)")
+    ax.set_ylabel("fraction per bin")
+    ax.grid(alpha=0.3)
+    fig.suptitle(f"{title} | merging check: DSA-ID'd standalone matched to the same gen muon (st2 + st1 fallback) | "
+                 "unweighted, unit area", fontsize=9)
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
+    fig.savefig(os.path.join(outdir, "merging.png"), dpi=90)
+    plt.close(fig)
+    return {cl: {"n": int(sel.sum()), **{k: int((v[sel] > 0).sum()) for k, v in fr.items()}} for cl, sel, _ in cats}
+
+
 def plot_symmetry(a, outdir):
     """Overall check that the two orderings of each mixed combination agree."""
     os.makedirs(outdir, exist_ok=True)
@@ -440,6 +511,8 @@ def main():
                 plot_hierarchy(a, title, os.path.join(args.outdir, key))
         if key == "overall":
             plot_symmetry(a, os.path.join(args.outdir, key))
+            if "dsaDR" in a:
+                summary["merging"] = plot_merging(a, title, os.path.join(args.outdir, key))
         print(key, summary["nEvents"], flush=True)
     with open(os.path.join(args.outdir, "dimuon_vertex_summary.json"), "w") as f:
         json.dump(out, f, indent=1)

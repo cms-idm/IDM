@@ -43,6 +43,10 @@
 // representative: 1 no ID'd DSA matched to that gen muon, 2 it is an outer track of
 // the representative's objects, 3 it is not but the objects have an outer track,
 // 4 the objects have no outer track.
+// Merging diagnostics (dsa*, hierDsa*, per gen muon with a matched DSA): DSA
+// kinematics, hits and owner displacedMuons; station-2 dR of the DSA and of the
+// representative to the other gen muon; station-2 dR between the representative and
+// the DSA; whether the DSA belongs to the representative matched to the other gen muon.
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -195,6 +199,7 @@ struct Unit {
   std::set<RefKey> ownOuters;  // hierarchy candidates: outer tracks of the parent muons
   int type = -1;               // hierarchy candidates: representative type
   int ownOuterId = -1;         // hierarchy candidates: -1 no own outer, else OR of DSA ID over own outers
+  int firstParent = -1;        // hierarchy candidates: lowest displacedMuons index
 };
 
 struct Gen {
@@ -411,6 +416,11 @@ private:
   int hierNCand_, hierNCandType_[kNTypes], nDSA_, nDSAId_, nMuOuter_, nMuOuterInDSA_;
   int hMatched_[2], hType_[2], hSurface_[2], hNParents_[2], hCharge_[2], hOuterCheck_[2], hOwnOuterId_[2];
   float hDR_[2], hPt_[2], hEta_[2], hPhi_[2];
+  // Merging diagnostics for the DSA matched to each gen muon
+  int dSurface_[2], dNDT_[2], dNCSC_[2], dNStations_[2], dOwnerN_[2], dOwnerTracker_[2], dOwnerGlobal_[2],
+      dOwnerInner_[2], dOtherRep_[2], hNMatchedStations_[2];
+  float dDR_[2], dPt_[2], dEta_[2], dPhi_[2], dPtErr_[2], dNormChi2_[2], dDROtherGen_[2], hDROtherGen_[2],
+      hDsaDRSt2_[2];
   FitResult hFit_;
 };
 
@@ -450,7 +460,11 @@ DimuonVertexTruth::DimuonVertexTruth(const edm::ParameterSet& ps)
                    "hierType 0 inner 1 global 2 outer -1 none; hierFit* = fit of the two matched representatives (status codes as fitStatus); "
                    "hierOuterCheck: DSA-ID'd raw displacedStandAloneMuons matched to the same gen muon (st2 + st1 fallback, dR<drOuter): "
                    "0 not matched, 1 none matched, 2 it is an outer of the representative's objects, 3 it is not but they have an outer, "
-                   "4 they have no outer; hierOwnOuterId -1 no own outer, else DSA ID of the own outer(s) (OR)");
+                   "4 they have no outer; hierOwnOuterId -1 no own outer, else DSA ID of the own outer(s) (OR); "
+                   "dsa* (filled when a DSA is matched to the gen muon): surface, dR, kinematics, DT/CSC hits, stations, "
+                   "owners among kept displacedMuons (count, OR isTracker/isGlobal/has inner), dsaOfOtherRep = DSA belongs to the "
+                   "representative matched to the other gen muon; dsaDROtherGen / hierDROtherGen = station-2 dR to the other gen muon; "
+                   "hierDsaDRSt2 = station-2 dR between representative and DSA; hierNMatchedStations of the lowest-index parent");
   tree_ = fs->make<TTree>("events", "truth-matched dimuon vertex fits");
   auto& t = *tree_;
   t.Branch("run", &run_);
@@ -539,6 +553,25 @@ DimuonVertexTruth::DimuonVertexTruth(const edm::ParameterSet& ps)
   t.Branch("hierPt", hPt_, "hierPt[2]/F");
   t.Branch("hierEta", hEta_, "hierEta[2]/F");
   t.Branch("hierPhi", hPhi_, "hierPhi[2]/F");
+  t.Branch("dsaSurface", dSurface_, "dsaSurface[2]/I");
+  t.Branch("dsaNDT", dNDT_, "dsaNDT[2]/I");
+  t.Branch("dsaNCSC", dNCSC_, "dsaNCSC[2]/I");
+  t.Branch("dsaNStations", dNStations_, "dsaNStations[2]/I");
+  t.Branch("dsaOwnerN", dOwnerN_, "dsaOwnerN[2]/I");
+  t.Branch("dsaOwnerTracker", dOwnerTracker_, "dsaOwnerTracker[2]/I");
+  t.Branch("dsaOwnerGlobal", dOwnerGlobal_, "dsaOwnerGlobal[2]/I");
+  t.Branch("dsaOwnerInner", dOwnerInner_, "dsaOwnerInner[2]/I");
+  t.Branch("dsaOfOtherRep", dOtherRep_, "dsaOfOtherRep[2]/I");
+  t.Branch("dsaDR", dDR_, "dsaDR[2]/F");
+  t.Branch("dsaPt", dPt_, "dsaPt[2]/F");
+  t.Branch("dsaEta", dEta_, "dsaEta[2]/F");
+  t.Branch("dsaPhi", dPhi_, "dsaPhi[2]/F");
+  t.Branch("dsaPtErr", dPtErr_, "dsaPtErr[2]/F");
+  t.Branch("dsaNormChi2", dNormChi2_, "dsaNormChi2[2]/F");
+  t.Branch("dsaDROtherGen", dDROtherGen_, "dsaDROtherGen[2]/F");
+  t.Branch("hierDROtherGen", hDROtherGen_, "hierDROtherGen[2]/F");
+  t.Branch("hierDsaDRSt2", hDsaDRSt2_, "hierDsaDRSt2[2]/F");
+  t.Branch("hierNMatchedStations", hNMatchedStations_, "hierNMatchedStations[2]/I");
   t.Branch("hierFitStatus", &hFit_.status);
   t.Branch("hierFitVx", &hFit_.vx);
   t.Branch("hierFitVy", &hFit_.vy);
@@ -594,6 +627,12 @@ void DimuonVertexTruth::resetBranches() {
   fill(hType_, 2, -1);
   fill(hOwnOuterId_, 2, -1);
   for (auto* a : {hDR_, hPt_, hEta_, hPhi_}) fill(a, 2, -999.f);
+  for (auto* a : {dSurface_, dNDT_, dNCSC_, dNStations_, dOwnerN_, dOwnerTracker_, dOwnerGlobal_, dOwnerInner_,
+                  dOtherRep_})
+    fill(a, 2, 0);
+  fill(hNMatchedStations_, 2, -1);
+  for (auto* a : {dDR_, dPt_, dEta_, dPhi_, dPtErr_, dNormChi2_, dDROtherGen_, hDROtherGen_, hDsaDRSt2_})
+    fill(a, 2, -999.f);
   hFit_ = FitResult();
 }
 
@@ -868,6 +907,7 @@ void DimuonVertexTruth::analyze(const edm::Event& iEvent, const edm::EventSetup&
       u.charge = ref->charge();
       u.st2 = toPos(propagator.extrapolate(*ref));
       if (needFallback) u.fallback = toPos(propagatorSt1.extrapolate(*ref));
+      u.firstParent = static_cast<int>(iMu);
       cands.push_back(u);
       ++hierNCandType_[t];
       it = cands.end() - 1;
@@ -906,11 +946,20 @@ void DimuonVertexTruth::analyze(const edm::Event& iEvent, const edm::EventSetup&
     if (needFallback) u.fallback = toPos(propagatorSt1.extrapolate(*ref));
     dsa.push_back(u);
   }
-  for (const auto& mu : muons)
-    if (mu.outerTrack().isNonnull()) {
-      ++nMuOuter_;
-      if (mu.outerTrack().id() == dsaHandle.id()) ++nMuOuterInDSA_;
-    }
+  // Owners of each outer track among the kept displacedMuons: count, OR of isTracker / isGlobal / has inner.
+  std::map<RefKey, std::array<int, 4>> owners;
+  for (size_t iMu = 0; iMu < muons.size(); ++iMu) {
+    const auto& mu = muons[iMu];
+    if (mu.outerTrack().isNull()) continue;
+    ++nMuOuter_;
+    if (mu.outerTrack().id() == dsaHandle.id()) ++nMuOuterInDSA_;
+    if (dropped[iMu]) continue;
+    auto& o = owners[refKey(mu.outerTrack())];
+    o[0] += 1;
+    o[1] |= mu.isTrackerMuon();
+    o[2] |= mu.isGlobalMuon();
+    o[3] |= mu.innerTrack().isNonnull();
+  }
   std::array<float, 2> ddr;
   std::array<int, 2> dsurf;
   const auto dmatch = matchSt2St1(gen, dsa, std::vector<double>(dsa.size(), drThreshold_[2]), ddr, dsurf);
@@ -928,12 +977,42 @@ void DimuonVertexTruth::analyze(const edm::Event& iEvent, const edm::EventSetup&
     hEta_[g] = c.ref->eta();
     hPhi_[g] = c.ref->phi();
     hOwnOuterId_[g] = c.ownOuterId;
-    if (dmatch[g] < 0)
+    hNMatchedStations_[g] = muons[c.firstParent].numberOfMatchedStations();
+    const Pos& other = gen[1 - g].st2;
+    if (c.st2.valid && other.valid) hDROtherGen_[g] = reco::deltaR(c.st2.eta, c.st2.phi, other.eta, other.phi);
+    if (dmatch[g] < 0) {
       hOuterCheck_[g] = 1;
-    else if (c.ownOuters.count(refKey(dsa[dmatch[g]].ref)))
+      continue;
+    }
+    const Unit& d = dsa[dmatch[g]];
+    const RefKey dk = refKey(d.ref);
+    if (c.ownOuters.count(dk))
       hOuterCheck_[g] = 2;
     else
       hOuterCheck_[g] = c.ownOuters.empty() ? 4 : 3;
+    const reco::Track& dt = *d.ref;
+    dSurface_[g] = dsurf[g];
+    dDR_[g] = ddr[g];
+    dPt_[g] = dt.pt();
+    dEta_[g] = dt.eta();
+    dPhi_[g] = dt.phi();
+    dPtErr_[g] = dt.ptError();
+    dNormChi2_[g] = dt.normalizedChi2();
+    dNDT_[g] = dt.hitPattern().numberOfValidMuonDTHits();
+    dNCSC_[g] = dt.hitPattern().numberOfValidMuonCSCHits();
+    dNStations_[g] = dt.hitPattern().muonStationsWithValidHits();
+    if (const auto o = owners.find(dk); o != owners.end()) {
+      dOwnerN_[g] = o->second[0];
+      dOwnerTracker_[g] = o->second[1];
+      dOwnerGlobal_[g] = o->second[2];
+      dOwnerInner_[g] = o->second[3];
+    }
+    if (hmatch[1 - g] >= 0) {
+      const Unit& oc = cands[hmatch[1 - g]];
+      dOtherRep_[g] = oc.ownOuters.count(dk) || oc.constituents.count(dk);
+    }
+    if (d.st2.valid && other.valid) dDROtherGen_[g] = reco::deltaR(d.st2.eta, d.st2.phi, other.eta, other.phi);
+    if (c.st2.valid && d.st2.valid) hDsaDRSt2_[g] = reco::deltaR(c.st2.eta, c.st2.phi, d.st2.eta, d.st2.phi);
   }
   if (hmatch[0] >= 0 && hmatch[1] >= 0)
     hFit_ = fitPair(cands[hmatch[0]], cands[hmatch[1]], ttb, kvf, bs, genVtx_, ux, uy);
