@@ -167,7 +167,9 @@ struct Unit {
   bool parentGlobal = false;
   int nParents = 0;
   // Tracks this leg is built from: the track itself; for a global track also
-  // its parent muons' inner and outer tracks. Legs sharing any are not fitted.
+  // its parent muons' inner and outer tracks; for an outer track also its
+  // parent muons' inner tracks. Legs sharing any are not fitted, so muons that
+  // share an inner track are never vertexed together, whatever the leg types.
   std::set<RefKey> constituents;
 };
 
@@ -282,7 +284,7 @@ DimuonVertexTruth::DimuonVertexTruth(const edm::ParameterSet& ps)
   fs->make<TNamed>("definitions",
                    "types: 0 inner(displacedTracks) 1 global(displacedGlobalMuons) 2 outer(displacedStandAloneMuons); "
                    "gen 0 = mu-, 1 = mu+; match index 3*g+type; fit index 3*typeMuMinus+typeMuPlus; "
-                   "fitStatus 0 not both matched, 1 legs share a track, global legs incl. parent inner/outer (not fitted), 2 fit failed, 3 valid; "
+                   "fitStatus 0 not both matched, 1 legs share a track, global legs incl. parent inner/outer, outer legs incl. parent inner (not fitted), 2 fit failed, 3 valid; "
                    "match: station 2 position, same charge, greedy 1-to-1, dR<0.06/0.06/0.10; "
                    "fallback: 2nd greedy pass for gen muons failing station 2, unused tracks, same charge and dR, "
                    "inner at ECAL inner boundary (reco from reference state), global/outer at station 1; "
@@ -509,6 +511,7 @@ void DimuonVertexTruth::analyze(const edm::Event& iEvent, const edm::EventSetup&
       if (t == 1)
         for (const auto& r : refs)
           if (r.isNonnull()) it->constituents.insert(refKey(r));
+      if (t == 2 && refs[0].isNonnull()) it->constituents.insert(refKey(refs[0]));
     }
   }
 
