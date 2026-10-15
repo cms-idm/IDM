@@ -47,22 +47,27 @@ class myHisto:
         #For vtx Eff studies
         self.pt_LL = self.parse_axis(('pt_LL',[0,5,10,20,100])) 
         self.vxy_LL = self.parse_axis(('vxy_LL',[0,1,5,10,15,20]))  
-        self.dr_LL = self.parse_axis(('dr_LL',[0,0.01,0.1,1,5] ))  
+        # self.dr_LL = self.parse_axis(('dr_LL',[0,0.01,0.1,1,5] ))  
+        self.dr_LL = self.parse_axis(('dr_LL', [0, 0.01, 0.02, 0.04, 0.06, 0.08, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.7, 1, 1.5, 2, 3, 4, 5] ))  
+
 
 
         self.pt_RR = self.parse_axis(('pt_RR',[0,5,10,20,100])) 
         self.vxy_RR = self.parse_axis(('vxy_RR',[0,1,5,10,15,20])) 
-        self.dr_RR = self.parse_axis(('dr_RR',[0,0.01,0.1,1,5] ))  
+        # self.dr_RR = self.parse_axis(('dr_RR',[0,0.01,0.1,1,5] ))  
+        self.dr_RR = self.parse_axis(('dr_RR',[0, 0.01, 0.02, 0.04, 0.06, 0.08, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.7, 1, 1.5, 2, 3, 4, 5] ))
 
 
         self.pt_LR = self.parse_axis(('pt_LR',[0,5,10,20,100])) 
         self.vxy_LR = self.parse_axis(('vxy_LR',[0,1,5,10,15,20]))  
-        self.dr_LR = self.parse_axis(('dr_LR',[0,0.01,0.1,1,5] ))  
+        # self.dr_LR = self.parse_axis(('dr_LR',[0,0.01,0.1,1,5] ))  
+        self.dr_LR = self.parse_axis(('dr_LR', [0, 0.01, 0.02, 0.04, 0.06, 0.08, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.7, 1, 1.5, 2, 3, 4, 5] ))  
 
 
         self.pt_den = self.parse_axis(('pt_den',[0,5,10,20,100])) 
         self.vxy_den = self.parse_axis(('vxy_den',[0,1,5,10,15,20]))  
-        self.dr_den = self.parse_axis(('dr_den',[0,0.01,0.1,1,5] ))  
+        # self.dr_den = self.parse_axis(('dr_den',[0,0.01,0.1,1,5] ))  
+        self.dr_den = self.parse_axis(('dr_den', [0, 0.01, 0.02, 0.04, 0.06, 0.08, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.7, 1, 1.5, 2, 3, 4, 5])) 
 
         
         self.Lxy_genEE = self.parse_axis(('Lxy_genEE',1000,0,100))  
