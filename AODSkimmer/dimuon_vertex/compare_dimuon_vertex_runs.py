@@ -4,7 +4,8 @@
 
 Both summaries must come from the same inputs and carry the x-variable (LxyFull from the 740 cm
 plot script on). Per group (overall, per mass, per lifetime, per sample), one PNG: fit efficiency
-(valid / both matched, per event, 68.27% Clopper-Pearson) per combination, old dashed vs new solid, and
+(valid / both matched, per event, 68.27% Clopper-Pearson) per combination, old open grey squares vs new
+filled red circles, and
 the both-accepted denominator per bin. Linear axes; --log adds a copy with a log y on the count panel.
 """
 import argparse
@@ -40,12 +41,13 @@ def plot(group, old, new, labels, xvar, outdir, log):
         if c not in eo["combos"] or c not in en["combos"]:
             ax.set_visible(False)
             continue
-        for e, ls, col, lab in ((eo, "--", "#7f7f7f", labels[0]), (en, "-", "#d62728", labels[1])):
+        for e, mk, col, lab in ((eo, "s", "#7f7f7f", labels[0]), (en, "o", "#d62728", labels[1])):
             m, v = series(e, c)
             eff, lo, hi = clopper_pearson(v, m)
             ok = m > 0
             ax.errorbar(centers[ok], eff[ok], yerr=[eff[ok] - lo[ok], hi[ok] - eff[ok]],
-                        xerr=0.5 * np.diff(edges)[ok], fmt="o" + ls, ms=3, color=col,
+                        xerr=0.5 * np.diff(edges)[ok], fmt=mk, ms=4, color=col,
+                        mfc="none" if mk == "s" else col,
                         label=f"{lab}: {int(v.sum())} valid / {int(m.sum())} matched")
         ax.set_title(c, fontsize=10)
         ax.set_ylim(0, 1.05)
@@ -62,7 +64,7 @@ def plot(group, old, new, labels, xvar, outdir, log):
         ax.set_xlabel("gen L_xy [cm]")
         ax.set_xlim(edges[0], edges[-1])
         ax.grid(alpha=0.3)
-    fig.suptitle(f"{group} | fit efficiency per event, {labels[0]} (dashed) vs {labels[1]} (solid) | "
+    fig.suptitle(f"{group} | fit efficiency per event, {labels[0]} (open squares) vs {labels[1]} (filled circles) | "
                  "mixed combos: either ordering | unweighted", fontsize=9)
     fig.tight_layout(rect=(0, 0, 1, 0.96))
     d = os.path.join(outdir, group)

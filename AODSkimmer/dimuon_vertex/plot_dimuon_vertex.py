@@ -304,9 +304,9 @@ def plot_group_figure(summary, title, outdir, name, combos, log, suffix):
     axs[0, 0].legend(fontsize=8, ncol=2)
     fig.suptitle(f"{title} | denominator: both signal muons accepted ({summary['nEvents']} events) | "
                  f"I=inner G=global O=DSA; HIER = object-level hierarchy; {ID_LABEL}mixed = both orderings; unweighted; "
-                 f"containment needs >= {MIN_ENTRIES} pairs/bin | combos: {', '.join(combos)}; "
+                 f"containment needs >= {MIN_ENTRIES} pairs/bin\ncombos: {', '.join(combos)}; "
                  f"{'log' if log else 'linear'} residual/pull axes", fontsize=9)
-    fig.tight_layout(rect=(0, 0, 1, 0.96))
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
     fig.savefig(os.path.join(outdir, f"{name}{suffix}.png"), dpi=90)
     plt.close(fig)
 
