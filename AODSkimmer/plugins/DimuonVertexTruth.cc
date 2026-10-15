@@ -9,6 +9,12 @@
 //   global = globalTrack (displacedGlobalMuons)
 //   outer  = outerTrack  (displacedStandAloneMuons, not UpdatedAtVtx)
 // Several displacedMuons pointing to one track give one unit (ID flags OR-ed).
+// Interim duplicate removal (user decisions 2026-10-15), before units are built:
+// for an inner track used by exactly two displacedMuons, if the track crossed the
+// IP (TrackDetectorAssociator::crossedIP, needs the TrackExtra) the higher-index
+// muon is dropped; otherwise, if exactly one of the two has a global track, the
+// other is dropped. Unresolved cases (no TrackExtra, both or neither global,
+// more than two users) keep all muons.
 //
 // Matching: station-2 position eta/phi (same PropagateToMuon setup as the
 // ntuplizer), same charge, dR < 0.06 inner/global and < 0.10 outer, strict
@@ -27,6 +33,7 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <map>
 #include <set>
 #include <tuple>
 #include <utility>
@@ -251,6 +258,7 @@ private:
   int gSt1Valid_[2], gEcalStatus_[2];
   // Matches: index 3*g + type
   int nUnits_[kNTypes];
+  int nDupDropped_, nDupUnresolved_;  // muons dropped; shared inner tracks left unresolved
   int mMatched_[2 * kNTypes], mIdPass_[2 * kNTypes], mNParents_[2 * kNTypes], mCharge_[2 * kNTypes];
   float mDR_[2 * kNTypes], mPt_[2 * kNTypes], mEta_[2 * kNTypes], mPhi_[2 * kNTypes];
   // Surface of the match (MatchSurface) and gen/reco eta/phi on it
@@ -284,6 +292,8 @@ DimuonVertexTruth::DimuonVertexTruth(const edm::ParameterSet& ps)
   fs->make<TNamed>("definitions",
                    "types: 0 inner(displacedTracks) 1 global(displacedGlobalMuons) 2 outer(displacedStandAloneMuons); "
                    "gen 0 = mu-, 1 = mu+; match index 3*g+type; fit index 3*typeMuMinus+typeMuPlus; "
+                   "interim dedup of displacedMuons sharing an inner track (2 users only; TrackExtra needed): crossedIP -> drop higher index, "
+                   "else drop the one without a global track if exactly one has it; others unresolved (nDupDropped, nDupUnresolved); "
                    "fitStatus 0 not both matched, 1 legs share a track, global legs incl. parent inner/outer, outer legs incl. parent inner (not fitted), 2 fit failed, 3 valid; "
                    "match: station 2 position, same charge, greedy 1-to-1, dR<0.06/0.06/0.10; "
                    "fallback: 2nd greedy pass for gen muons failing station 2, unused tracks, same charge and dR, "
@@ -326,6 +336,8 @@ DimuonVertexTruth::DimuonVertexTruth(const edm::ParameterSet& ps)
   t.Branch("genEcalEta", gEcalEta_, "genEcalEta[2]/F");
   t.Branch("genEcalPhi", gEcalPhi_, "genEcalPhi[2]/F");
   t.Branch("nUnits", nUnits_, "nUnits[3]/I");
+  t.Branch("nDupDropped", &nDupDropped_);
+  t.Branch("nDupUnresolved", &nDupUnresolved_);
   t.Branch("matched", mMatched_, "matched[6]/I");
   t.Branch("matchDR", mDR_, "matchDR[6]/F");
   t.Branch("matchPt", mPt_, "matchPt[6]/F");
@@ -380,6 +392,7 @@ void DimuonVertexTruth::resetBranches() {
     fill(a, 2, -999.f);
   for (auto* a : {gCharge_, gAccepted_, gSt2Valid_, gSt1Valid_, gEcalStatus_}) fill(a, 2, 0);
   fill(nUnits_, kNTypes, 0);
+  nDupDropped_ = nDupUnresolved_ = 0;
   for (auto* a : {mMatched_, mIdPass_, mNParents_, mCharge_, mSurface_}) fill(a, 2 * kNTypes, 0);
   for (auto* a : {mDR_, mPt_, mEta_, mPhi_, mGenSurfEta_, mGenSurfPhi_, mRecoSurfEta_, mRecoSurfPhi_})
     fill(a, 2 * kNTypes, -999.f);
@@ -483,10 +496,45 @@ void DimuonVertexTruth::analyze(const edm::Event& iEvent, const edm::EventSetup&
   // Reco fallback positions are needed only if an accepted gen muon failed station 2.
   const bool needFallback = (gen[0].accepted && !gen[0].st2.valid) || (gen[1].accepted && !gen[1].st2.valid);
 
-  // Reco units, unique per track.
   const auto& muons = iEvent.get(muonToken_);
+  // Interim duplicate removal for displacedMuons sharing an inner track (see header).
+  std::vector<bool> dropped(muons.size(), false);
+  {
+    std::map<RefKey, std::vector<size_t>> users;
+    for (size_t i = 0; i < muons.size(); ++i)
+      if (muons[i].innerTrack().isNonnull()) users[refKey(muons[i].innerTrack())].push_back(i);
+    for (const auto& [key, idx] : users) {
+      if (idx.size() < 2) continue;
+      int drop = -1;
+      if (idx.size() == 2) {
+        const reco::Track& tk = *muons[idx[0]].innerTrack();
+        if (tk.extra().isAvailable()) {
+          // crossedIP = TrackDetectorAssociator::crossedIP(track), as in SharedInnerTrackDuplicatePolicy.cc
+          const auto ip = tk.innerPosition(), op = tk.outerPosition();
+          const auto im = tk.innerMomentum(), om = tk.outerMomentum();
+          const double rpIn = ip.x() * im.x() + ip.y() * im.y(), rpOut = op.x() * om.x() + op.y() * om.y();
+          const bool crossedIP = ip.rho() > 3 && op.rho() > 3 && ((rpIn < 0) != (rpOut < 0));
+          const bool g0 = muons[idx[0]].globalTrack().isNonnull(), g1 = muons[idx[1]].globalTrack().isNonnull();
+          if (crossedIP)
+            drop = static_cast<int>(idx[1]);  // indices are ascending: keep the lower one
+          else if (g0 != g1)
+            drop = static_cast<int>(g0 ? idx[1] : idx[0]);  // keep the one with a global track
+        }
+      }
+      if (drop < 0) {
+        ++nDupUnresolved_;
+        continue;
+      }
+      dropped[drop] = true;
+      ++nDupDropped_;
+    }
+  }
+
+  // Reco units, unique per track.
   std::array<std::vector<Unit>, kNTypes> units;
-  for (const auto& mu : muons) {
+  for (size_t iMu = 0; iMu < muons.size(); ++iMu) {
+    if (dropped[iMu]) continue;
+    const auto& mu = muons[iMu];
     const std::array<reco::TrackRef, kNTypes> refs{{mu.innerTrack(), mu.globalTrack(), mu.outerTrack()}};
     for (int t = 0; t < kNTypes; ++t) {
       const reco::TrackRef& ref = refs[t];
