@@ -1,6 +1,7 @@
 """Plots and JSON summary for the DimuonVertexTruth outputs (vertexing step 1).
 
   python3 plot_dimuon_vertex.py 'RUNDIR/dimuon_vertex_*.root' OUTDIR [--groups overall,mass,lifetime,sample]
+                                 [--require-id]
 
 Groups: overall, per mass point (pooled over lifetimes), per lifetime (pooled over mass points), per
 sample. Pooling is unweighted. Denominator: events with both signal muons accepted.
@@ -24,6 +25,11 @@ bins), not cut.
 x-variables (gen): min pT, max |eta|, max |d0|, leading/subleading (by pT) pT, eta, |d0|, dimuon pT and
 eta, Lxy, dR(mu,mu). |d0| = |vx sin(phi) - vy cos(phi)|, straight line to (0,0); Lxy = vertex rho from
 (0,0). Per-sample groups use only min pT, max |eta|, max |d0|, Lxy, dR.
+
+--require-id (component-level ID): a leg counts as matched only if its matched track passes the ID of
+its type (matchIdPass: inner -> a parent muon isTracker, global -> a parent isGlobal, outer -> DSA ID;
+OR over parent muons). Pairs with a failing leg are treated as not matched (fitStatus 0), so the first
+panel becomes both matched and ID'd / both accepted and the fit efficiency valid / both matched and ID'd.
 """
 import argparse
 import glob
@@ -40,11 +46,13 @@ import uproot
 from scipy.stats import beta
 
 MIN_ENTRIES = 20
+ID_MODE = False  # set by --require-id
+ID_LABEL = ""
 COMBOS = {"II": [0], "GG": [4], "OO": [8], "IG": [1, 3], "IO": [2, 6], "GO": [5, 7]}
 COLORS = {"II": "#1f77b4", "GG": "#ff7f0e", "OO": "#2ca02c", "IG": "#9467bd", "IO": "#8c564b", "GO": "#e377c2"}
 BRANCHES = ["genAccepted", "genPt", "genEta", "genD0", "genLxy", "genDimuonPt", "genDimuonEta", "genDimuonDR",
             "matchSurface", "fitStatus", "fitResAlong", "fitResPerp", "fitResZ", "fitSigAlong", "fitProb",
-            "fitChi2", "fitNdof"]
+            "fitChi2", "fitNdof", "matchIdPass"]
 
 XVARS = {  # name: (label, display edges); underflow (-inf, first) and overflow [last, inf) bins are added for the JSON
     "minPt": ("min gen p_T [GeV]", np.arange(0, 30.01, 2)),
@@ -76,6 +84,16 @@ def load(pattern):
             raise RuntimeError(f"sample {sample} appears in more than one input file ({fn})")
         data[sample] = {k: v[keep] for k, v in a.items()}
     return data
+
+
+def require_id(a):
+    """Treat combinations with a leg failing its component ID as not matched (fitStatus 0)."""
+    st = a["fitStatus"].copy()
+    idp = a["matchIdPass"]  # [mu- I, G, O, mu+ I, G, O]
+    for idx in range(9):
+        ta, tb = divmod(idx, 3)
+        st[(idp[:, ta] == 0) | (idp[:, 3 + tb] == 0), idx] = 0
+    a["fitStatus"] = st
 
 
 def concat(parts):
@@ -199,8 +217,9 @@ def plot_group(a, summary, xv, title, outdir, xvars):
                     ax.plot(centers, y, ls, marker="o", ms=3, color=col, label=c if q == 68 else None)
             y = np.array([np.nan if t is None else t for t in ce["pull_along_q68"][sl]], float)
             axs[1, 2].plot(centers, y, "-", marker="o", ms=3, color=col, label=c)
-        axs[0, 0].set_ylabel("pair-match efficiency (both matched / both accepted)")
-        axs[0, 1].set_ylabel("fit efficiency (valid / both matched)")
+        both = "both matched and ID'd" if ID_MODE else "both matched"
+        axs[0, 0].set_ylabel(f"pair-match efficiency ({both} / both accepted)")
+        axs[0, 1].set_ylabel(f"fit efficiency (valid / {both})")
         for ax in (axs[0, 0], axs[0, 1]):
             ax.set_ylim(0, 1.05)
         for ax, comp in ((axs[0, 2], "along flight dir."), (axs[1, 0], "perp. to flight dir."), (axs[1, 1], "z")):
@@ -215,7 +234,7 @@ def plot_group(a, summary, xv, title, outdir, xvars):
             ax.grid(alpha=0.3)
         axs[0, 0].legend(fontsize=8, ncol=2)
         fig.suptitle(f"{title} | denominator: both signal muons accepted ({summary['nEvents']} events) | "
-                     f"I=inner G=global O=DSA; mixed = both orderings; unweighted; "
+                     f"I=inner G=global O=DSA; {ID_LABEL}mixed = both orderings; unweighted; "
                      f"containment needs >= {MIN_ENTRIES} pairs/bin", fontsize=9)
         fig.tight_layout(rect=(0, 0, 1, 0.96))
         fig.savefig(os.path.join(outdir, f"{name}.png"), dpi=90)
@@ -251,7 +270,7 @@ def plot_distributions(a, title, outdir):
         ax.grid(alpha=0.3)
     axs[0, 0].legend(fontsize=8)
     axs[1, 0].legend(fontsize=8)
-    fig.suptitle(f"{title} | valid fits, mixed combos include both orderings | unweighted", fontsize=9)
+    fig.suptitle(f"{title} | {ID_LABEL}valid fits, mixed combos include both orderings | unweighted", fontsize=9)
     fig.tight_layout(rect=(0, 0, 1, 0.96))
     fig.savefig(os.path.join(outdir, "distributions.png"), dpi=90)
     plt.close(fig)
@@ -284,7 +303,7 @@ def plot_symmetry(a, outdir):
             ax.set_xlabel(label)
             ax.legend(fontsize=8)
             ax.grid(alpha=0.3)
-    fig.suptitle("Overall: orderings of mixed combinations (mu+/mu- symmetry check) | unweighted", fontsize=9)
+    fig.suptitle(f"Overall: {ID_LABEL}orderings of mixed combinations (mu+/mu- symmetry check) | unweighted", fontsize=9)
     fig.tight_layout(rect=(0, 0, 1, 0.96))
     fig.savefig(os.path.join(outdir, "ordering_symmetry_Lxy.png"), dpi=90)
     plt.close(fig)
@@ -295,9 +314,16 @@ def main():
     ap.add_argument("pattern")
     ap.add_argument("outdir")
     ap.add_argument("--groups", default="overall,mass,lifetime,sample")
+    ap.add_argument("--require-id", action="store_true", help="require the component ID on both legs")
     args = ap.parse_args()
+    global ID_MODE, ID_LABEL
+    if args.require_id:
+        ID_MODE, ID_LABEL = True, "both legs pass component ID (I: tracker, G: global, O: DSA ID); "
     groups = args.groups.split(",")
     data = load(args.pattern)
+    if ID_MODE:
+        for a in data.values():
+            require_id(a)
     rx = re.compile(r"(Mchi-[^_]+_dMchi-[^_]+)_(ctau-[^_]+)$")
     by_mass, by_life = {}, {}
     for s in data:
@@ -316,7 +342,7 @@ def main():
         todo += [(f"lifetime/{l}", f"lifetime {l} (pooled over masses)", ss, list(XVARS)) for l, ss in sorted(by_life.items())]
     if "sample" in groups:
         todo += [(f"sample/{s}", f"sample {s}", [s], SAMPLE_XVARS) for s in sorted(data)]
-    out = {"definitions": __doc__, "minEntries": MIN_ENTRIES, "samples": sorted(data), "groups": {}}
+    out = {"definitions": __doc__, "minEntries": MIN_ENTRIES, "requireId": ID_MODE, "samples": sorted(data), "groups": {}}
     for key, title, samples, xvars in todo:
         a = concat([data[s] for s in samples])
         summary, xv = summarize_group(a, xvars)
