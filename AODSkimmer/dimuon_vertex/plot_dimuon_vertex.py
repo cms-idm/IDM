@@ -1,7 +1,7 @@
 """Plots and JSON summary for the DimuonVertexTruth outputs (vertexing step 1).
 
   python3 plot_dimuon_vertex.py 'RUNDIR/dimuon_vertex_*.root' OUTDIR [--groups overall,mass,lifetime,sample]
-                                 [--require-id]
+                                 [--require-id] [--log]
 
 Groups: overall, per mass point (pooled over lifetimes), per lifetime (pooled over mass points), per
 sample. Pooling is unweighted. Denominator: events with both signal muons accepted.
@@ -17,14 +17,22 @@ station-1/ECAL fallback; its share is stored in the JSON.
 Per group and x-variable, one PNG with 6 panels: pair-match efficiency (both matched / both accepted),
 fit efficiency (valid / both matched), 68% (solid) and 95% (dashed) containment of |residual| along /
 perpendicular to the gen transverse flight direction and in z, and 68% containment of |pull_along|
-(1 for Gaussian pulls with correct errors). Residual panels use a log y axis. Containment needs
->= MIN_ENTRIES entries per bin and carries no uncertainty; efficiencies have 68.27% Clopper-Pearson
-intervals. x axes are linear; values outside the shown range are kept in the JSON (underflow/overflow
-bins), not cut.
+(1 for Gaussian pulls with correct errors). Containment needs >= MIN_ENTRIES entries per bin and carries
+no uncertainty; efficiencies have 68.27% Clopper-Pearson intervals. Values outside the shown range are
+kept in the JSON (underflow/overflow bins), not cut.
+
+Scales: every plot is linear. <name>_trackerLegs.png repeats a figure with only II, GG, IG (inner/global
+residuals, ~0.01 cm, vanish next to DSA ones on a linear axis). --log adds <name>_log.png copies with log
+residual/pull axes; they never replace the linear plots.
+
+gen_vertex.png (every group): gen signal-vertex Lxy (production vertex of the signal mu-, rho from (0,0))
+over 0-740 cm and the fraction above Lxy; denominator = every event with one signal mu- and one mu+ (no
+acceptance; Lxy >= 740 counted as overflow). Fractions with Lxy > 112, 273.5, 330, >= 740 cm, |vz| > 273.5
+cm and outside the old fitter box (Lxy >= 112 or |vz| >= 273.5) are in the plot and the JSON (genVertex).
 
 x-variables (gen): min pT, max |eta|, max |d0|, leading/subleading (by pT) pT, eta, |d0|, dimuon pT and
-eta, Lxy, dR(mu,mu). |d0| = |vx sin(phi) - vy cos(phi)|, straight line to (0,0); Lxy = vertex rho from
-(0,0). Per-sample groups use only min pT, max |eta|, max |d0|, Lxy, dR.
+eta, Lxy (0-75 cm), LxyFull (0-740 cm), dR(mu,mu). |d0| = |vx sin(phi) - vy cos(phi)|, straight line to
+(0,0); Lxy = vertex rho from (0,0). Per-sample groups use only min pT, max |eta|, max |d0|, Lxy, LxyFull, dR.
 
 HIER (object-level hierarchy, files from 63c413d on): one representative track per kept displacedMuon
 (isGlobal -> global, else isTracker -> inner, else DSA-ID'd outer -> outer; no ID'd component -> unused),
@@ -60,6 +68,9 @@ from scipy.stats import beta
 MIN_ENTRIES = 20
 ID_MODE = False  # set by --require-id
 ID_LABEL = ""
+LOG = False  # set by --log: add log-scale copies
+TRACKER_COMBOS = ["II", "GG", "IG"]
+GEN_LXY_CUTS = [112.0, 273.5, 330.0, 740.0]
 COMBOS = {"II": [0], "GG": [4], "OO": [8], "IG": [1, 3], "IO": [2, 6], "GO": [5, 7]}
 COLORS = {"II": "#1f77b4", "GG": "#ff7f0e", "OO": "#2ca02c", "IG": "#9467bd", "IO": "#8c564b", "GO": "#e377c2",
           "HIER": "#000000"}
@@ -89,12 +100,14 @@ XVARS = {  # name: (label, display edges); underflow (-inf, first) and overflow 
     "dimuonPt": ("gen dimuon p_T [GeV]", np.arange(0, 60.01, 4)),
     "dimuonEta": ("gen dimuon eta", np.linspace(-4, 4, 17)),
     "Lxy": ("gen L_xy [cm]", np.arange(0, 75.01, 3)),
+    "LxyFull": ("gen L_xy [cm]", np.arange(0, 740.01, 20)),
     "dR": ("gen dR(mu, mu)", np.arange(0, 1.501, 0.1)),
 }
-SAMPLE_XVARS = ["minPt", "maxAbsEta", "maxAbsD0", "Lxy", "dR"]
+SAMPLE_XVARS = ["minPt", "maxAbsEta", "maxAbsD0", "Lxy", "LxyFull", "dR"]
 
 
 def load(pattern):
+    """Per sample: events with both signal muons accepted, and (GEN) the gen vertex of every event."""
     data = {}
     for fn in sorted(glob.glob(pattern)):
         f = uproot.open(fn)
@@ -119,7 +132,12 @@ def load(pattern):
         if sample in data:
             raise RuntimeError(f"sample {sample} appears in more than one input file ({fn})")
         data[sample] = {k: v[keep] for k, v in a.items()}
+        vz = tree["genVtx"].array(library="np")[:, 2]
+        GEN[sample] = {"genLxy": a["genLxy"], "genVz": np.asarray(vz)}
     return data
+
+
+GEN = {}  # sample -> gen vertex of every event (filled by load)
 
 
 def require_id(a):
@@ -145,7 +163,8 @@ def xvalues(a):
         "minPt": pt.min(1), "maxAbsEta": np.abs(eta).max(1), "maxAbsD0": d0.max(1),
         "leadPt": pt[r, lead], "subPt": pt[r, sub], "leadEta": eta[r, lead], "subEta": eta[r, sub],
         "leadD0": d0[r, lead], "subD0": d0[r, sub],
-        "dimuonPt": a["genDimuonPt"], "dimuonEta": a["genDimuonEta"], "Lxy": a["genLxy"], "dR": a["genDimuonDR"],
+        "dimuonPt": a["genDimuonPt"], "dimuonEta": a["genDimuonEta"], "Lxy": a["genLxy"], "LxyFull": a["genLxy"],
+        "dR": a["genDimuonDR"],
     }
 
 
@@ -233,74 +252,98 @@ def summarize_group(a, xvars):
 def plot_group(a, summary, xv, title, outdir, xvars):
     os.makedirs(outdir, exist_ok=True)
     for name in xvars:
-        label, disp = XVARS[name]
-        e = summary["x"][name]
-        nb = len(disp) - 1
-        centers = 0.5 * (disp[:-1] + disp[1:])
-        sl = slice(1, nb + 1)  # skip underflow/overflow bins
-        den = np.array(e["bothAccepted"][sl])
-        fig, axs = plt.subplots(2, 3, figsize=(16, 9))
-        for c in COMBOS:
-            ce = e["combos"][c]
-            col = COLORS[c]
-            m = np.array(ce["matched"][sl])
-            v = np.array(ce["validGivenMatched"][sl])
-            for ax, k, n in ((axs[0, 0], m, den), (axs[0, 1], v, m)):
-                eff, lo, hi = clopper_pearson(k, n)
-                ok = n > 0
-                ax.errorbar(centers[ok], eff[ok], yerr=[eff[ok] - lo[ok], hi[ok] - eff[ok]],
-                            xerr=0.5 * np.diff(disp)[ok], fmt="o", ms=3, color=col, label=c)
-            for ax, comp in ((axs[0, 2], "along"), (axs[1, 0], "perp"), (axs[1, 1], "z")):
-                for q, ls in ((68, "-"), (95, "--")):
-                    y = np.array([np.nan if t is None else t for t in ce[f"res_{comp}_q{q}_cm"][sl]], float)
-                    ax.plot(centers, y, ls, marker="o", ms=3, color=col, label=c if q == 68 else None)
-            y = np.array([np.nan if t is None else t for t in ce["pull_along_q68"][sl]], float)
-            axs[1, 2].plot(centers, y, "-", marker="o", ms=3, color=col, label=c)
-        both = "both matched and ID'd" if ID_MODE else "both matched"
-        axs[0, 0].set_ylabel(f"pair-match efficiency ({both} / both accepted)")
-        axs[0, 1].set_ylabel(f"fit efficiency (valid / {both})")
-        for ax in (axs[0, 0], axs[0, 1]):
-            ax.set_ylim(0, 1.05)
-        for ax, comp in ((axs[0, 2], "along flight dir."), (axs[1, 0], "perp. to flight dir."), (axs[1, 1], "z")):
-            ax.set_yscale("log")
-            ax.set_ylabel(f"|reco - gen vertex| {comp} [cm]\n68% (solid), 95% (dashed) containment")
-        axs[1, 2].axhline(1.0, color="gray", lw=0.8)
-        axs[1, 2].set_yscale("log")
-        axs[1, 2].set_ylabel("68% containment of |pull_along|")
-        for ax in axs.flat:
-            ax.set_xlabel(label)
-            ax.set_xlim(disp[0], disp[-1])
-            ax.grid(alpha=0.3)
-        axs[0, 0].legend(fontsize=8, ncol=2)
-        fig.suptitle(f"{title} | denominator: both signal muons accepted ({summary['nEvents']} events) | "
-                     f"I=inner G=global O=DSA; HIER = object-level hierarchy; {ID_LABEL}mixed = both orderings; unweighted; "
-                     f"containment needs >= {MIN_ENTRIES} pairs/bin", fontsize=9)
-        fig.tight_layout(rect=(0, 0, 1, 0.96))
-        fig.savefig(os.path.join(outdir, f"{name}.png"), dpi=90)
-        plt.close(fig)
+        plot_group_figure(summary, title, outdir, name, list(COMBOS), False, "")
+        plot_group_figure(summary, title, outdir, name, TRACKER_COMBOS, False, "_trackerLegs")
+        if LOG:
+            plot_group_figure(summary, title, outdir, name, list(COMBOS), True, "_log")
+
+
+def plot_group_figure(summary, title, outdir, name, combos, log, suffix):
+    label, disp = XVARS[name]
+    e = summary["x"][name]
+    nb = len(disp) - 1
+    centers = 0.5 * (disp[:-1] + disp[1:])
+    sl = slice(1, nb + 1)  # skip underflow/overflow bins
+    den = np.array(e["bothAccepted"][sl])
+    fig, axs = plt.subplots(2, 3, figsize=(16, 9))
+    for c in combos:
+        ce = e["combos"][c]
+        col = COLORS[c]
+        m = np.array(ce["matched"][sl])
+        v = np.array(ce["validGivenMatched"][sl])
+        for ax, k, n in ((axs[0, 0], m, den), (axs[0, 1], v, m)):
+            eff, lo, hi = clopper_pearson(k, n)
+            ok = n > 0
+            ax.errorbar(centers[ok], eff[ok], yerr=[eff[ok] - lo[ok], hi[ok] - eff[ok]],
+                        xerr=0.5 * np.diff(disp)[ok], fmt="o", ms=3, color=col, label=c)
+        for ax, comp in ((axs[0, 2], "along"), (axs[1, 0], "perp"), (axs[1, 1], "z")):
+            for q, ls in ((68, "-"), (95, "--")):
+                y = np.array([np.nan if t is None else t for t in ce[f"res_{comp}_q{q}_cm"][sl]], float)
+                ax.plot(centers, y, ls, marker="o", ms=3, color=col, label=c if q == 68 else None)
+        y = np.array([np.nan if t is None else t for t in ce["pull_along_q68"][sl]], float)
+        axs[1, 2].plot(centers, y, "-", marker="o", ms=3, color=col, label=c)
+    both = "both matched and ID'd" if ID_MODE else "both matched"
+    axs[0, 0].set_ylabel(f"pair-match efficiency ({both} / both accepted)")
+    axs[0, 1].set_ylabel(f"fit efficiency (valid / {both})")
+    for ax in (axs[0, 0], axs[0, 1]):
+        ax.set_ylim(0, 1.05)
+    for ax, comp in ((axs[0, 2], "along flight dir."), (axs[1, 0], "perp. to flight dir."), (axs[1, 1], "z")):
+        ax.set_yscale("log" if log else "linear")
+        if not log:
+            ax.set_ylim(bottom=0)
+        ax.set_ylabel(f"|reco - gen vertex| {comp} [cm]\n68% (solid), 95% (dashed) containment")
+    axs[1, 2].axhline(1.0, color="gray", lw=0.8)
+    axs[1, 2].set_yscale("log" if log else "linear")
+    if not log:
+        axs[1, 2].set_ylim(bottom=0)
+    axs[1, 2].set_ylabel("68% containment of |pull_along|")
+    for ax in axs.flat:
+        ax.set_xlabel(label)
+        ax.set_xlim(disp[0], disp[-1])
+        ax.grid(alpha=0.3)
+    axs[0, 0].legend(fontsize=8, ncol=2)
+    fig.suptitle(f"{title} | denominator: both signal muons accepted ({summary['nEvents']} events) | "
+                 f"I=inner G=global O=DSA; HIER = object-level hierarchy; {ID_LABEL}mixed = both orderings; unweighted; "
+                 f"containment needs >= {MIN_ENTRIES} pairs/bin | combos: {', '.join(combos)}; "
+                 f"{'log' if log else 'linear'} residual/pull axes", fontsize=9)
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
+    fig.savefig(os.path.join(outdir, f"{name}{suffix}.png"), dpi=90)
+    plt.close(fig)
 
 
 def plot_distributions(a, title, outdir):
     os.makedirs(outdir, exist_ok=True)
+    plot_distributions_figure(a, title, outdir, list(COMBOS), np.linspace(0, 50, 101), "")
+    plot_distributions_figure(a, title, outdir, TRACKER_COMBOS, np.linspace(0, 0.1, 101), "_trackerLegs")
+    if LOG:
+        plot_distributions_figure(a, title, outdir, list(COMBOS), np.logspace(-5, 3, 81), "_log")
+
+
+def plot_distributions_figure(a, title, outdir, combos, resbins, suffix):
+    log = suffix == "_log"
     dummy = np.zeros(len(a["genPt"]))
     fig, axs = plt.subplots(2, 3, figsize=(16, 9))
-    logbins = np.logspace(-5, 3, 81)
-    for c in COMBOS:
+    lo, hi = (1.01e-5, 9.9e2) if log else (0.0, resbins[-1] * (1 - 1e-9))
+    for c in combos:
         p = combo_pairs(a, c, dummy)
         if len(p["along"]) == 0:
             continue
         w = np.full(len(p["along"]), 1.0 / len(p["along"]))  # fraction of pairs per bin
         kw = dict(histtype="step", weights=w, color=COLORS[c], label=f"{c} ({len(p['along'])})")
         for ax, comp in ((axs[0, 0], "along"), (axs[0, 1], "perp"), (axs[0, 2], "z")):
-            ax.hist(np.clip(np.abs(p[comp]), 1.01e-5, 9.9e2), bins=logbins, **kw)
+            ax.hist(np.clip(np.abs(p[comp]), lo, hi), bins=resbins, **kw)
         axs[1, 0].hist(np.clip(p["pull"], -10, 10), bins=np.linspace(-10, 10, 81), **kw)
         axs[1, 1].hist(p["prob"], bins=np.linspace(0, 1, 51), **kw)
         axs[1, 2].hist(np.clip(p["chi2ndof"], 0, 20), bins=np.linspace(0, 20, 81), **kw)
     g = np.linspace(-10, 10, 400)
     axs[1, 0].plot(g, 0.25 * np.exp(-g * g / 2) / np.sqrt(2 * np.pi), color="k", lw=0.8, label="N(0,1)")
     for ax, comp in ((axs[0, 0], "along flight dir."), (axs[0, 1], "perp. to flight dir."), (axs[0, 2], "z")):
-        ax.set_xscale("log")
-        ax.set_xlabel(f"|reco - gen vertex| {comp} [cm] (clipped to [1e-5, 1e3])")
+        if log:
+            ax.set_xscale("log")
+        ax.set_xlabel(f"|reco - gen vertex| {comp} [cm] (clipped to [{lo:g}, {resbins[-1]:g}])")
+    if log:
+        for ax in (axs[1, 0], axs[1, 2]):
+            ax.set_yscale("log")
     axs[1, 0].set_xlabel("pull along flight dir. (clipped to +-10)")
     axs[1, 1].set_xlabel("fit probability")
     axs[1, 2].set_xlabel("chi2 / ndof (clipped to 20)")
@@ -309,9 +352,10 @@ def plot_distributions(a, title, outdir):
         ax.grid(alpha=0.3)
     axs[0, 0].legend(fontsize=8)
     axs[1, 0].legend(fontsize=8)
-    fig.suptitle(f"{title} | {ID_LABEL}valid fits, mixed combos include both orderings | unweighted", fontsize=9)
+    fig.suptitle(f"{title} | {ID_LABEL}valid fits, mixed combos include both orderings | unweighted | "
+                 f"{'log' if log else 'linear'} axes", fontsize=9)
     fig.tight_layout(rect=(0, 0, 1, 0.96))
-    fig.savefig(os.path.join(outdir, "distributions.png"), dpi=90)
+    fig.savefig(os.path.join(outdir, f"distributions{suffix}.png"), dpi=90)
     plt.close(fig)
 
 
@@ -374,6 +418,13 @@ def plot_hierarchy(a, title, outdir):
 
 
 def plot_merging(a, title, outdir):
+    out = plot_merging_figure(a, title, outdir, False)
+    if LOG:
+        plot_merging_figure(a, title, outdir, True)
+    return out
+
+
+def plot_merging_figure(a, title, outdir, log):
     """Is the DSA matched to a gen muon of an inner representative wrongly matched, or unmerged?"""
     def per_gen(k):
         return np.concatenate([a[k][:, 0], a[k][:, 1]])
@@ -432,19 +483,74 @@ def plot_merging(a, title, outdir):
         v = np.clip(odr[sel & (odr > -900)], 0, 0.4999)
         if len(v):
             ax.hist(v, bins=np.linspace(0, 0.5, 51), histtype="step", color=col, weights=np.full(len(v), 1.0 / len(v)))
-    ax.set_yscale("log")
+    ax.set_yscale("log" if log else "linear")
     ax.set_xlabel("dR(DSA owner's inner track, representative track) at reference point (clipped to 0.5)")
     ax.set_ylabel("fraction per bin")
     ax.grid(alpha=0.3)
     fig.suptitle(f"{title} | merging check: DSA-ID'd standalone matched to the same gen muon (st2 + st1 fallback) | "
                  "unweighted, unit area", fontsize=9)
     fig.tight_layout(rect=(0, 0, 1, 0.96))
-    fig.savefig(os.path.join(outdir, "merging.png"), dpi=90)
+    fig.savefig(os.path.join(outdir, "merging_log.png" if log else "merging.png"), dpi=90)
     plt.close(fig)
     return {cl: {"n": int(sel.sum()), **{k: int((v[sel] > 0).sum()) for k, v in fr.items()}} for cl, sel, _ in cats}
 
 
+def gen_vertex_counts(g):
+    lxy, vz = g["genLxy"], np.abs(g["genVz"])
+    n = len(lxy)
+    out = {"nEvents": int(n), "LxyAbove": {f"{c:g}": int((lxy > c).sum()) for c in GEN_LXY_CUTS[:-1]},
+           "LxyAtLeast740": int((lxy >= 740).sum()), "absVzAbove273.5": int((vz > 273.5).sum()),
+           "outsideOldBox": int(((lxy >= 112) | (vz >= 273.5)).sum())}
+    return out
+
+
+def plot_gen_vertex(g, counts, title, outdir):
+    os.makedirs(outdir, exist_ok=True)
+    lxy = g["genLxy"]
+    n = max(len(lxy), 1)
+    edges = np.arange(0, 740.01, 10)
+    for log in ([False, True] if LOG else [False]):
+        fig, axs = plt.subplots(1, 2, figsize=(14, 5.5))
+        h = np.histogram(np.clip(lxy, 0, None), np.append(edges, np.inf))[0]  # last bin = overflow (>= 740)
+        axs[0].stairs(h[:-1] / n, edges, color="k")
+        axs[0].set_ylabel("fraction of gen signal vertices per 10 cm")
+        grid = np.linspace(0, 740, 741)
+        above = 1.0 - np.searchsorted(np.sort(lxy), grid, side="right") / n
+        axs[1].plot(grid, above, color="k")
+        axs[1].set_ylabel("fraction of gen signal vertices with L_xy > x")
+        for ax in axs:
+            for c, col in zip(GEN_LXY_CUTS[:-1], ("#d62728", "#1f77b4", "#2ca02c")):
+                ax.axvline(c, color=col, ls="--", lw=1, label=f"{c:g} cm")
+            ax.set_xlabel("gen signal-vertex L_xy [cm] (rho from (0,0))")
+            ax.set_xlim(0, 740)
+            ax.set_yscale("log" if log else "linear")
+            if not log:
+                ax.set_ylim(bottom=0)
+            ax.grid(alpha=0.3)
+        axs[1].legend(fontsize=8)
+        k = counts
+        txt = "\n".join([f"N = {k['nEvents']} events (no acceptance)"]
+                        + [f"L_xy > {c} cm: {v} ({v / n:.4f})" for c, v in k["LxyAbove"].items()]
+                        + [f"L_xy >= 740 cm (overflow): {k['LxyAtLeast740']} ({k['LxyAtLeast740'] / n:.4f})",
+                           f"|vz| > 273.5 cm: {k['absVzAbove273.5']} ({k['absVzAbove273.5'] / n:.4f})",
+                           f"outside old box (L_xy>=112 or |vz|>=273.5): {k['outsideOldBox']} "
+                           f"({k['outsideOldBox'] / n:.4f})"])
+        axs[0].text(0.97, 0.97, txt, transform=axs[0].transAxes, ha="right", va="top", fontsize=8,
+                    bbox=dict(facecolor="white", alpha=0.8, edgecolor="gray"))
+        fig.suptitle(f"{title} | gen signal vertex (signal mu- production vertex), every event with one signal mu- "
+                     f"and one mu+ | unweighted | {'log' if log else 'linear'} y", fontsize=9)
+        fig.tight_layout(rect=(0, 0, 1, 0.95))
+        fig.savefig(os.path.join(outdir, "gen_vertex_log.png" if log else "gen_vertex.png"), dpi=90)
+        plt.close(fig)
+
+
 def plot_symmetry(a, outdir):
+    plot_symmetry_figure(a, outdir, False)
+    if LOG:
+        plot_symmetry_figure(a, outdir, True)
+
+
+def plot_symmetry_figure(a, outdir, log):
     """Overall check that the two orderings of each mixed combination agree."""
     os.makedirs(outdir, exist_ok=True)
     x = a["genLxy"]
@@ -466,14 +572,14 @@ def plot_symmetry(a, outdir):
                            label=f"mu- {name[0]}, mu+ {name[1]}: {int(v.sum())} valid")
         axs[0, j].set_ylabel(f"{c}: pair-match efficiency per ordering")
         axs[1, j].set_ylabel(f"{c}: 68% containment |res along| [cm]")
-        axs[1, j].set_yscale("log")
+        axs[1, j].set_yscale("log" if log else "linear")
         for ax in (axs[0, j], axs[1, j]):
             ax.set_xlabel(label)
             ax.legend(fontsize=8)
             ax.grid(alpha=0.3)
     fig.suptitle(f"Overall: {ID_LABEL}orderings of mixed combinations (mu+/mu- symmetry check) | unweighted", fontsize=9)
     fig.tight_layout(rect=(0, 0, 1, 0.96))
-    fig.savefig(os.path.join(outdir, "ordering_symmetry_Lxy.png"), dpi=90)
+    fig.savefig(os.path.join(outdir, "ordering_symmetry_Lxy_log.png" if log else "ordering_symmetry_Lxy.png"), dpi=90)
     plt.close(fig)
 
 
@@ -483,8 +589,10 @@ def main():
     ap.add_argument("outdir")
     ap.add_argument("--groups", default="overall,mass,lifetime,sample")
     ap.add_argument("--require-id", action="store_true", help="require the component ID on both legs")
+    ap.add_argument("--log", action="store_true", help="also write log-scale copies (*_log.png)")
     args = ap.parse_args()
-    global ID_MODE, ID_LABEL
+    global ID_MODE, ID_LABEL, LOG
+    LOG = args.log
     if args.require_id:
         ID_MODE, ID_LABEL = True, "both legs pass component ID (I: tracker, G: global, O: DSA ID); "
     groups = args.groups.split(",")
@@ -510,11 +618,15 @@ def main():
         todo += [(f"lifetime/{l}", f"lifetime {l} (pooled over masses)", ss, list(XVARS)) for l, ss in sorted(by_life.items())]
     if "sample" in groups:
         todo += [(f"sample/{s}", f"sample {s}", [s], SAMPLE_XVARS) for s in sorted(data)]
-    out = {"definitions": __doc__, "minEntries": MIN_ENTRIES, "requireId": ID_MODE, "samples": sorted(data), "groups": {}}
+    out = {"definitions": __doc__, "minEntries": MIN_ENTRIES, "requireId": ID_MODE, "log": LOG, "samples": sorted(data),
+           "groups": {}}
     for key, title, samples, xvars in todo:
         a = concat([data[s] for s in samples])
         summary, xv = summarize_group(a, xvars)
         summary["samples"] = samples
+        g = concat([GEN[s] for s in samples])
+        summary["genVertex"] = gen_vertex_counts(g)
+        plot_gen_vertex(g, summary["genVertex"], title, os.path.join(args.outdir, key))
         if "HIER" in COMBOS:
             summary["hierarchy"] = hierarchy_counts(a)
         out["groups"][key] = summary
