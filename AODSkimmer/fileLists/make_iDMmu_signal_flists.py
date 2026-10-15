@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import argparse
 import os
 import re
 import subprocess
@@ -143,6 +144,12 @@ def output_path_for_key(key):
 
 
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--campaign", default="",
+                    help="keep only one production, e.g. 20260928 (matches _<campaign>_ in the path); "
+                         "EOS holds several productions per signal point")
+    args = ap.parse_args()
+
     Path(OUT_DIR).mkdir(parents=True, exist_ok=True)
 
     print("Scanning EOS directory:")
@@ -150,6 +157,8 @@ def main():
 
     files = list_root_files(EOS_DIR)
     files = [f for f in files if condition(f)]
+    if args.campaign:
+        files = [f for f in files if f"_{args.campaign}_" in f]
 
     print(f"Found {len(files)} ROOT files.")
 
