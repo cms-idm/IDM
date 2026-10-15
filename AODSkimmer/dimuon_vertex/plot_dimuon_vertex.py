@@ -26,6 +26,15 @@ x-variables (gen): min pT, max |eta|, max |d0|, leading/subleading (by pT) pT, e
 eta, Lxy, dR(mu,mu). |d0| = |vx sin(phi) - vy cos(phi)|, straight line to (0,0); Lxy = vertex rho from
 (0,0). Per-sample groups use only min pT, max |eta|, max |d0|, Lxy, dR.
 
+HIER (object-level hierarchy, files from 63c413d on): one representative track per kept displacedMuon
+(isGlobal -> global, else isTracker -> inner, else DSA-ID'd outer -> outer; no ID'd component -> unused),
+matched at station 2 with station-1 fallback; same panels with pair-match = both gen muons matched to a
+representative / both accepted, fit efficiency = valid / both matched. Extra hierarchy.png (non-sample
+groups): composition of valid HIER fits by representative pair, and the merging check per matched gen
+muon: whether a DSA-ID'd raw standalone track matched to the same gen muon is an outer track of the
+representative's objects (hierOuterCheck 1 none matched, 2 own, 3 not own but objects have an outer, 4
+objects have no outer); counts in the JSON. --require-id does not change HIER (its IDs are built in).
+
 --require-id (component-level ID): a leg counts as matched only if its matched track passes the ID of
 its type (matchIdPass: inner -> a parent muon isTracker, global -> a parent isGlobal, outer -> DSA ID;
 OR over parent muons). Pairs with a failing leg are treated as not matched (fitStatus 0), so the first
@@ -49,7 +58,12 @@ MIN_ENTRIES = 20
 ID_MODE = False  # set by --require-id
 ID_LABEL = ""
 COMBOS = {"II": [0], "GG": [4], "OO": [8], "IG": [1, 3], "IO": [2, 6], "GO": [5, 7]}
-COLORS = {"II": "#1f77b4", "GG": "#ff7f0e", "OO": "#2ca02c", "IG": "#9467bd", "IO": "#8c564b", "GO": "#e377c2"}
+COLORS = {"II": "#1f77b4", "GG": "#ff7f0e", "OO": "#2ca02c", "IG": "#9467bd", "IO": "#8c564b", "GO": "#e377c2",
+          "HIER": "#000000"}
+HIER_FIT = {"fitStatus": "hierFitStatus", "fitResAlong": "hierFitResAlong", "fitResPerp": "hierFitResPerp",
+            "fitResZ": "hierFitResZ", "fitSigAlong": "hierFitSigAlong", "fitProb": "hierFitProb",
+            "fitChi2": "hierFitChi2", "fitNdof": "hierFitNdof"}
+HIER_EXTRA = ["hierSurface", "hierType", "hierMatched", "hierOuterCheck"]
 BRANCHES = ["genAccepted", "genPt", "genEta", "genD0", "genLxy", "genDimuonPt", "genDimuonEta", "genDimuonDR",
             "matchSurface", "fitStatus", "fitResAlong", "fitResPerp", "fitResZ", "fitSigAlong", "fitProb",
             "fitChi2", "fitNdof", "matchIdPass"]
@@ -77,8 +91,16 @@ def load(pattern):
     for fn in sorted(glob.glob(pattern)):
         f = uproot.open(fn)
         sample = str(f["dimuonVertexTruth/sample"].member("fTitle"))
-        a = f["dimuonVertexTruth/events"].arrays(BRANCHES, library="np")
-        a = {k: np.asarray(v) for k, v in a.items()}
+        tree = f["dimuonVertexTruth/events"]
+        hier = "hierFitStatus" in tree.keys()
+        if data and hier != ("HIER" in COMBOS):
+            raise RuntimeError(f"{fn}: inputs mix files with and without the hierarchy branches")
+        names = BRANCHES + (list(HIER_FIT.values()) + HIER_EXTRA if hier else [])
+        a = {k: np.asarray(v) for k, v in tree.arrays(names, library="np").items()}
+        if hier:  # the hierarchy fit becomes column 9 of the fit arrays
+            COMBOS["HIER"] = [9]
+            for k, h in HIER_FIT.items():
+                a[k] = np.column_stack([a[k], a.pop(h)])
         keep = a["genAccepted"].sum(1) == 2
         if sample in data:
             raise RuntimeError(f"sample {sample} appears in more than one input file ({fn})")
@@ -90,7 +112,7 @@ def require_id(a):
     """Treat combinations with a leg failing its component ID as not matched (fitStatus 0)."""
     st = a["fitStatus"].copy()
     idp = a["matchIdPass"]  # [mu- I, G, O, mu+ I, G, O]
-    for idx in range(9):
+    for idx in range(9):  # column 9 (HIER) already has its IDs
         ta, tb = divmod(idx, 3)
         st[(idp[:, ta] == 0) | (idp[:, 3 + tb] == 0), idx] = 0
     a["fitStatus"] = st
@@ -130,6 +152,9 @@ def combo_event_flags(a, c):
     valid = (st == 3).any(1)
     fallback = np.zeros(len(st), bool)
     for idx in COMBOS[c]:
+        if idx == 9:
+            fallback |= (a["fitStatus"][:, 9] > 0) & (a["hierSurface"] > 1).any(1)
+            continue
         ta, tb = divmod(idx, 3)
         fallback |= (a["fitStatus"][:, idx] > 0) & ((surf[:, ta] > 1) | (surf[:, 3 + tb] > 1))
     return matched, valid, fallback
@@ -234,7 +259,7 @@ def plot_group(a, summary, xv, title, outdir, xvars):
             ax.grid(alpha=0.3)
         axs[0, 0].legend(fontsize=8, ncol=2)
         fig.suptitle(f"{title} | denominator: both signal muons accepted ({summary['nEvents']} events) | "
-                     f"I=inner G=global O=DSA; {ID_LABEL}mixed = both orderings; unweighted; "
+                     f"I=inner G=global O=DSA; HIER = object-level hierarchy; {ID_LABEL}mixed = both orderings; unweighted; "
                      f"containment needs >= {MIN_ENTRIES} pairs/bin", fontsize=9)
         fig.tight_layout(rect=(0, 0, 1, 0.96))
         fig.savefig(os.path.join(outdir, f"{name}.png"), dpi=90)
@@ -273,6 +298,64 @@ def plot_distributions(a, title, outdir):
     fig.suptitle(f"{title} | {ID_LABEL}valid fits, mixed combos include both orderings | unweighted", fontsize=9)
     fig.tight_layout(rect=(0, 0, 1, 0.96))
     fig.savefig(os.path.join(outdir, "distributions.png"), dpi=90)
+    plt.close(fig)
+
+
+def hierarchy_counts(a):
+    """Merging check per matched gen muon by representative type; valid HIER fits by representative pair."""
+    m, t, oc = a["hierMatched"] == 1, a["hierType"], a["hierOuterCheck"]
+    out = {"outerCheck": {}, "validFitsByRepPair": {}}
+    for k, name in enumerate("IGO"):
+        sel = m & (t == k)
+        out["outerCheck"][name] = {str(c): int((sel & (oc == c)).sum()) for c in (1, 2, 3, 4)}
+    v = a["fitStatus"][:, 9] == 3
+    for i in range(3):
+        for j in range(3):
+            out["validFitsByRepPair"]["IGO"[i] + "IGO"[j]] = int((v & (t[:, 0] == i) & (t[:, 1] == j)).sum())
+    return out
+
+
+def plot_hierarchy(a, title, outdir):
+    os.makedirs(outdir, exist_ok=True)
+    label, disp = XVARS["Lxy"]
+    centers = 0.5 * (disp[:-1] + disp[1:])
+    fig, axs = plt.subplots(1, 3, figsize=(16, 5))
+    x = a["genLxy"]
+    v = a["fitStatus"][:, 9] == 3
+    t = a["hierType"]
+    nv = np.histogram(x[v], disp)[0]
+    for pair, col in (("GG", "#ff7f0e"), ("IG", "#9467bd"), ("II", "#1f77b4"), ("GO", "#e377c2"),
+                      ("IO", "#8c564b"), ("OO", "#2ca02c")):
+        i, j = "IGO".index(pair[0]), "IGO".index(pair[1])
+        sel = v & (((t[:, 0] == i) & (t[:, 1] == j)) | ((t[:, 0] == j) & (t[:, 1] == i)))
+        with np.errstate(invalid="ignore", divide="ignore"):
+            axs[0].plot(centers, np.histogram(x[sel], disp)[0] / nv, "-o", ms=3, color=col, label=pair)
+    axs[0].set_ylabel("fraction of valid HIER fits (representative pair, either order)")
+    xg = np.concatenate([x, x])
+    m = np.concatenate([a["hierMatched"][:, 0], a["hierMatched"][:, 1]]) == 1
+    tg = np.concatenate([t[:, 0], t[:, 1]])
+    og = np.concatenate([a["hierOuterCheck"][:, 0], a["hierOuterCheck"][:, 1]])
+    for ax, k in ((axs[1], 0), (axs[2], 1)):
+        sel = m & (tg == k)
+        den = np.histogram(xg[sel & (og > 1)], disp)[0]
+        for c, col, lab in ((3, "#d62728", "not own, objects have an outer"), (4, "#7f7f7f", "objects have no outer")):
+            eff, lo, hi = clopper_pearson(np.histogram(xg[sel & (og == c)], disp)[0], den)
+            ok = den > 0
+            ax.errorbar(centers[ok], eff[ok], yerr=[eff[ok] - lo[ok], hi[ok] - eff[ok]], fmt="o", ms=3, color=col,
+                        label=lab)
+        ax.set_ylabel("fraction of gen muons with a DSA-ID'd standalone matched\n(DSA not an outer of the "
+                      f"{'inner' if k == 0 else 'global'}-represented objects)")
+        ax.set_title(f"{'inner' if k == 0 else 'global'} representatives: {int((sel & (og > 1)).sum())} "
+                     f"with an ID'd DSA matched, {int((sel & (og == 1)).sum())} without", fontsize=9)
+        ax.set_ylim(0, 1.05)
+    for ax in axs:
+        ax.set_xlabel(label)
+        ax.grid(alpha=0.3)
+        ax.legend(fontsize=8)
+    fig.suptitle(f"{title} | object-level hierarchy (G > I > DSA-ID'd O), station 2 + station-1 fallback | "
+                 "unweighted", fontsize=9)
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    fig.savefig(os.path.join(outdir, "hierarchy.png"), dpi=90)
     plt.close(fig)
 
 
@@ -347,10 +430,14 @@ def main():
         a = concat([data[s] for s in samples])
         summary, xv = summarize_group(a, xvars)
         summary["samples"] = samples
+        if "HIER" in COMBOS:
+            summary["hierarchy"] = hierarchy_counts(a)
         out["groups"][key] = summary
         plot_group(a, summary, xv, title, os.path.join(args.outdir, key), xvars)
         if not key.startswith("sample/"):
             plot_distributions(a, title, os.path.join(args.outdir, key))
+            if "HIER" in COMBOS:
+                plot_hierarchy(a, title, os.path.join(args.outdir, key))
         if key == "overall":
             plot_symmetry(a, os.path.join(args.outdir, key))
         print(key, summary["nEvents"], flush=True)
