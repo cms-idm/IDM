@@ -67,10 +67,11 @@ HIER_FIT = {"fitStatus": "hierFitStatus", "fitResAlong": "hierFitResAlong", "fit
             "fitResZ": "hierFitResZ", "fitSigAlong": "hierFitSigAlong", "fitProb": "hierFitProb",
             "fitChi2": "hierFitChi2", "fitNdof": "hierFitNdof"}
 HIER_EXTRA = ["hierSurface", "hierType", "hierMatched", "hierOuterCheck"]
+MERGE_ON = [False]  # set by load: inputs carry the dsa* merging branches
 MERGE = ["dsaDR", "dsaDROtherGen", "hierDsaDRSt2", "hierDROtherGen", "dsaPt", "hierPt", "dsaNStations",
          "dsaOwnerN", "dsaOwnerTracker", "dsaOwnerGlobal", "dsaOwnerInner", "dsaOfOtherRep", "hierNMatchedStations",
          "hierDR", "dsaOwnerCandType", "dsaOwnerInnerSame", "dsaOwnerInnerDRRep", "dsaOwnerInnerPtRatio",
-         "dsaOwnerCandDR"]
+         "dsaOwnerCandDR", "dsaSurface"]
 BRANCHES = ["genAccepted", "genPt", "genEta", "genD0", "genLxy", "genDimuonPt", "genDimuonEta", "genDimuonDR",
             "matchSurface", "fitStatus", "fitResAlong", "fitResPerp", "fitResZ", "fitSigAlong", "fitProb",
             "fitChi2", "fitNdof", "matchIdPass"]
@@ -103,7 +104,11 @@ def load(pattern):
         if data and hier != ("HIER" in COMBOS):
             raise RuntimeError(f"{fn}: inputs mix files with and without the hierarchy branches")
         names = BRANCHES + (list(HIER_FIT.values()) + HIER_EXTRA if hier else [])
-        if "dsaDR" in tree.keys():
+        merge = "dsaDR" in tree.keys()
+        if data and merge != MERGE_ON[0]:
+            raise RuntimeError(f"{fn}: inputs mix files with and without the dsa* branches")
+        MERGE_ON[0] = merge
+        if merge:
             names += MERGE
         a = {k: np.asarray(v) for k, v in tree.arrays(names, library="np").items()}
         if hier:  # the hierarchy fit becomes column 9 of the fit arrays
@@ -374,12 +379,14 @@ def plot_merging(a, title, outdir):
         return np.concatenate([a[k][:, 0], a[k][:, 1]])
     genpt = per_gen("genPt")
     m, t, oc = per_gen("hierMatched") == 1, per_gen("hierType"), per_gen("hierOuterCheck")
+    st2 = per_gen("dsaSurface") == 1  # DSA matched at station 2, so its dR is comparable with dsaDROtherGen
     cats = [("inner rep, DSA own (2)", m & (t == 0) & (oc == 2), "#1f77b4"),
             ("inner rep, DSA of another object, own outer exists (3)", m & (t == 0) & (oc == 3), "#d62728"),
             ("inner rep, DSA of another object, no own outer (4)", m & (t == 0) & (oc == 4), "#7f7f7f"),
             ("global rep, DSA own (2), reference", m & (t == 1) & (oc == 2), "#ff7f0e")]
     with np.errstate(divide="ignore", invalid="ignore"):
-        dvars = [("dsaDR", "station-2 dR(DSA, its gen muon)", np.linspace(0, 0.1, 41), per_gen("dsaDR")),
+        dvars = [("dsaDR", "station-2 dR(DSA, its gen muon) (DSA matched at station 2)", np.linspace(0, 0.1, 41),
+                  np.where(st2, per_gen("dsaDR"), -999.0)),
                  ("dsaDROtherGen", "station-2 dR(DSA, other gen muon) (clipped to 2)", np.linspace(0, 2, 41),
                   np.clip(per_gen("dsaDROtherGen"), -1, 1.999)),
                  ("hierDsaDRSt2", "station-2 dR(representative, DSA) (clipped to 0.5)", np.linspace(0, 0.5, 51),
@@ -404,7 +411,8 @@ def plot_merging(a, title, outdir):
     ax = axs[1, 2]
     fr = {"owner tracker": per_gen("dsaOwnerTracker"), "owner global": per_gen("dsaOwnerGlobal"),
           "owner has inner": per_gen("dsaOwnerInner"), "DSA of other gen's rep": per_gen("dsaOfOtherRep"),
-          "DSA closer to other gen": (per_gen("dsaDROtherGen") > -900) & (per_gen("dsaDROtherGen") < per_gen("dsaDR")),
+          "DSA closer to other gen (st2)": st2 & (per_gen("dsaDROtherGen") > -900)
+                                           & (per_gen("dsaDROtherGen") < per_gen("dsaDR")),
           "owner inner = rep's": per_gen("dsaOwnerInnerSame") == 1,
           "owner inner dR<0.01": (per_gen("dsaOwnerInnerDRRep") > -900) & (per_gen("dsaOwnerInnerDRRep") < 0.01),
           "owner cand within 0.06": (per_gen("dsaOwnerCandDR") > -900) & (per_gen("dsaOwnerCandDR") < 0.06)}
