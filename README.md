@@ -29,6 +29,12 @@ and these lines to apply the patch:
 ```bash
 git apply iDMe/patches/lowPtElectrons_miniAOD_IDRegression.patch
 ```
+In CMSSW_13_0_13 the vertex-fitter tracker bounds moved into `SequentialVertexFitter.h`, so the
+`SequentialVertexFitter.cc` hunk above no longer applies. For Run 3 apply this instead (interim
+r < 740 cm, |z| < 960 cm, replacing the 112 / 273.5 cm defaults), then rebuild with `scram b`:
+```bash
+git apply iDMe/patches/trackerBounds_CMSSW_13_0_13.patch
+```
 
 ## Installing EGamma PostRecoTools
 We need to run EGamma "PostRecoTools" according to [EGamma POG recommendations](https://twiki.cern.ch/twiki/bin/view/CMS/EgammaUL2016To2018#Recipe_for_running_scales_and_sm). Run these commands (copied from the linked twiki) to set it up:
