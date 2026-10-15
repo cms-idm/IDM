@@ -418,9 +418,9 @@ private:
   float hDR_[2], hPt_[2], hEta_[2], hPhi_[2];
   // Merging diagnostics for the DSA matched to each gen muon
   int dSurface_[2], dNDT_[2], dNCSC_[2], dNStations_[2], dOwnerN_[2], dOwnerTracker_[2], dOwnerGlobal_[2],
-      dOwnerInner_[2], dOtherRep_[2], hNMatchedStations_[2];
+      dOwnerInner_[2], dOtherRep_[2], hNMatchedStations_[2], dOwnerCandType_[2], dOwnerInnerSame_[2];
   float dDR_[2], dPt_[2], dEta_[2], dPhi_[2], dPtErr_[2], dNormChi2_[2], dDROtherGen_[2], hDROtherGen_[2],
-      hDsaDRSt2_[2];
+      hDsaDRSt2_[2], dOwnerInnerDRRep_[2], dOwnerInnerPtRatio_[2], dOwnerCandDR_[2];
   FitResult hFit_;
 };
 
@@ -464,7 +464,10 @@ DimuonVertexTruth::DimuonVertexTruth(const edm::ParameterSet& ps)
                    "dsa* (filled when a DSA is matched to the gen muon): surface, dR, kinematics, DT/CSC hits, stations, "
                    "owners among kept displacedMuons (count, OR isTracker/isGlobal/has inner), dsaOfOtherRep = DSA belongs to the "
                    "representative matched to the other gen muon; dsaDROtherGen / hierDROtherGen = station-2 dR to the other gen muon; "
-                   "hierDsaDRSt2 = station-2 dR between representative and DSA; hierNMatchedStations of the lowest-index parent");
+                   "hierDsaDRSt2 = station-2 dR between representative and DSA; hierNMatchedStations of the lowest-index parent; "
+                   "lowest-index DSA owner: dsaOwnerInnerSame (its inner is a constituent of the representative; -1 no inner), "
+                   "dsaOwnerInnerDRRep / PtRatio (its inner vs the representative track, at the reference point), "
+                   "dsaOwnerCandType / CandDR (its hierarchy candidate's type and station-2 dR to this gen muon; -1/-999 none)");
   tree_ = fs->make<TTree>("events", "truth-matched dimuon vertex fits");
   auto& t = *tree_;
   t.Branch("run", &run_);
@@ -572,6 +575,11 @@ DimuonVertexTruth::DimuonVertexTruth(const edm::ParameterSet& ps)
   t.Branch("hierDROtherGen", hDROtherGen_, "hierDROtherGen[2]/F");
   t.Branch("hierDsaDRSt2", hDsaDRSt2_, "hierDsaDRSt2[2]/F");
   t.Branch("hierNMatchedStations", hNMatchedStations_, "hierNMatchedStations[2]/I");
+  t.Branch("dsaOwnerCandType", dOwnerCandType_, "dsaOwnerCandType[2]/I");
+  t.Branch("dsaOwnerInnerSame", dOwnerInnerSame_, "dsaOwnerInnerSame[2]/I");
+  t.Branch("dsaOwnerInnerDRRep", dOwnerInnerDRRep_, "dsaOwnerInnerDRRep[2]/F");
+  t.Branch("dsaOwnerInnerPtRatio", dOwnerInnerPtRatio_, "dsaOwnerInnerPtRatio[2]/F");
+  t.Branch("dsaOwnerCandDR", dOwnerCandDR_, "dsaOwnerCandDR[2]/F");
   t.Branch("hierFitStatus", &hFit_.status);
   t.Branch("hierFitVx", &hFit_.vx);
   t.Branch("hierFitVy", &hFit_.vy);
@@ -631,7 +639,10 @@ void DimuonVertexTruth::resetBranches() {
                   dOtherRep_})
     fill(a, 2, 0);
   fill(hNMatchedStations_, 2, -1);
-  for (auto* a : {dDR_, dPt_, dEta_, dPhi_, dPtErr_, dNormChi2_, dDROtherGen_, hDROtherGen_, hDsaDRSt2_})
+  fill(dOwnerCandType_, 2, -1);
+  fill(dOwnerInnerSame_, 2, -1);
+  for (auto* a : {dDR_, dPt_, dEta_, dPhi_, dPtErr_, dNormChi2_, dDROtherGen_, hDROtherGen_, hDsaDRSt2_,
+                  dOwnerInnerDRRep_, dOwnerInnerPtRatio_, dOwnerCandDR_})
     fill(a, 2, -999.f);
   hFit_ = FitResult();
 }
@@ -946,15 +957,17 @@ void DimuonVertexTruth::analyze(const edm::Event& iEvent, const edm::EventSetup&
     if (needFallback) u.fallback = toPos(propagatorSt1.extrapolate(*ref));
     dsa.push_back(u);
   }
-  // Owners of each outer track among the kept displacedMuons: count, OR of isTracker / isGlobal / has inner.
-  std::map<RefKey, std::array<int, 4>> owners;
+  // Owners of each outer track among the kept displacedMuons: count, OR of isTracker / isGlobal / has inner,
+  // lowest owner index.
+  std::map<RefKey, std::array<int, 5>> owners;
   for (size_t iMu = 0; iMu < muons.size(); ++iMu) {
     const auto& mu = muons[iMu];
     if (mu.outerTrack().isNull()) continue;
     ++nMuOuter_;
     if (mu.outerTrack().id() == dsaHandle.id()) ++nMuOuterInDSA_;
     if (dropped[iMu]) continue;
-    auto& o = owners[refKey(mu.outerTrack())];
+    auto& o = owners.try_emplace(refKey(mu.outerTrack()), std::array<int, 5>{{0, 0, 0, 0, static_cast<int>(iMu)}})
+                  .first->second;
     o[0] += 1;
     o[1] |= mu.isTrackerMuon();
     o[2] |= mu.isGlobalMuon();
@@ -1006,6 +1019,24 @@ void DimuonVertexTruth::analyze(const edm::Event& iEvent, const edm::EventSetup&
       dOwnerTracker_[g] = o->second[1];
       dOwnerGlobal_[g] = o->second[2];
       dOwnerInner_[g] = o->second[3];
+      // Lowest-index owner: its inner track against the representative, and its own candidate.
+      const reco::Muon& ow = muons[o->second[4]];
+      if (ow.innerTrack().isNonnull()) {
+        dOwnerInnerSame_[g] = c.constituents.count(refKey(ow.innerTrack())) > 0;
+        dOwnerInnerDRRep_[g] = reco::deltaR(*ow.innerTrack(), *c.ref);
+        dOwnerInnerPtRatio_[g] = ow.innerTrack()->pt() / c.ref->pt();
+      }
+      const reco::TrackRef owRep = ow.isGlobalMuon() && ow.globalTrack().isNonnull()   ? ow.globalTrack()
+                                   : ow.isTrackerMuon() && ow.innerTrack().isNonnull() ? ow.innerTrack()
+                                   : passesDisplacedID(*ow.outerTrack())               ? ow.outerTrack()
+                                                                                       : reco::TrackRef();
+      if (owRep.isNonnull())
+        for (const auto& oc : cands)
+          if (oc.ref == owRep) {
+            dOwnerCandType_[g] = oc.type;
+            if (oc.st2.valid && gen[g].st2.valid)
+              dOwnerCandDR_[g] = reco::deltaR(oc.st2.eta, oc.st2.phi, gen[g].st2.eta, gen[g].st2.phi);
+          }
     }
     if (hmatch[1 - g] >= 0) {
       const Unit& oc = cands[hmatch[1 - g]];

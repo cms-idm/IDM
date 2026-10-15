@@ -69,7 +69,8 @@ HIER_FIT = {"fitStatus": "hierFitStatus", "fitResAlong": "hierFitResAlong", "fit
 HIER_EXTRA = ["hierSurface", "hierType", "hierMatched", "hierOuterCheck"]
 MERGE = ["dsaDR", "dsaDROtherGen", "hierDsaDRSt2", "hierDROtherGen", "dsaPt", "hierPt", "dsaNStations",
          "dsaOwnerN", "dsaOwnerTracker", "dsaOwnerGlobal", "dsaOwnerInner", "dsaOfOtherRep", "hierNMatchedStations",
-         "hierDR"]
+         "hierDR", "dsaOwnerCandType", "dsaOwnerInnerSame", "dsaOwnerInnerDRRep", "dsaOwnerInnerPtRatio",
+         "dsaOwnerCandDR"]
 BRANCHES = ["genAccepted", "genPt", "genEta", "genD0", "genLxy", "genDimuonPt", "genDimuonEta", "genDimuonDR",
             "matchSurface", "fitStatus", "fitResAlong", "fitResPerp", "fitResZ", "fitSigAlong", "fitProb",
             "fitChi2", "fitNdof", "matchIdPass"]
@@ -403,8 +404,12 @@ def plot_merging(a, title, outdir):
     ax = axs[1, 2]
     fr = {"owner tracker": per_gen("dsaOwnerTracker"), "owner global": per_gen("dsaOwnerGlobal"),
           "owner has inner": per_gen("dsaOwnerInner"), "DSA of other gen's rep": per_gen("dsaOfOtherRep"),
-          "DSA closer to other gen": (per_gen("dsaDROtherGen") > -900) & (per_gen("dsaDROtherGen") < per_gen("dsaDR"))}
+          "DSA closer to other gen": (per_gen("dsaDROtherGen") > -900) & (per_gen("dsaDROtherGen") < per_gen("dsaDR")),
+          "owner inner = rep's": per_gen("dsaOwnerInnerSame") == 1,
+          "owner inner dR<0.01": (per_gen("dsaOwnerInnerDRRep") > -900) & (per_gen("dsaOwnerInnerDRRep") < 0.01),
+          "owner cand within 0.06": (per_gen("dsaOwnerCandDR") > -900) & (per_gen("dsaOwnerCandDR") < 0.06)}
     w = 0.2
+    ax.set_title("bars per category: owner flags, other-gen association, owner duplicate", fontsize=8)
     for j, (cl, sel, col) in enumerate(cats):
         n = max(int(sel.sum()), 1)
         ax.bar(np.arange(len(fr)) + (j - 1.5) * w, [float((v[sel] > 0).sum()) / n for v in fr.values()], w,
@@ -414,12 +419,13 @@ def plot_merging(a, title, outdir):
     ax.set_ylabel("fraction of gen muons in category")
     ax.grid(alpha=0.3)
     ax = axs[1, 3]
-    ms = per_gen("hierNMatchedStations")
+    odr = per_gen("dsaOwnerInnerDRRep")
     for cl, sel, col in cats:
-        v = ms[sel & (ms >= 0)]
+        v = np.clip(odr[sel & (odr > -900)], 0, 0.4999)
         if len(v):
-            ax.hist(v, bins=np.arange(-0.5, 6.5, 1), histtype="step", color=col, weights=np.full(len(v), 1.0 / len(v)))
-    ax.set_xlabel("representative's matched muon stations (tracker-muon segments)")
+            ax.hist(v, bins=np.linspace(0, 0.5, 51), histtype="step", color=col, weights=np.full(len(v), 1.0 / len(v)))
+    ax.set_yscale("log")
+    ax.set_xlabel("dR(DSA owner's inner track, representative track) at reference point (clipped to 0.5)")
     ax.set_ylabel("fraction per bin")
     ax.grid(alpha=0.3)
     fig.suptitle(f"{title} | merging check: DSA-ID'd standalone matched to the same gen muon (st2 + st1 fallback) | "
