@@ -2,8 +2,8 @@
 
   cmsRun dimuon_vertex_truth_cfg.py flist=files.txt sample=Mchi-10p5_dMchi-1p0_ctau-10 [nEvents=-1] [outFile=dimuon_vertex_truth.root]
 
-Input: Run3Summer22EE MiniAOD of the 2026-09-23 iDMmu production
-(AODSkimmer/fileLists/signal/2022EE/iDMmu/*_flist.txt), which keeps displacedMuons and the
+Input: Run3Summer22EE MiniAOD of the iDMmu production (2026-09-23 for step 1, 2026-09-28 from step 2;
+AODSkimmer/fileLists/signal/2022EE/iDMmu/*_flist.txt), which keeps displacedMuons and the
 displaced track collections. flist may also be a single ROOT file.
 Station-2 and station-1 propagation use the ntuplizer's genMuonPropagatorSt2/St1 settings.
 Fallback for gen muons failing station 2: inner tracks at the ECAL inner boundary, global/outer at station 1.
@@ -47,6 +47,7 @@ process.dimuonVertexTruth = cms.EDAnalyzer(
     muons=cms.InputTag("displacedMuons"),
     genParticles=cms.InputTag("prunedGenParticles"),
     beamspot=cms.InputTag("offlineBeamSpot"),
+    standAloneMuons=cms.InputTag("displacedStandAloneMuons"),  # raw DSA tracks for the hierarchy merging check
     sample=cms.string(options.sample),
     drInner=cms.double(0.06),
     drGlobal=cms.double(0.06),

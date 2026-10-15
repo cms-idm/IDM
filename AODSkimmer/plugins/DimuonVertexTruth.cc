@@ -29,6 +29,20 @@
 // Fits: KalmanVertexFitter(refit=true) for the 9 ordered combinations
 // (mu- type, mu+ type), index 3*typeMuMinus + typeMuPlus. No ID is applied;
 // ID pass flags are stored per matched unit.
+//
+// Object-level hierarchy (vertexing step 2, user decisions 2026-10-15; branches hier*):
+// each displacedMuon kept by the dedup gets one representative track:
+//   isGlobalMuon -> global; else isTrackerMuon -> inner; else outer passing the
+//   DSA ID -> outer; else the object is not used. Objects with the same
+//   representative track are one candidate. Candidates are matched to gen like the
+//   units (same charge, dR of the representative's type, greedy one-to-one over
+//   all candidates), at station 2 with a station-1 fallback for every type (no
+//   ECAL fallback). The two matched representatives are fitted as above.
+// Merging check (hierOuterCheck): DSA-ID'd tracks of the raw displacedStandAloneMuons
+// collection are matched to gen the same way (dR < drOuter); for each matched
+// representative: 1 no ID'd DSA matched to that gen muon, 2 it is an outer track of
+// the representative's objects, 3 it is not but the objects have an outer track,
+// 4 the objects have no outer track.
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -178,6 +192,9 @@ struct Unit {
   // parent muons' inner tracks. Legs sharing any are not fitted, so muons that
   // share an inner track are never vertexed together, whatever the leg types.
   std::set<RefKey> constituents;
+  std::set<RefKey> ownOuters;  // hierarchy candidates: outer tracks of the parent muons
+  int type = -1;               // hierarchy candidates: representative type
+  int ownOuterId = -1;         // hierarchy candidates: -1 no own outer, else OR of DSA ID over own outers
 };
 
 struct Gen {
@@ -218,6 +235,123 @@ std::array<int, 2> greedyMatch(const std::array<Gen, 2>& gen,
   return match;
 }
 
+struct FitResult {
+  int status = kNotMatched;
+  float vx = -999.f, vy = -999.f, vz = -999.f, cxx = -999.f, cyy = -999.f, czz = -999.f, cxy = -999.f,
+        cxz = -999.f, cyz = -999.f, chi2 = -999.f, ndof = -999.f, prob = -999.f, resAlong = -999.f,
+        resPerp = -999.f, resZ = -999.f, sigAlong = -999.f, sigPerp = -999.f, lxyBS = -999.f, sigLxyBS = -999.f,
+        mass = -999.f, massRefit = -999.f;
+};
+
+// Fit two legs; legs sharing a constituent are not fitted. Residuals relative to the
+// gen decay vertex along/perpendicular to the gen transverse flight direction (ux, uy).
+FitResult fitPair(const Unit& u0, const Unit& u1, const TransientTrackBuilder& ttb, const KalmanVertexFitter& kvf,
+                  const reco::BeamSpot& bs, const float* genVtx, double ux, double uy) {
+  FitResult f;
+  for (const auto& k : u0.constituents)
+    if (u1.constituents.count(k)) {
+      f.status = kSharedTrack;
+      return f;
+    }
+  std::vector<reco::TransientTrack> tts{ttb.build(u0.ref), ttb.build(u1.ref)};
+  const TransientVertex tv = kvf.vertex(tts);
+  if (!tv.isValid()) {
+    f.status = kFitFailed;
+    return f;
+  }
+  f.status = kFitValid;
+  const reco::Vertex v(tv);
+  f.vx = v.x();
+  f.vy = v.y();
+  f.vz = v.z();
+  f.cxx = v.covariance(0, 0);
+  f.cyy = v.covariance(1, 1);
+  f.czz = v.covariance(2, 2);
+  f.cxy = v.covariance(0, 1);
+  f.cxz = v.covariance(0, 2);
+  f.cyz = v.covariance(1, 2);
+  f.chi2 = v.chi2();
+  f.ndof = v.ndof();
+  f.prob = TMath::Prob(v.chi2(), static_cast<int>(std::lround(v.ndof())));
+  const double dx = v.x() - genVtx[0], dy = v.y() - genVtx[1];
+  f.resAlong = dx * ux + dy * uy;
+  f.resPerp = -dx * uy + dy * ux;
+  f.resZ = v.z() - genVtx[2];
+  const double cxx = v.covariance(0, 0), cyy = v.covariance(1, 1), cxy = v.covariance(0, 1);
+  f.sigAlong = std::sqrt(std::max(0., ux * ux * cxx + uy * uy * cyy + 2 * ux * uy * cxy));
+  f.sigPerp = std::sqrt(std::max(0., uy * uy * cxx + ux * ux * cyy - 2 * ux * uy * cxy));
+  const double bx = v.x() - bs.x(v.z()), by = v.y() - bs.y(v.z());
+  const double lxy = std::hypot(bx, by);
+  f.lxyBS = lxy;
+  if (lxy > 0) f.sigLxyBS = std::sqrt(std::max(0., bx * bx * cxx + by * by * cyy + 2 * bx * by * cxy)) / lxy;
+  auto p4 = [](const reco::Track& t) { return math::PtEtaPhiMLorentzVector(t.pt(), t.eta(), t.phi(), kMuonMass); };
+  f.mass = (p4(*u0.ref) + p4(*u1.ref)).mass();
+  if (tv.hasRefittedTracks() && tv.refittedTracks().size() == 2) {
+    const reco::Track r0 = tv.refittedTracks()[0].track();
+    const reco::Track r1 = tv.refittedTracks()[1].track();
+    f.massRefit = (p4(r0) + p4(r1)).mass();
+  }
+  return f;
+}
+
+// Station 2 pass, then station-1 pass for accepted gen muons failing station 2 on
+// candidates unused in pass 1. surface: kStation2 / kStation1Fallback / kNoMatch.
+std::array<int, 2> matchSt2St1(const std::array<Gen, 2>& gen, const std::vector<Unit>& cands,
+                               const std::vector<double>& thr, std::array<float, 2>& dROut,
+                               std::array<int, 2>& surface) {
+  std::vector<const Pos*> st2(cands.size()), st1(cands.size());
+  for (size_t u = 0; u < cands.size(); ++u) {
+    st2[u] = &cands[u].st2;
+    st1[u] = &cands[u].fallback;
+  }
+  auto pass = [&](const std::array<const Pos*, 2>& genPos, const std::array<bool, 2>& genOk,
+                  const std::vector<const Pos*>& pos, const std::vector<bool>& candOk, std::array<float, 2>& dr) {
+    // Pairs from all candidates with their own thresholds, then one greedy assignment.
+    std::vector<std::tuple<float, int, int>> pairs;
+    for (int g = 0; g < 2; ++g) {
+      if (!genOk[g] || !genPos[g]->valid) continue;
+      for (size_t u = 0; u < cands.size(); ++u) {
+        if (!candOk[u] || !pos[u]->valid || cands[u].charge != gen[g].p->charge()) continue;
+        const float d = reco::deltaR(genPos[g]->eta, genPos[g]->phi, pos[u]->eta, pos[u]->phi);
+        if (d < thr[u]) pairs.emplace_back(d, g, static_cast<int>(u));
+      }
+    }
+    std::sort(pairs.begin(), pairs.end());
+    std::array<int, 2> m{{-1, -1}};
+    dr = {{-1.f, -1.f}};
+    std::vector<bool> used(cands.size(), false);
+    for (const auto& [d, g, u] : pairs) {
+      if (m[g] >= 0 || used[u]) continue;
+      m[g] = u;
+      used[u] = true;
+      dr[g] = d;
+    }
+    return m;
+  };
+  std::array<float, 2> dr2, dr1;
+  std::array<int, 2> m = pass({{&gen[0].st2, &gen[1].st2}}, {{gen[0].accepted, gen[1].accepted}}, st2,
+                              std::vector<bool>(cands.size(), true), dr2);
+  std::vector<bool> unused(cands.size(), true);
+  for (int g = 0; g < 2; ++g)
+    if (m[g] >= 0) unused[m[g]] = false;
+  const auto m1 = pass({{&gen[0].st1, &gen[1].st1}},
+                       {{gen[0].accepted && !gen[0].st2.valid, gen[1].accepted && !gen[1].st2.valid}}, st1, unused,
+                       dr1);
+  for (int g = 0; g < 2; ++g) {
+    surface[g] = kNoMatch;
+    dROut[g] = -1.f;
+    if (m[g] >= 0) {
+      surface[g] = kStation2;
+      dROut[g] = dr2[g];
+    } else if (m1[g] >= 0) {
+      m[g] = m1[g];
+      surface[g] = kStation1Fallback;
+      dROut[g] = dr1[g];
+    }
+  }
+  return m;
+}
+
 }  // namespace
 
 class DimuonVertexTruth : public edm::one::EDAnalyzer<edm::one::SharedResources> {
@@ -228,10 +362,12 @@ public:
 
 private:
   void resetBranches();
+  void setFit(int c, const FitResult& f);
 
   const edm::EDGetTokenT<std::vector<reco::Muon>> muonToken_;
   const edm::EDGetTokenT<std::vector<reco::GenParticle>> genToken_;
   const edm::EDGetTokenT<reco::BeamSpot> beamspotToken_;
+  const edm::EDGetTokenT<std::vector<reco::Track>> dsaToken_;
   const edm::ESGetToken<TransientTrackBuilder, TransientTrackRecord> ttbToken_;
   const edm::ESGetToken<MagneticField, IdealMagneticFieldRecord> magFieldToken_;
   const PropagateToMuonSetup propagatorSetup_;
@@ -271,12 +407,18 @@ private:
       fCxy_[kNCombos], fCxz_[kNCombos], fCyz_[kNCombos], fChi2_[kNCombos], fNdof_[kNCombos], fProb_[kNCombos],
       fResAlong_[kNCombos], fResPerp_[kNCombos], fResZ_[kNCombos], fSigAlong_[kNCombos], fSigPerp_[kNCombos],
       fLxyBS_[kNCombos], fSigLxyBS_[kNCombos], fMass_[kNCombos], fMassRefit_[kNCombos];
+  // Object-level hierarchy: candidates, per-gen matches (index g), one fit
+  int hierNCand_, hierNCandType_[kNTypes], nDSA_, nDSAId_, nMuOuter_, nMuOuterInDSA_;
+  int hMatched_[2], hType_[2], hSurface_[2], hNParents_[2], hCharge_[2], hOuterCheck_[2], hOwnOuterId_[2];
+  float hDR_[2], hPt_[2], hEta_[2], hPhi_[2];
+  FitResult hFit_;
 };
 
 DimuonVertexTruth::DimuonVertexTruth(const edm::ParameterSet& ps)
     : muonToken_(consumes<std::vector<reco::Muon>>(ps.getParameter<edm::InputTag>("muons"))),
       genToken_(consumes<std::vector<reco::GenParticle>>(ps.getParameter<edm::InputTag>("genParticles"))),
       beamspotToken_(consumes<reco::BeamSpot>(ps.getParameter<edm::InputTag>("beamspot"))),
+      dsaToken_(consumes<std::vector<reco::Track>>(ps.getParameter<edm::InputTag>("standAloneMuons"))),
       ttbToken_(esConsumes(edm::ESInputTag("", "TransientTrackBuilder"))),
       magFieldToken_(esConsumes()),
       propagatorSetup_(ps.getParameter<edm::ParameterSet>("propagatorSt2"), consumesCollector()),
@@ -301,7 +443,14 @@ DimuonVertexTruth::DimuonVertexTruth(const edm::ParameterSet& ps)
                    "matchSurface 0 none, 1 station 2, 2 station-1 fallback, 3 ECAL fallback; "
                    "genEcalStatus 0 not run, 1 ok, 2 start beyond boundary, 3 failed; "
                    "residual = reco - gen decay vertex, along/perp = gen transverse flight direction (decay - gen PV); "
-                   "idPass: inner parent isTracker, global parent isGlobal, outer DSA ID (OR over parents)");
+                   "idPass: inner parent isTracker, global parent isGlobal, outer DSA ID (OR over parents); "
+                   "hier*: object-level hierarchy per kept displacedMuon: isGlobal -> global, else isTracker -> inner, "
+                   "else DSA-ID'd outer -> outer, else unused; same representative track = one candidate; "
+                   "matched at station 2 with station-1 fallback for all types (hierSurface 1/2), dR by representative type; "
+                   "hierType 0 inner 1 global 2 outer -1 none; hierFit* = fit of the two matched representatives (status codes as fitStatus); "
+                   "hierOuterCheck: DSA-ID'd raw displacedStandAloneMuons matched to the same gen muon (st2 + st1 fallback, dR<drOuter): "
+                   "0 not matched, 1 none matched, 2 it is an outer of the representative's objects, 3 it is not but they have an outer, "
+                   "4 they have no outer; hierOwnOuterId -1 no own outer, else DSA ID of the own outer(s) (OR)");
   tree_ = fs->make<TTree>("events", "truth-matched dimuon vertex fits");
   auto& t = *tree_;
   t.Branch("run", &run_);
@@ -373,6 +522,45 @@ DimuonVertexTruth::DimuonVertexTruth(const edm::ParameterSet& ps)
   t.Branch("fitSigLxyBS", fSigLxyBS_, "fitSigLxyBS[9]/F");
   t.Branch("fitMass", fMass_, "fitMass[9]/F");
   t.Branch("fitMassRefit", fMassRefit_, "fitMassRefit[9]/F");
+  t.Branch("hierNCand", &hierNCand_);
+  t.Branch("hierNCandType", hierNCandType_, "hierNCandType[3]/I");
+  t.Branch("nDSA", &nDSA_);
+  t.Branch("nDSAId", &nDSAId_);
+  t.Branch("nMuOuter", &nMuOuter_);
+  t.Branch("nMuOuterInDSA", &nMuOuterInDSA_);
+  t.Branch("hierMatched", hMatched_, "hierMatched[2]/I");
+  t.Branch("hierType", hType_, "hierType[2]/I");
+  t.Branch("hierSurface", hSurface_, "hierSurface[2]/I");
+  t.Branch("hierNParents", hNParents_, "hierNParents[2]/I");
+  t.Branch("hierCharge", hCharge_, "hierCharge[2]/I");
+  t.Branch("hierOuterCheck", hOuterCheck_, "hierOuterCheck[2]/I");
+  t.Branch("hierOwnOuterId", hOwnOuterId_, "hierOwnOuterId[2]/I");
+  t.Branch("hierDR", hDR_, "hierDR[2]/F");
+  t.Branch("hierPt", hPt_, "hierPt[2]/F");
+  t.Branch("hierEta", hEta_, "hierEta[2]/F");
+  t.Branch("hierPhi", hPhi_, "hierPhi[2]/F");
+  t.Branch("hierFitStatus", &hFit_.status);
+  t.Branch("hierFitVx", &hFit_.vx);
+  t.Branch("hierFitVy", &hFit_.vy);
+  t.Branch("hierFitVz", &hFit_.vz);
+  t.Branch("hierFitCxx", &hFit_.cxx);
+  t.Branch("hierFitCyy", &hFit_.cyy);
+  t.Branch("hierFitCzz", &hFit_.czz);
+  t.Branch("hierFitCxy", &hFit_.cxy);
+  t.Branch("hierFitCxz", &hFit_.cxz);
+  t.Branch("hierFitCyz", &hFit_.cyz);
+  t.Branch("hierFitChi2", &hFit_.chi2);
+  t.Branch("hierFitNdof", &hFit_.ndof);
+  t.Branch("hierFitProb", &hFit_.prob);
+  t.Branch("hierFitResAlong", &hFit_.resAlong);
+  t.Branch("hierFitResPerp", &hFit_.resPerp);
+  t.Branch("hierFitResZ", &hFit_.resZ);
+  t.Branch("hierFitSigAlong", &hFit_.sigAlong);
+  t.Branch("hierFitSigPerp", &hFit_.sigPerp);
+  t.Branch("hierFitLxyBS", &hFit_.lxyBS);
+  t.Branch("hierFitSigLxyBS", &hFit_.sigLxyBS);
+  t.Branch("hierFitMass", &hFit_.mass);
+  t.Branch("hierFitMassRefit", &hFit_.massRefit);
 
   totals_ = fs->make<TTree>("totals", "event counters");
   totals_->Branch("events", &nEvents_);
@@ -400,6 +588,38 @@ void DimuonVertexTruth::resetBranches() {
   for (auto* a : {fVx_, fVy_, fVz_, fCxx_, fCyy_, fCzz_, fCxy_, fCxz_, fCyz_, fChi2_, fNdof_, fProb_, fResAlong_,
                   fResPerp_, fResZ_, fSigAlong_, fSigPerp_, fLxyBS_, fSigLxyBS_, fMass_, fMassRefit_})
     fill(a, kNCombos, -999.f);
+  hierNCand_ = nDSA_ = nDSAId_ = nMuOuter_ = nMuOuterInDSA_ = 0;
+  fill(hierNCandType_, kNTypes, 0);
+  for (auto* a : {hMatched_, hSurface_, hNParents_, hCharge_, hOuterCheck_}) fill(a, 2, 0);
+  fill(hType_, 2, -1);
+  fill(hOwnOuterId_, 2, -1);
+  for (auto* a : {hDR_, hPt_, hEta_, hPhi_}) fill(a, 2, -999.f);
+  hFit_ = FitResult();
+}
+
+void DimuonVertexTruth::setFit(int c, const FitResult& f) {
+  fStatus_[c] = f.status;
+  fVx_[c] = f.vx;
+  fVy_[c] = f.vy;
+  fVz_[c] = f.vz;
+  fCxx_[c] = f.cxx;
+  fCyy_[c] = f.cyy;
+  fCzz_[c] = f.czz;
+  fCxy_[c] = f.cxy;
+  fCxz_[c] = f.cxz;
+  fCyz_[c] = f.cyz;
+  fChi2_[c] = f.chi2;
+  fNdof_[c] = f.ndof;
+  fProb_[c] = f.prob;
+  fResAlong_[c] = f.resAlong;
+  fResPerp_[c] = f.resPerp;
+  fResZ_[c] = f.resZ;
+  fSigAlong_[c] = f.sigAlong;
+  fSigPerp_[c] = f.sigPerp;
+  fLxyBS_[c] = f.lxyBS;
+  fSigLxyBS_[c] = f.sigLxyBS;
+  fMass_[c] = f.mass;
+  fMassRefit_[c] = f.massRefit;
 }
 
 void DimuonVertexTruth::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup) {
@@ -620,60 +840,103 @@ void DimuonVertexTruth::analyze(const edm::Event& iEvent, const edm::EventSetup&
   KalmanVertexFitter kvf(true);
   for (int a = 0; a < kNTypes; ++a) {
     for (int b = 0; b < kNTypes; ++b) {
-      const int c = 3 * a + b;
       if (match[a][0] < 0 || match[b][1] < 0) continue;
-      const Unit& u0 = units[a][match[a][0]];
-      const Unit& u1 = units[b][match[b][1]];
-      bool shared = false;
-      for (const auto& k : u0.constituents)
-        if (u1.constituents.count(k)) shared = true;
-      if (shared) {
-        fStatus_[c] = kSharedTrack;
-        continue;
-      }
-      std::vector<reco::TransientTrack> tts{ttb.build(u0.ref), ttb.build(u1.ref)};
-      const TransientVertex tv = kvf.vertex(tts);
-      if (!tv.isValid()) {
-        fStatus_[c] = kFitFailed;
-        continue;
-      }
-      fStatus_[c] = kFitValid;
-      const reco::Vertex v(tv);
-      fVx_[c] = v.x();
-      fVy_[c] = v.y();
-      fVz_[c] = v.z();
-      fCxx_[c] = v.covariance(0, 0);
-      fCyy_[c] = v.covariance(1, 1);
-      fCzz_[c] = v.covariance(2, 2);
-      fCxy_[c] = v.covariance(0, 1);
-      fCxz_[c] = v.covariance(0, 2);
-      fCyz_[c] = v.covariance(1, 2);
-      fChi2_[c] = v.chi2();
-      fNdof_[c] = v.ndof();
-      fProb_[c] = TMath::Prob(v.chi2(), static_cast<int>(std::lround(v.ndof())));
-      const double dx = v.x() - genVtx_[0], dy = v.y() - genVtx_[1];
-      fResAlong_[c] = dx * ux + dy * uy;
-      fResPerp_[c] = -dx * uy + dy * ux;
-      fResZ_[c] = v.z() - genVtx_[2];
-      const double cxx = v.covariance(0, 0), cyy = v.covariance(1, 1), cxy = v.covariance(0, 1);
-      fSigAlong_[c] = std::sqrt(std::max(0., ux * ux * cxx + uy * uy * cyy + 2 * ux * uy * cxy));
-      fSigPerp_[c] = std::sqrt(std::max(0., uy * uy * cxx + ux * ux * cyy - 2 * ux * uy * cxy));
-      const double bx = v.x() - bs.x(v.z()), by = v.y() - bs.y(v.z());
-      const double lxy = std::hypot(bx, by);
-      fLxyBS_[c] = lxy;
-      if (lxy > 0)
-        fSigLxyBS_[c] = std::sqrt(std::max(0., bx * bx * cxx + by * by * cyy + 2 * bx * by * cxy)) / lxy;
-      auto p4 = [](const reco::Track& t) {
-        return math::PtEtaPhiMLorentzVector(t.pt(), t.eta(), t.phi(), kMuonMass);
-      };
-      fMass_[c] = (p4(*u0.ref) + p4(*u1.ref)).mass();
-      if (tv.hasRefittedTracks() && tv.refittedTracks().size() == 2) {
-        const reco::Track r0 = tv.refittedTracks()[0].track();
-        const reco::Track r1 = tv.refittedTracks()[1].track();
-        fMassRefit_[c] = (p4(r0) + p4(r1)).mass();
-      }
+      setFit(3 * a + b, fitPair(units[a][match[a][0]], units[b][match[b][1]], ttb, kvf, bs, genVtx_, ux, uy));
     }
   }
+
+  // Object-level hierarchy (see header).
+  std::vector<Unit> cands;
+  for (size_t iMu = 0; iMu < muons.size(); ++iMu) {
+    if (dropped[iMu]) continue;
+    const auto& mu = muons[iMu];
+    const std::array<reco::TrackRef, kNTypes> refs{{mu.innerTrack(), mu.globalTrack(), mu.outerTrack()}};
+    int t = -1;
+    if (mu.isGlobalMuon() && refs[1].isNonnull())
+      t = 1;
+    else if (mu.isTrackerMuon() && refs[0].isNonnull())
+      t = 0;
+    else if (refs[2].isNonnull() && passesDisplacedID(*refs[2]))
+      t = 2;
+    if (t < 0) continue;
+    const reco::TrackRef& ref = refs[t];
+    auto it = std::find_if(cands.begin(), cands.end(), [&](const Unit& u) { return u.ref == ref; });
+    if (it == cands.end()) {
+      Unit u;
+      u.ref = ref;
+      u.type = t;
+      u.charge = ref->charge();
+      u.st2 = toPos(propagator.extrapolate(*ref));
+      if (needFallback) u.fallback = toPos(propagatorSt1.extrapolate(*ref));
+      cands.push_back(u);
+      ++hierNCandType_[t];
+      it = cands.end() - 1;
+    }
+    it->nParents += 1;
+    it->constituents.insert(refKey(ref));
+    if (t == 1)
+      for (const auto& r : refs)
+        if (r.isNonnull()) it->constituents.insert(refKey(r));
+    if (t == 2 && refs[0].isNonnull()) it->constituents.insert(refKey(refs[0]));
+    if (refs[2].isNonnull()) {
+      it->ownOuters.insert(refKey(refs[2]));
+      it->ownOuterId = std::max(it->ownOuterId, static_cast<int>(passesDisplacedID(*refs[2])));
+    }
+  }
+  hierNCand_ = cands.size();
+  std::array<float, 2> hdr;
+  std::array<int, 2> hsurf;
+  std::vector<double> hthr;
+  for (const auto& c : cands) hthr.push_back(drThreshold_[c.type]);
+  const auto hmatch = matchSt2St1(gen, cands, hthr, hdr, hsurf);
+
+  // DSA-ID'd raw standalone tracks, matched to gen for the merging check.
+  const auto dsaHandle = iEvent.getHandle(dsaToken_);
+  std::vector<Unit> dsa;
+  for (size_t i = 0; i < dsaHandle->size(); ++i) {
+    ++nDSA_;
+    const reco::TrackRef ref(dsaHandle, i);
+    if (!passesDisplacedID(*ref)) continue;
+    ++nDSAId_;
+    Unit u;
+    u.ref = ref;
+    u.type = 2;
+    u.charge = ref->charge();
+    u.st2 = toPos(propagator.extrapolate(*ref));
+    if (needFallback) u.fallback = toPos(propagatorSt1.extrapolate(*ref));
+    dsa.push_back(u);
+  }
+  for (const auto& mu : muons)
+    if (mu.outerTrack().isNonnull()) {
+      ++nMuOuter_;
+      if (mu.outerTrack().id() == dsaHandle.id()) ++nMuOuterInDSA_;
+    }
+  std::array<float, 2> ddr;
+  std::array<int, 2> dsurf;
+  const auto dmatch = matchSt2St1(gen, dsa, std::vector<double>(dsa.size(), drThreshold_[2]), ddr, dsurf);
+
+  for (int g = 0; g < 2; ++g) {
+    if (hmatch[g] < 0) continue;
+    const Unit& c = cands[hmatch[g]];
+    hMatched_[g] = 1;
+    hType_[g] = c.type;
+    hSurface_[g] = hsurf[g];
+    hNParents_[g] = c.nParents;
+    hCharge_[g] = c.charge;
+    hDR_[g] = hdr[g];
+    hPt_[g] = c.ref->pt();
+    hEta_[g] = c.ref->eta();
+    hPhi_[g] = c.ref->phi();
+    hOwnOuterId_[g] = c.ownOuterId;
+    if (dmatch[g] < 0)
+      hOuterCheck_[g] = 1;
+    else if (c.ownOuters.count(refKey(dsa[dmatch[g]].ref)))
+      hOuterCheck_[g] = 2;
+    else
+      hOuterCheck_[g] = c.ownOuters.empty() ? 4 : 3;
+  }
+  if (hmatch[0] >= 0 && hmatch[1] >= 0)
+    hFit_ = fitPair(cands[hmatch[0]], cands[hmatch[1]], ttb, kvf, bs, genVtx_, ux, uy);
   tree_->Fill();
 }
 
