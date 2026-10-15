@@ -88,6 +88,8 @@ def main():
         new = json.load(f)
     if old["samples"] != new["samples"]:
         raise RuntimeError("the summaries cover different samples")
+    if old.get("requireId") != new.get("requireId"):
+        raise RuntimeError("the summaries differ in --require-id")
     labels = args.labels.split(",")
     for group in new["groups"]:
         if group not in old["groups"] or args.xvar not in old["groups"][group]["x"]:
