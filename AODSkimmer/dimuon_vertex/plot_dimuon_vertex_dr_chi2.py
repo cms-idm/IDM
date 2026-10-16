@@ -32,8 +32,9 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import hist
 import numpy as np
+import ROOT
+ROOT.gROOT.SetBatch(True)
 import uproot
 from matplotlib.colors import LogNorm
 
@@ -92,17 +93,27 @@ def add(hs):
     return {k: sum(h[k] for h in hs) for k in hs[0]}
 
 
-def write_root(out, groups):
-    """TH1D/TH2D per group with under/overflow; unweighted counts, so no separate Sumw2."""
+def write_root(path, groups):
+    """TH1D/TH2D per group with under/overflow; unweighted counts (no Sumw2 needed)."""
+    f = ROOT.TFile(path, "RECREATE")
+    ROOT.TNamed("definitions", __doc__).Write()
     for key, h in groups.items():
+        f.mkdir(key)
+        f.cd(key)
         for k, (label, e, _) in H1.items():
-            t = hist.Hist(hist.axis.Variable(e, name=k, label=label))
-            t.view(flow=True)[...] = h[k]
-            out[f"{key}/{k}"] = t
+            t = ROOT.TH1D(k, f";{label};entries per bin", len(e) - 1, e)
+            for i, c in enumerate(h[k]):
+                t.SetBinContent(i, c)
+            t.SetEntries(h["n"])
+            t.Write()
         for k, (x, y, ex, ey) in H2.items():
-            t = hist.Hist(hist.axis.Variable(ex, name=x, label=LABELS[x]), hist.axis.Variable(ey, name=y, label=LABELS[y]))
-            t.view(flow=True)[...] = h[k]
-            out[f"{key}/{k}"] = t
+            t = ROOT.TH2D(k, f";{LABELS[x]};{LABELS[y]}", len(ex) - 1, ex, len(ey) - 1, ey)
+            for i in range(h[k].shape[0]):
+                for j in range(h[k].shape[1]):
+                    t.SetBinContent(i, j, h[k][i, j])
+            t.SetEntries(h["n"])
+            t.Write()
+    f.Close()
 
 
 def overflow_frac(h, k):
@@ -219,9 +230,7 @@ def main():
         groups[f"sample/{s}"] = hs[s]
         titles[f"sample/{s}"] = f"sample {s}"
     os.makedirs(args.outdir, exist_ok=True)
-    with uproot.recreate(os.path.join(args.outdir, "dimuon_vertex_dr_chi2.root")) as out:
-        out["definitions"] = __doc__
-        write_root(out, groups)
+    write_root(os.path.join(args.outdir, "dimuon_vertex_dr_chi2.root"), groups)
     for key, h in groups.items():
         plot_group(h, titles[key], os.path.join(args.outdir, key))
         print(key, h["n"], flush=True)
