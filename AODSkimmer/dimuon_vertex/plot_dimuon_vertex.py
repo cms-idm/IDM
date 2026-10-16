@@ -28,7 +28,10 @@ residual/pull axes; they never replace the linear plots.
 gen_vertex.png (every group): gen signal-vertex Lxy (production vertex of the signal mu-, rho from (0,0))
 over 0-740 cm and the fraction above Lxy; denominator = every event with one signal mu- and one mu+ (no
 acceptance; Lxy >= 740 counted as overflow). Fractions with Lxy > 112, 273.5, 330, >= 740 cm, |vz| > 273.5
-cm and outside the old fitter box (Lxy >= 112 or |vz| >= 273.5) are in the plot and the JSON (genVertex).
+cm, |vz| >= 960 cm and outside the old (Lxy >= 112 or |vz| >= 273.5) and new (Lxy >= 740 or |vz| >= 960)
+fitter boxes are in the plot and the JSON (genVertex). gen_vxy_vz.png: truth vxy (= Lxy) over 0-1000 cm and
+vz over -1500..1500 cm, same denominator, bound lines at 112 / 740 and 273.5 / 960 cm. --gen-only writes
+only these two figures and their JSON counts.
 
 x-variables (gen): min pT, max |eta|, max |d0|, leading/subleading (by pT) pT, eta, |d0|, dimuon pT and
 eta, Lxy (0-75 cm), LxyFull (0-740 cm), dR(mu,mu). |d0| = |vx sin(phi) - vy cos(phi)|, straight line to
@@ -500,7 +503,9 @@ def gen_vertex_counts(g):
     n = len(lxy)
     out = {"nEvents": int(n), "LxyAbove": {f"{c:g}": int((lxy > c).sum()) for c in GEN_LXY_CUTS[:-1]},
            "LxyAtLeast740": int((lxy >= 740).sum()), "absVzAbove273.5": int((vz > 273.5).sum()),
-           "outsideOldBox": int(((lxy >= 112) | (vz >= 273.5)).sum())}
+           "absVzAtLeast960": int((vz >= 960).sum()),
+           "outsideOldBox": int(((lxy >= 112) | (vz >= 273.5)).sum()),
+           "outsideNewBox": int(((lxy >= 740) | (vz >= 960)).sum())}
     return out
 
 
@@ -541,6 +546,49 @@ def plot_gen_vertex(g, counts, title, outdir):
                      f"and one mu+ | unweighted | {'log' if log else 'linear'} y", fontsize=9)
         fig.tight_layout(rect=(0, 0, 1, 0.95))
         fig.savefig(os.path.join(outdir, "gen_vertex_log.png" if log else "gen_vertex.png"), dpi=90)
+        plt.close(fig)
+
+
+def plot_gen_vxy_vz(g, counts, title, outdir):
+    """Truth vxy (= L_xy, rho from (0,0)) and vz of the gen signal vertex, fraction of all events per bin."""
+    os.makedirs(outdir, exist_ok=True)
+    vxy, vz = g["genLxy"], g["genVz"]
+    n = max(len(vxy), 1)
+    k = counts
+    panels = [(vxy, np.arange(0, 1000.01, 10), "gen signal-vertex v_xy = L_xy [cm] (rho from (0,0))",
+               [(112, "#d62728", "old bound 112 cm"), (740, "#2ca02c", "bound / acceptance 740 cm")],
+               [f"v_xy >= 1000 cm (not shown): {int((vxy >= 1000).sum())} ({(vxy >= 1000).sum() / n:.4f})",
+                f"v_xy > 112 cm: {k['LxyAbove']['112']} ({k['LxyAbove']['112'] / n:.4f})",
+                f"v_xy >= 740 cm: {k['LxyAtLeast740']} ({k['LxyAtLeast740'] / n:.4f})"]),
+              (vz, np.arange(-1500, 1500.01, 20), "gen signal-vertex v_z [cm]",
+               [(-273.5, "#d62728", "old bound |z| 273.5 cm"), (273.5, "#d62728", None),
+                (-960, "#2ca02c", "bound / acceptance |z| 960 cm"), (960, "#2ca02c", None)],
+               [f"|v_z| >= 1500 cm (not shown): {int((np.abs(vz) >= 1500).sum())} "
+                f"({(np.abs(vz) >= 1500).sum() / n:.4f})",
+                f"|v_z| > 273.5 cm: {k['absVzAbove273.5']} ({k['absVzAbove273.5'] / n:.4f})",
+                f"|v_z| >= 960 cm: {k['absVzAtLeast960']} ({k['absVzAtLeast960'] / n:.4f})"])]
+    for log in ([False, True] if LOG else [False]):
+        fig, axs = plt.subplots(1, 2, figsize=(15, 5.5))
+        for ax, (x, edges, label, lines, txt) in zip(axs, panels):
+            h = np.histogram(x, edges)[0]
+            ax.stairs(h / n, edges, color="k")
+            for xv, col, lab in lines:
+                ax.axvline(xv, color=col, ls="--", lw=1, label=lab)
+            ax.set_xlabel(label)
+            ax.set_ylabel(f"fraction of gen signal vertices per {edges[1] - edges[0]:g} cm")
+            ax.set_xlim(edges[0], edges[-1])
+            ax.set_yscale("log" if log else "linear")
+            if not log:
+                ax.set_ylim(bottom=0)
+            ax.grid(alpha=0.3)
+            ax.legend(fontsize=8, loc="upper left")
+            ax.text(0.97, 0.97, "\n".join([f"N = {k['nEvents']} events (no acceptance)"] + txt), transform=ax.transAxes,
+                    ha="right", va="top", fontsize=8, bbox=dict(facecolor="white", alpha=0.8, edgecolor="gray"))
+        fig.suptitle(f"{title} | truth vertex of the signal mu- (production vertex), every event with one signal mu- "
+                     f"and one mu+ | outside new box (v_xy>=740 or |v_z|>=960): {k['outsideNewBox']} "
+                     f"({k['outsideNewBox'] / n:.4f}) | unweighted | {'log' if log else 'linear'} y", fontsize=9)
+        fig.tight_layout(rect=(0, 0, 1, 0.95))
+        fig.savefig(os.path.join(outdir, "gen_vxy_vz_log.png" if log else "gen_vxy_vz.png"), dpi=90)
         plt.close(fig)
 
 
@@ -590,6 +638,8 @@ def main():
     ap.add_argument("--groups", default="overall,mass,lifetime,sample")
     ap.add_argument("--require-id", action="store_true", help="require the component ID on both legs")
     ap.add_argument("--log", action="store_true", help="also write log-scale copies (*_log.png)")
+    ap.add_argument("--gen-only", action="store_true",
+                    help="only the gen signal-vertex plots (gen_vertex, gen_vxy_vz) and their JSON counts")
     args = ap.parse_args()
     global ID_MODE, ID_LABEL, LOG
     LOG = args.log
@@ -621,12 +671,20 @@ def main():
     out = {"definitions": __doc__, "minEntries": MIN_ENTRIES, "requireId": ID_MODE, "log": LOG, "samples": sorted(data),
            "groups": {}}
     for key, title, samples, xvars in todo:
+        if args.gen_only:
+            g = concat([GEN[s] for s in samples])
+            out["groups"][key] = {"samples": samples, "genVertex": gen_vertex_counts(g)}
+            plot_gen_vertex(g, out["groups"][key]["genVertex"], title, os.path.join(args.outdir, key))
+            plot_gen_vxy_vz(g, out["groups"][key]["genVertex"], title, os.path.join(args.outdir, key))
+            print(key, len(g["genLxy"]), flush=True)
+            continue
         a = concat([data[s] for s in samples])
         summary, xv = summarize_group(a, xvars)
         summary["samples"] = samples
         g = concat([GEN[s] for s in samples])
         summary["genVertex"] = gen_vertex_counts(g)
         plot_gen_vertex(g, summary["genVertex"], title, os.path.join(args.outdir, key))
+        plot_gen_vxy_vz(g, summary["genVertex"], title, os.path.join(args.outdir, key))
         if "HIER" in COMBOS:
             summary["hierarchy"] = hierarchy_counts(a)
         out["groups"][key] = summary
