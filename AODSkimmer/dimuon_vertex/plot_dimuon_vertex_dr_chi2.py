@@ -1,6 +1,7 @@
 """dR(mu, mu) and vertex chi2/ndof of the HIER dimuon fits (DimuonVertexTruth outputs, files from 63c413d on).
 
   python3 plot_dimuon_vertex_dr_chi2.py 'RUNDIR/dimuon_vertex_*.root' OUTDIR [--log]
+  python3 plot_dimuon_vertex_dr_chi2.py OUTDIR/dimuon_vertex_dr_chi2.root OUTDIR --from-root [--log]   (replot only)
 
 Population: events with both signal muons accepted and a valid HIER fit (hierFitStatus 3: both gen muons
 matched to a representative, legs share no track, fit valid inside the tracker bounds). One entry per event,
@@ -188,7 +189,7 @@ def plot_overlay(hs, kind, outdir):
                 finish_1d(ax, k, unit_area, log)
                 ax.legend(fontsize=7, ncol=2 if len(hs) > 8 else 1)
                 norm = "unit area (incl. under/overflow)" if unit_area else "raw counts"
-                ax.set_title(f"all {kind}s, each {pooled} | {POP} | {norm} | {'log' if log else 'linear'}",
+                ax.set_title(f"all {kind}{'es' if kind == 'mass' else 's'}, each {pooled} | {POP} | {norm} | {'log' if log else 'linear'}",
                              fontsize=8)
                 fig.tight_layout()
                 name = f"{kind}_{k}{'_unitArea' if unit_area else ''}{'_log' if log else ''}.png"
@@ -200,44 +201,72 @@ def num(s):
     return float(re.search(r"-([0-9p]+)", s).group(1).replace("p", "."))
 
 
+def read_root(path):
+    """Groups from a file written by write_root; refuses binnings that differ from H1/H2."""
+    f = uproot.open(path)
+    groups = {}
+    for key in f.keys(recursive=True, cycle=False):
+        if not key.endswith("/dR"):
+            continue
+        g = key[: -len("/dR")]
+        h = {}
+        for k, (_, e, _) in H1.items():
+            t = f[f"{g}/{k}"]
+            if not np.allclose(t.axis().edges(), e):
+                raise RuntimeError(f"{path}: {g}/{k} binning differs from this script")
+            h[k] = t.values(flow=True)
+        for k, (_, _, ex, ey) in H2.items():
+            t = f[f"{g}/{k}"]
+            if not (np.allclose(t.axis(0).edges(), ex) and np.allclose(t.axis(1).edges(), ey)):
+                raise RuntimeError(f"{path}: {g}/{k} binning differs from this script")
+            h[k] = t.values(flow=True)
+        h["n"] = int(round(h["dR"].sum()))
+        groups[g] = h
+    return groups
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("pattern")
+    ap.add_argument("pattern", help="ntuple glob, or with --from-root the dimuon_vertex_dr_chi2.root to replot")
     ap.add_argument("outdir")
     ap.add_argument("--log", action="store_true", help="also write log-scale copies (*_log.png)")
+    ap.add_argument("--from-root", action="store_true", help="replot from saved histograms; no ntuple pass")
     args = ap.parse_args()
     global LOG
     LOG = args.log
-    hs = {s: fill(a) for s, a in load(args.pattern).items()}
-    rx = re.compile(r"(Mchi-[^_]+_dMchi-[^_]+)_(ctau-[^_]+)$")
-    by_mass, by_life = {}, {}
-    for s in hs:
-        match = rx.match(s)
-        if not match:
-            raise RuntimeError(f"unexpected sample name {s}")
-        m, l = match.groups()
-        by_mass.setdefault(m, []).append(s)
-        by_life.setdefault(l, []).append(s)
-    groups = {"overall": add(list(hs.values()))}
+    if args.from_root:
+        groups = read_root(args.pattern)
+    else:
+        hs = {s: fill(a) for s, a in load(args.pattern).items()}
+        rx = re.compile(r"(Mchi-[^_]+_dMchi-[^_]+)_(ctau-[^_]+)$")
+        by_mass, by_life = {}, {}
+        for s in hs:
+            match = rx.match(s)
+            if not match:
+                raise RuntimeError(f"unexpected sample name {s}")
+            m, l = match.groups()
+            by_mass.setdefault(m, []).append(s)
+            by_life.setdefault(l, []).append(s)
+        groups = {"overall": add(list(hs.values()))}
+        for m in by_mass:
+            groups[f"mass/{m}"] = add([hs[s] for s in by_mass[m]])
+        for l in by_life:
+            groups[f"lifetime/{l}"] = add([hs[s] for s in by_life[l]])
+        for s in sorted(hs):
+            groups[f"sample/{s}"] = hs[s]
+        os.makedirs(args.outdir, exist_ok=True)
+        write_root(os.path.join(args.outdir, "dimuon_vertex_dr_chi2.root"), groups)
+    masses = sorted((k.split("/", 1)[1] for k in groups if k.startswith("mass/")), key=num)
+    lifes = sorted((k.split("/", 1)[1] for k in groups if k.startswith("lifetime/")), key=num)
     titles = {"overall": "overall"}
-    for m in sorted(by_mass, key=num):
-        groups[f"mass/{m}"] = add([hs[s] for s in by_mass[m]])
-        titles[f"mass/{m}"] = f"mass {m} (pooled over lifetimes)"
-    for l in sorted(by_life, key=num):
-        groups[f"lifetime/{l}"] = add([hs[s] for s in by_life[l]])
-        titles[f"lifetime/{l}"] = f"lifetime {l} (pooled over masses)"
-    for s in sorted(hs):
-        groups[f"sample/{s}"] = hs[s]
-        titles[f"sample/{s}"] = f"sample {s}"
-    os.makedirs(args.outdir, exist_ok=True)
-    write_root(os.path.join(args.outdir, "dimuon_vertex_dr_chi2.root"), groups)
+    titles.update({f"mass/{m}": f"mass {m} (pooled over lifetimes)" for m in masses})
+    titles.update({f"lifetime/{l}": f"lifetime {l} (pooled over masses)" for l in lifes})
+    titles.update({k: f"sample {k[7:]}" for k in groups if k.startswith("sample/")})
     for key, h in groups.items():
         plot_group(h, titles[key], os.path.join(args.outdir, key))
         print(key, h["n"], flush=True)
-    plot_overlay({m: groups[f"mass/{m}"] for m in sorted(by_mass, key=num)}, "mass",
-                 os.path.join(args.outdir, "overlays"))
-    plot_overlay({l: groups[f"lifetime/{l}"] for l in sorted(by_life, key=num)}, "lifetime",
-                 os.path.join(args.outdir, "overlays"))
+    plot_overlay({m: groups[f"mass/{m}"] for m in masses}, "mass", os.path.join(args.outdir, "overlays"))
+    plot_overlay({l: groups[f"lifetime/{l}"] for l in lifes}, "lifetime", os.path.join(args.outdir, "overlays"))
 
 
 if __name__ == "__main__":
