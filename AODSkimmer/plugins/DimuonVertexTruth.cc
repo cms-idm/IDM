@@ -47,6 +47,12 @@
 // kinematics, hits and owner displacedMuons; station-2 dR of the DSA and of the
 // representative to the other gen muon; station-2 dR between the representative and
 // the DSA; whether the DSA belongs to the representative matched to the other gen muon.
+//
+// PF muons (branches pf*, user decisions 2026-10-18): slimmedMuons with isPFMuon and
+// (isGlobalMuon or isTrackerMuon); representative global track if isGlobalMuon, else
+// inner track; matched to gen exactly like the hierarchy candidates (station 2 with
+// station-1 fallback, same charge, dR < drGlobal / drInner, greedy one-to-one over all
+// PF candidates), independently of the displacedMuons. pfMet* = slimmedMETs[0] Type-1.
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -70,6 +76,8 @@
 #include "DataFormats/HepMCCandidate/interface/GenParticle.h"
 #include "DataFormats/Math/interface/deltaR.h"
 #include "DataFormats/MuonReco/interface/Muon.h"
+#include "DataFormats/PatCandidates/interface/MET.h"
+#include "DataFormats/PatCandidates/interface/Muon.h"
 #include "DataFormats/TrackReco/interface/Track.h"
 #include "DataFormats/VertexReco/interface/Vertex.h"
 
@@ -373,6 +381,8 @@ private:
   const edm::EDGetTokenT<std::vector<reco::GenParticle>> genToken_;
   const edm::EDGetTokenT<reco::BeamSpot> beamspotToken_;
   const edm::EDGetTokenT<std::vector<reco::Track>> dsaToken_;
+  const edm::EDGetTokenT<std::vector<pat::Muon>> pfMuonToken_;
+  const edm::EDGetTokenT<std::vector<pat::MET>> metToken_;
   const edm::ESGetToken<TransientTrackBuilder, TransientTrackRecord> ttbToken_;
   const edm::ESGetToken<MagneticField, IdealMagneticFieldRecord> magFieldToken_;
   const PropagateToMuonSetup propagatorSetup_;
@@ -422,6 +432,10 @@ private:
   float dDR_[2], dPt_[2], dEta_[2], dPhi_[2], dPtErr_[2], dNormChi2_[2], dDROtherGen_[2], hDROtherGen_[2],
       hDsaDRSt2_[2], dOwnerInnerDRRep_[2], dOwnerInnerPtRatio_[2], dOwnerCandDR_[2];
   FitResult hFit_;
+  // PF muons (index g) and PF MET
+  int pfNCand_, pfNCandType_[2], pfNoTrack_;
+  int pfMatched_[2], pfType_[2], pfSurface_[2], pfCharge_[2];
+  float pfDR_[2], pfPt_[2], pfEta_[2], pfPhi_[2], pfMuPt_[2], pfMuPhi_[2], pfMetPt_, pfMetPhi_;
 };
 
 DimuonVertexTruth::DimuonVertexTruth(const edm::ParameterSet& ps)
@@ -429,6 +443,8 @@ DimuonVertexTruth::DimuonVertexTruth(const edm::ParameterSet& ps)
       genToken_(consumes<std::vector<reco::GenParticle>>(ps.getParameter<edm::InputTag>("genParticles"))),
       beamspotToken_(consumes<reco::BeamSpot>(ps.getParameter<edm::InputTag>("beamspot"))),
       dsaToken_(consumes<std::vector<reco::Track>>(ps.getParameter<edm::InputTag>("standAloneMuons"))),
+      pfMuonToken_(consumes<std::vector<pat::Muon>>(ps.getParameter<edm::InputTag>("pfMuons"))),
+      metToken_(consumes<std::vector<pat::MET>>(ps.getParameter<edm::InputTag>("met"))),
       ttbToken_(esConsumes(edm::ESInputTag("", "TransientTrackBuilder"))),
       magFieldToken_(esConsumes()),
       propagatorSetup_(ps.getParameter<edm::ParameterSet>("propagatorSt2"), consumesCollector()),
@@ -467,7 +483,12 @@ DimuonVertexTruth::DimuonVertexTruth(const edm::ParameterSet& ps)
                    "hierDsaDRSt2 = station-2 dR between representative and DSA; hierNMatchedStations of the lowest-index parent; "
                    "lowest-index DSA owner: dsaOwnerInnerSame (its inner is a constituent of the representative; -1 no inner), "
                    "dsaOwnerInnerDRRep / PtRatio (its inner vs the representative track, at the reference point), "
-                   "dsaOwnerCandType / CandDR (its hierarchy candidate's type and station-2 dR to this gen muon; -1/-999 none)");
+                   "dsaOwnerCandType / CandDR (its hierarchy candidate's type and station-2 dR to this gen muon; -1/-999 none); "
+                   "pf*: slimmedMuons with isPFMuon and (isGlobalMuon or isTrackerMuon), representative global track if "
+                   "isGlobalMuon else inner track (pfType 1 / 0, -1 none), matched like hier* (st2 + st1 fallback, same charge, "
+                   "dR<drGlobal/drInner, greedy 1-to-1 over PF candidates), independent of displacedMuons; pfPt/Eta/Phi = "
+                   "representative track at its reference point, pfMuPt/Phi = pat::Muon p4; pfNoTrack = PF candidates "
+                   "skipped because the flagged track is missing; pfMetPt/Phi = slimmedMETs[0] Type-1 (-999 if empty)");
   tree_ = fs->make<TTree>("events", "truth-matched dimuon vertex fits");
   auto& t = *tree_;
   t.Branch("run", &run_);
@@ -602,6 +623,21 @@ DimuonVertexTruth::DimuonVertexTruth(const edm::ParameterSet& ps)
   t.Branch("hierFitSigLxyBS", &hFit_.sigLxyBS);
   t.Branch("hierFitMass", &hFit_.mass);
   t.Branch("hierFitMassRefit", &hFit_.massRefit);
+  t.Branch("pfNCand", &pfNCand_);
+  t.Branch("pfNCandType", pfNCandType_, "pfNCandType[2]/I");
+  t.Branch("pfNoTrack", &pfNoTrack_);
+  t.Branch("pfMatched", pfMatched_, "pfMatched[2]/I");
+  t.Branch("pfType", pfType_, "pfType[2]/I");
+  t.Branch("pfSurface", pfSurface_, "pfSurface[2]/I");
+  t.Branch("pfCharge", pfCharge_, "pfCharge[2]/I");
+  t.Branch("pfDR", pfDR_, "pfDR[2]/F");
+  t.Branch("pfPt", pfPt_, "pfPt[2]/F");
+  t.Branch("pfEta", pfEta_, "pfEta[2]/F");
+  t.Branch("pfPhi", pfPhi_, "pfPhi[2]/F");
+  t.Branch("pfMuPt", pfMuPt_, "pfMuPt[2]/F");
+  t.Branch("pfMuPhi", pfMuPhi_, "pfMuPhi[2]/F");
+  t.Branch("pfMetPt", &pfMetPt_);
+  t.Branch("pfMetPhi", &pfMetPhi_);
 
   totals_ = fs->make<TTree>("totals", "event counters");
   totals_->Branch("events", &nEvents_);
@@ -645,6 +681,12 @@ void DimuonVertexTruth::resetBranches() {
                   dOwnerInnerDRRep_, dOwnerInnerPtRatio_, dOwnerCandDR_})
     fill(a, 2, -999.f);
   hFit_ = FitResult();
+  pfNCand_ = pfNoTrack_ = 0;
+  fill(pfNCandType_, 2, 0);
+  for (auto* a : {pfMatched_, pfSurface_, pfCharge_}) fill(a, 2, 0);
+  fill(pfType_, 2, -1);
+  for (auto* a : {pfDR_, pfPt_, pfEta_, pfPhi_, pfMuPt_, pfMuPhi_}) fill(a, 2, -999.f);
+  pfMetPt_ = pfMetPhi_ = -999.f;
 }
 
 void DimuonVertexTruth::setFit(int c, const FitResult& f) {
@@ -1047,6 +1089,58 @@ void DimuonVertexTruth::analyze(const edm::Event& iEvent, const edm::EventSetup&
   }
   if (hmatch[0] >= 0 && hmatch[1] >= 0)
     hFit_ = fitPair(cands[hmatch[0]], cands[hmatch[1]], ttb, kvf, bs, genVtx_, ux, uy);
+
+  // PF muons (see header). Units carry charge and positions only; kinematics kept per candidate.
+  const auto& pfMuons = iEvent.get(pfMuonToken_);
+  std::vector<Unit> pfCands;
+  std::vector<const pat::Muon*> pfMu;
+  std::vector<const reco::Track*> pfTrk;
+  for (const auto& mu : pfMuons) {
+    if (!mu.isPFMuon() || !(mu.isGlobalMuon() || mu.isTrackerMuon())) continue;
+    int t = -1;
+    if (mu.isGlobalMuon() && mu.globalTrack().isNonnull())
+      t = 1;
+    else if (mu.isTrackerMuon() && mu.innerTrack().isNonnull())
+      t = 0;
+    if (t < 0) {
+      ++pfNoTrack_;
+      continue;
+    }
+    const reco::Track& tk = t == 1 ? *mu.globalTrack() : *mu.innerTrack();
+    Unit u;
+    u.type = t;
+    u.charge = tk.charge();
+    u.st2 = toPos(propagator.extrapolate(tk));
+    if (needFallback) u.fallback = toPos(propagatorSt1.extrapolate(tk));
+    pfCands.push_back(u);
+    pfMu.push_back(&mu);
+    pfTrk.push_back(&tk);
+    ++pfNCandType_[t];
+  }
+  pfNCand_ = pfCands.size();
+  std::vector<double> pthr;
+  for (const auto& c : pfCands) pthr.push_back(drThreshold_[c.type]);
+  std::array<float, 2> pdr;
+  std::array<int, 2> psurf;
+  const auto pmatch = matchSt2St1(gen, pfCands, pthr, pdr, psurf);
+  for (int g = 0; g < 2; ++g) {
+    if (pmatch[g] < 0) continue;
+    pfMatched_[g] = 1;
+    pfType_[g] = pfCands[pmatch[g]].type;
+    pfSurface_[g] = psurf[g];
+    pfCharge_[g] = pfCands[pmatch[g]].charge;
+    pfDR_[g] = pdr[g];
+    pfPt_[g] = pfTrk[pmatch[g]]->pt();
+    pfEta_[g] = pfTrk[pmatch[g]]->eta();
+    pfPhi_[g] = pfTrk[pmatch[g]]->phi();
+    pfMuPt_[g] = pfMu[pmatch[g]]->pt();
+    pfMuPhi_[g] = pfMu[pmatch[g]]->phi();
+  }
+  const auto& mets = iEvent.get(metToken_);
+  if (!mets.empty()) {
+    pfMetPt_ = mets[0].corPt(pat::MET::Type1);
+    pfMetPhi_ = mets[0].corPhi(pat::MET::Type1);
+  }
   tree_->Fill();
 }
 
