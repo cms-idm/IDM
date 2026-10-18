@@ -17,7 +17,10 @@ Populations (event level, both signal muons; one entry per event, raw counts, un
   pf_trk / dm_trk   both representatives tracker (inner) type
   pf_glb / dm_glb   both global type
   dm_dsa     both DSA type (displacedMuons only; PF has no DSA)
+  dm_pf      both matched to HIER displacedMuons and both matched to ID'd PF muons
   dm_notpf   both matched to HIER displacedMuons and neither matched to an ID'd PF muon
+PF-matched means the signal muon also has an ID'd PF match (independent matching), not that the PF muon and
+the displacedMuon share a track. HIER events with exactly one PF-matched leg are counted (`dm one leg pf`).
 Mixed-type events (e.g. one global, one tracker leg) are in *_all only; their counts are in `counts`.
 
 Observable: reco pT^mumu = vector sum of the two matched representative tracks (at their reference points).
@@ -30,7 +33,7 @@ x |Delta phi|); `counts`. Groups: overall, per mass point (pooled over lifetimes
 (pooled over masses, unweighted), per sample.
 
 PNGs (linear): per group all.png (pf_all and dm_all), tracker.png, global.png (PF vs displacedMuons overlaid),
-dsa.png, notpf.png, each also _unitArea; vs_d0.png (heatmaps, all populations). overlays/ mass_* (all masses,
+dsa.png, notpf.png, pfsplit.png (dm_pf vs dm_notpf), each also _unitArea; vs_d0.png (heatmaps, all populations). overlays/ mass_* (all masses,
 each pooled over lifetimes) and lifetime_* (all lifetimes, each pooled over masses), raw and unit area. --log
 adds *_log.png copies; they never replace the linear plots.
 """
@@ -59,6 +62,7 @@ POPS = {  # name: (legend label, colour)
     "pf_glb": ("PF, both global", "tab:blue"),
     "dm_glb": ("displacedMuons, both global", "tab:red"),
     "dm_dsa": ("displacedMuons, both DSA", "tab:green"),
+    "dm_pf": ("displacedMuons HIER, both legs PF-matched", "tab:orange"),
     "dm_notpf": ("displacedMuons HIER, neither leg PF-matched", "tab:purple"),
 }
 FIGS = {  # file stem: (populations, title)
@@ -67,8 +71,9 @@ FIGS = {  # file stem: (populations, title)
     "global": (["pf_glb", "dm_glb"], "both legs global type"),
     "dsa": (["dm_dsa"], "both legs DSA type (displacedMuons only)"),
     "notpf": (["dm_notpf"], "both legs HIER displacedMuons, neither PF-matched"),
+    "pfsplit": (["dm_pf", "dm_notpf"], "HIER displacedMuons (all types): both legs vs neither leg PF-matched"),
 }
-COUNTS = ["events (2 signal muons)", "both accepted"] + list(POPS) + ["pf mixed types", "dm mixed types"]
+COUNTS = ["events (2 signal muons)", "both accepted"] + list(POPS) + ["pf mixed types", "dm mixed types", "dm one leg pf"]
 SIGNED = np.linspace(-np.pi, np.pi, 41)
 ABS = np.linspace(0, np.pi, 21)
 D0 = np.linspace(0, 30, 31)
@@ -103,6 +108,7 @@ def load(pattern):
                "pf_trk": pf & (a["pfType"] == 0).all(1), "dm_trk": dm & (a["hierType"] == 0).all(1),
                "pf_glb": pf & (a["pfType"] == 1).all(1), "dm_glb": dm & (a["hierType"] == 1).all(1),
                "dm_dsa": dm & (a["hierType"] == 2).all(1),
+               "dm_pf": dm & (a["pfMatched"].sum(1) == 2),
                "dm_notpf": dm & (a["pfMatched"].sum(1) == 0)}
         if (sel["pf_all"] & ~acc).any() or (sel["dm_all"] & ~acc).any():
             raise RuntimeError(f"{fn}: matched events with a non-accepted gen muon")
@@ -113,7 +119,8 @@ def load(pattern):
         maxd0 = np.abs(a["genD0"]).max(1).astype(float)
         d = {"counts": np.array([len(acc), acc.sum()] + [sel[p].sum() for p in POPS] +
                                 [(pf & (a["pfType"][:, 0] != a["pfType"][:, 1])).sum(),
-                                 (dm & (a["hierType"][:, 0] != a["hierType"][:, 1])).sum()])}
+                                 (dm & (a["hierType"][:, 0] != a["hierType"][:, 1])).sum(),
+                                 (dm & (a["pfMatched"].sum(1) == 1)).sum()])}
         for p in POPS:
             d[p] = (dphi[p[:2]][sel[p]], maxd0[sel[p]])
         data[sample] = d
@@ -223,7 +230,8 @@ def finish_1d(ax, kind, unit_area, log):
 def head(h, title):
     c = dict(zip(COUNTS, h["counts"].astype(int)))
     return (f"{title} | {c['both accepted']} of {c['events (2 signal muons)']} events both accepted | mixed-type events "
-            f"(in 'all' only): PF {c['pf mixed types']}, displacedMuons {c['dm mixed types']} | unweighted")
+            f"(in 'all' only): PF {c['pf mixed types']}, displacedMuons {c['dm mixed types']} | HIER with one PF-matched leg "
+            f"(in 'all' only): {c['dm one leg pf']} | unweighted")
 
 
 def plot_group(h, title, outdir):
@@ -243,7 +251,7 @@ def plot_group(h, title, outdir):
                 fig.savefig(os.path.join(outdir, f"{stem}{'_unitArea' if unit_area else ''}{'_log' if log else ''}.png"),
                             dpi=90)
                 plt.close(fig)
-        fig, axs = plt.subplots(2, 4, figsize=(22, 9))
+        fig, axs = plt.subplots(3, 3, figsize=(18, 13))
         for ax, p in zip(axs.flat, POPS):
             z = h[f"d0_absdphi_{p}"][1:-1, 1:-1].T
             norm = LogNorm(vmin=1, vmax=max(z.max(), 1)) if log else None
