@@ -20,6 +20,13 @@
 //   hit precedes the PCA on either z side); the last hit follows the PCA (endcap: Z_L > sign(pz) * vz;
 //   barrel: assumed); rho lower bound at the first hit sqrt(dxy^2 + ((sign(pz) * vz - Z1) * pt / |pz|)^2) > 3
 //   and d(last) > 3. Evaluated only when the proxy is defined.
+// Muon-system side test (two-user tracks only; design "Muon-system side test vs crossedIP" in the same note):
+//   s = (X - r0) . p_hat, r0 = shared track reference point (PCA to the beamline), p_hat its unit momentum.
+//   Per copy (A = lower index, B) and source: M = every matches() chamber with >= 1 segment/RPC/GEM match,
+//   X = chamber surface centre (GlobalTrackingGeometry); Arb = DT/CSC chambers with a segment passing
+//   BestInChamberByDR && BelongsToTrackByDR (SegmentAndTrackArbitration); S = standalone innerPosition and
+//   outerPosition (outerTrack with available extra). Counts: ahead (s > 0), behind (s < 0), plane (s == 0),
+//   dropped (no geometry or non-finite s). Classes are formed offline.
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -27,6 +34,7 @@
 #include <vector>
 
 #include "CommonTools/UtilAlgos/interface/TFileService.h"
+#include "DataFormats/MuonDetId/interface/MuonSubdetId.h"
 #include "DataFormats/MuonReco/interface/Muon.h"
 #include "DataFormats/TrackReco/interface/HitPattern.h"
 #include "DataFormats/TrackReco/interface/Track.h"
@@ -38,6 +46,8 @@
 #include "FWCore/ParameterSet/interface/ParameterSet.h"
 #include "FWCore/ServiceRegistry/interface/Service.h"
 #include "FWCore/Utilities/interface/InputTag.h"
+#include "Geometry/CommonDetUnit/interface/GlobalTrackingGeometry.h"
+#include "Geometry/Records/interface/GlobalTrackingGeometryRecord.h"
 #include "Geometry/Records/interface/TrackerDigiGeometryRecord.h"
 #include "Geometry/Records/interface/TrackerTopologyRcd.h"
 #include "Geometry/TrackerGeometryBuilder/interface/TrackerGeometry.h"
@@ -54,7 +64,8 @@ public:
   explicit CrossedIPHitPatternCheck(const edm::ParameterSet& cfg)
       : muonToken_(consumes<std::vector<reco::Muon>>(cfg.getParameter<edm::InputTag>("muons"))),
         geomToken_(esConsumes()),
-        topoToken_(esConsumes()) {
+        topoToken_(esConsumes()),
+        globalGeomToken_(esConsumes()) {
     usesResource(TFileService::kSharedResource);
   }
 
@@ -66,6 +77,7 @@ private:
   edm::EDGetTokenT<std::vector<reco::Muon>> muonToken_;
   edm::ESGetToken<TrackerGeometry, TrackerDigiGeometryRecord> geomToken_;
   edm::ESGetToken<TrackerTopology, TrackerTopologyRcd> topoToken_;
+  edm::ESGetToken<GlobalTrackingGeometry, GlobalTrackingGeometryRecord> globalGeomToken_;
   std::map<std::pair<int, int>, double> layerPos_;  // (subdet, layer) -> mean radius (barrel) or |z| (endcap)
 
   TTree* tree_ = nullptr;
@@ -79,6 +91,10 @@ private:
   float vz_, dxy_, dzError_, marginFirst_, marginLast_, rhoFirstBound_;
   std::vector<int> hitCode_;
   std::vector<float> hitD_;
+  // side test: [copy A/B][source M/Arb/S]
+  int sideN_[2][3][4];  // ahead, behind, plane, dropped
+  float sideS_[2][3][3];  // s min, s max, min |s|
+  int identicalM_;        // copies' source-M chamber sets identical (-1: not a two-user track)
 };
 
 void CrossedIPHitPatternCheck::beginJob() {
@@ -124,6 +140,18 @@ void CrossedIPHitPatternCheck::beginJob() {
   tree_->Branch("rhoFirstBound", &rhoFirstBound_);
   tree_->Branch("ruleE", &ruleE_);
   tree_->Branch("proxyFix", &proxyFix_);  // proxy OR ruleE; -1 undefined
+  const char* copies[2] = {"A", "B"};
+  const char* sources[3] = {"M", "Arb", "S"};
+  const char* counts[4] = {"nAhead", "nBehind", "nPlane", "nDropped"};
+  const char* svals[3] = {"sMin", "sMax", "absSMin"};
+  for (int c = 0; c < 2; ++c)
+    for (int k = 0; k < 3; ++k) {
+      for (int i = 0; i < 4; ++i)
+        tree_->Branch((std::string("side") + sources[k] + "_" + copies[c] + "_" + counts[i]).c_str(), &sideN_[c][k][i]);
+      for (int i = 0; i < 3; ++i)
+        tree_->Branch((std::string("side") + sources[k] + "_" + copies[c] + "_" + svals[i]).c_str(), &sideS_[c][k][i]);
+    }
+  tree_->Branch("sideIdenticalM", &identicalM_);
   tree_->Branch("hitCode", &hitCode_);  // valid tracker hits in order: 10 * subdet + layer
   tree_->Branch("hitD", &hitD_);
 }
@@ -248,6 +276,71 @@ void CrossedIPHitPatternCheck::analyze(const edm::Event& iEvent, const edm::Even
     ruleE_ = !undefReason_ && firstEndcap_ && marginFirst_ > 0 && (!lastEndcap_ || marginLast_ > 0) &&
              rhoFirstBound_ > 3 && dLast_ > 3;
     proxyFix_ = undefReason_ ? -1 : (proxy_ || ruleE_);
+
+    // muon-system side test
+    for (auto& c : sideN_)
+      for (auto& k : c)
+        for (int& n : k) n = -1;
+    for (auto& c : sideS_)
+      for (auto& k : c)
+        for (float& v : k) v = std::nanf("");
+    identicalM_ = -1;
+    if (idx.size() == 2) {
+      const auto& gg = iSetup.getData(globalGeomToken_);
+      const auto r0 = tk.referencePoint();
+      const auto pHat = tk.momentum().unit();
+      std::vector<uint32_t> chambersM[2];
+      for (int c = 0; c < 2; ++c) {
+        const reco::Muon& mu = muons[idx[c]];
+        for (int k = 0; k < 3; ++k) {
+          for (int& n : sideN_[c][k]) n = 0;
+          sideS_[c][k][0] = sideS_[c][k][1] = sideS_[c][k][2] = std::nanf("");
+        }
+        auto add = [&](int k, double x, double y, double z, bool valid) {
+          const double sv = (x - r0.x()) * pHat.x() + (y - r0.y()) * pHat.y() + (z - r0.z()) * pHat.z();
+          if (!valid || !std::isfinite(sv)) {
+            ++sideN_[c][k][3];
+            return;
+          }
+          ++sideN_[c][k][sv > 0 ? 0 : sv < 0 ? 1 : 2];
+          float& lo = sideS_[c][k][0];
+          float& hi = sideS_[c][k][1];
+          float& am = sideS_[c][k][2];
+          lo = std::isnan(lo) ? sv : std::min<float>(lo, sv);
+          hi = std::isnan(hi) ? sv : std::max<float>(hi, sv);
+          am = std::isnan(am) ? std::abs(sv) : std::min<float>(am, std::abs(sv));
+        };
+        for (const auto& m : mu.matches()) {
+          const int det = m.detector();
+          if (det != MuonSubdetId::DT && det != MuonSubdetId::CSC && det != MuonSubdetId::RPC &&
+              det != MuonSubdetId::GEM)
+            continue;
+          const bool anyHit = !m.segmentMatches.empty() || !m.rpcMatches.empty() || !m.gemMatches.empty() ||
+                              !m.gemHitMatches.empty();
+          bool arbitrated = false;
+          if (det == MuonSubdetId::DT || det == MuonSubdetId::CSC)
+            for (const auto& seg : m.segmentMatches)
+              arbitrated |= seg.isMask(reco::MuonSegmentMatch::BestInChamberByDR) &&
+                            seg.isMask(reco::MuonSegmentMatch::BelongsToTrackByDR);
+          if (!anyHit) continue;
+          const GeomDet* gd = gg.idToDet(m.id);
+          const GlobalPoint x = gd ? gd->position() : GlobalPoint();
+          add(0, x.x(), x.y(), x.z(), gd != nullptr);
+          if (arbitrated) add(1, x.x(), x.y(), x.z(), gd != nullptr);
+          chambersM[c].push_back(m.id.rawId());
+        }
+        if (mu.outerTrack().isNonnull() && mu.outerTrack()->extra().isAvailable()) {
+          const auto& ot = *mu.outerTrack();
+          add(2, ot.innerPosition().x(), ot.innerPosition().y(), ot.innerPosition().z(), true);
+          add(2, ot.outerPosition().x(), ot.outerPosition().y(), ot.outerPosition().z(), true);
+        }
+      }
+      for (auto& v : chambersM) {
+        std::sort(v.begin(), v.end());
+        v.erase(std::unique(v.begin(), v.end()), v.end());
+      }
+      identicalM_ = chambersM[0] == chambersM[1];
+    }
     tree_->Fill();
   }
 }
