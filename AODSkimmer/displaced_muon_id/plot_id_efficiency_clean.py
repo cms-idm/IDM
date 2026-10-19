@@ -202,7 +202,7 @@ def curve(group, source, key, vname):
 # The row-based binning must reproduce the stored all-pass counts everywhere.
 for group in groups:
     for vname in ROW_X:
-        if row_counts(group, "all", vname)[:2] != list(curve(group, "all_components", "all", vname)[:2]):
+        if list(row_counts(group, "all", vname)[:2]) != list(curve(group, "all_components", "all", vname)[:2]):
             raise RuntimeError(f"Row counts disagree with JSON for {group} {vname}")
 print(f"cross-check: row-based all-pass counts match JSON for {len(groups)} groups x {len(ROW_X)} variables")
 
