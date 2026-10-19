@@ -15,6 +15,11 @@
 // muon is dropped; otherwise, if exactly one of the two has a global track, the
 // other is dropped. Unresolved cases (no TrackExtra, both or neither global,
 // more than two users) keep all muons.
+// Data-AOD gate (design 2026-10-18, kb/studies/shared-track-duplicates.md): data AOD
+// stores only displacedMuonReducedTrackExtras, which keeps muon.bestTrack()->extra()
+// for displacedMuons with pt > 3.0. The TrackExtra is used only if some muon in the
+// event passes that keep condition for it; otherwise the pair is unresolved
+// (nDupGateFail; nDupGateLost* count those the ungated rule would have resolved).
 //
 // Matching: station-2 position eta/phi (same PropagateToMuon setup as the
 // ntuplizer), same charge, dR < 0.06 inner/global and < 0.10 outer, strict
@@ -410,6 +415,7 @@ private:
   // Matches: index 3*g + type
   int nUnits_[kNTypes];
   int nDupDropped_, nDupUnresolved_;  // muons dropped; shared inner tracks left unresolved
+  int nDupGateFail_, nDupGateLostCross_, nDupGateLostNonCross_;  // data-AOD gate (see header)
   int mMatched_[2 * kNTypes], mIdPass_[2 * kNTypes], mNParents_[2 * kNTypes], mCharge_[2 * kNTypes];
   float mDR_[2 * kNTypes], mPt_[2 * kNTypes], mEta_[2 * kNTypes], mPhi_[2 * kNTypes];
   // Surface of the match (MatchSurface) and gen/reco eta/phi on it
@@ -462,6 +468,9 @@ DimuonVertexTruth::DimuonVertexTruth(const edm::ParameterSet& ps)
                    "gen 0 = mu-, 1 = mu+; match index 3*g+type; fit index 3*typeMuMinus+typeMuPlus; "
                    "interim dedup of displacedMuons sharing an inner track (2 users only; TrackExtra needed): crossedIP -> drop higher index, "
                    "else drop the one without a global track if exactly one has it; others unresolved (nDupDropped, nDupUnresolved); "
+                   "data-AOD gate: TrackExtra used only if some displacedMuon with pt>3.0 has bestTrack extra == it "
+                   "(displacedMuonReducedTrackExtras keep condition), else unresolved (nDupGateFail; nDupGateLostCross/NonCross: "
+                   "of those, resolved by the ungated rule, by its crossedIP); "
                    "fitStatus 0 not both matched, 1 legs share a track, global legs incl. parent inner/outer, outer legs incl. parent inner (not fitted), 2 fit failed, 3 valid; "
                    "match: station 2 position, same charge, greedy 1-to-1, dR<0.06/0.06/0.10; "
                    "fallback: 2nd greedy pass for gen muons failing station 2, unused tracks, same charge and dR, "
@@ -525,6 +534,9 @@ DimuonVertexTruth::DimuonVertexTruth(const edm::ParameterSet& ps)
   t.Branch("nUnits", nUnits_, "nUnits[3]/I");
   t.Branch("nDupDropped", &nDupDropped_);
   t.Branch("nDupUnresolved", &nDupUnresolved_);
+  t.Branch("nDupGateFail", &nDupGateFail_);
+  t.Branch("nDupGateLostCross", &nDupGateLostCross_);
+  t.Branch("nDupGateLostNonCross", &nDupGateLostNonCross_);
   t.Branch("matched", mMatched_, "matched[6]/I");
   t.Branch("matchDR", mDR_, "matchDR[6]/F");
   t.Branch("matchPt", mPt_, "matchPt[6]/F");
@@ -658,6 +670,7 @@ void DimuonVertexTruth::resetBranches() {
   for (auto* a : {gCharge_, gAccepted_, gSt2Valid_, gSt1Valid_, gEcalStatus_}) fill(a, 2, 0);
   fill(nUnits_, kNTypes, 0);
   nDupDropped_ = nDupUnresolved_ = 0;
+  nDupGateFail_ = nDupGateLostCross_ = nDupGateLostNonCross_ = 0;
   for (auto* a : {mMatched_, mIdPass_, mNParents_, mCharge_, mSurface_}) fill(a, 2 * kNTypes, 0);
   for (auto* a : {mDR_, mPt_, mEta_, mPhi_, mGenSurfEta_, mGenSurfPhi_, mRecoSurfEta_, mRecoSurfPhi_})
     fill(a, 2 * kNTypes, -999.f);
@@ -815,11 +828,22 @@ void DimuonVertexTruth::analyze(const edm::Event& iEvent, const edm::EventSetup&
     std::map<RefKey, std::vector<size_t>> users;
     for (size_t i = 0; i < muons.size(); ++i)
       if (muons[i].innerTrack().isNonnull()) users[refKey(muons[i].innerTrack())].push_back(i);
+    // TrackExtras that displacedMuonReducedTrackExtras keeps (cut "pt > 3.0" on the muon,
+    // extra of muon.bestTrack(); CMSSW_13_0_13 displacedMuonReducedTrackExtras_cfi).
+    std::set<RefKey> reducedExtras;
+    for (const auto& mu : muons) {
+      if (!(mu.pt() > 3.0) || mu.muonBestTrack().isNull()) continue;
+      const reco::TrackExtraRef& ex = mu.muonBestTrack()->extra();
+      if (ex.isNonnull()) reducedExtras.insert({ex.id(), static_cast<unsigned int>(ex.key())});
+    }
     for (const auto& [key, idx] : users) {
       if (idx.size() < 2) continue;
       int drop = -1;
       if (idx.size() == 2) {
         const reco::Track& tk = *muons[idx[0]].innerTrack();
+        const bool gate = tk.extra().isNonnull() &&
+                          reducedExtras.count({tk.extra().id(), static_cast<unsigned int>(tk.extra().key())}) > 0;
+        if (!gate) ++nDupGateFail_;
         if (tk.extra().isAvailable()) {
           // crossedIP = TrackDetectorAssociator::crossedIP(track), as in SharedInnerTrackDuplicatePolicy.cc
           const auto ip = tk.innerPosition(), op = tk.outerPosition();
@@ -831,6 +855,10 @@ void DimuonVertexTruth::analyze(const edm::Event& iEvent, const edm::EventSetup&
             drop = static_cast<int>(idx[1]);  // indices are ascending: keep the lower one
           else if (g0 != g1)
             drop = static_cast<int>(g0 ? idx[1] : idx[0]);  // keep the one with a global track
+          if (!gate && drop >= 0) {
+            ++(crossedIP ? nDupGateLostCross_ : nDupGateLostNonCross_);
+            drop = -1;
+          }
         }
       }
       if (drop < 0) {
