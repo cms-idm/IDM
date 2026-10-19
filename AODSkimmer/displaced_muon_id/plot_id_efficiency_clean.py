@@ -43,7 +43,7 @@ POLICIES = [("all_components", "all", "All present tracks pass their ID", "all_p
             ("components", "outer", "Outer/DSA track alone: DSA ID", "outer_dsa_alone"),
             ("components", "global", "Global track alone: global-muon flag", "global_alone"),
             ("rows", "any", "Any present track passes its ID", "any_pass"),
-            ("hierarchy", "dsa", "Priority: global, else outer/DSA, else inner", "priority_global_outer_inner")]
+            ("hierarchy", "dsa", "Priority: global > outer/DSA > inner", "priority_global_outer_inner")]
 # (name, x title, linear view max, log-x view min or None)
 VARS = [("pt", "gen muon p_{T} [GeV]", 30., .25),
         ("d0", "gen muon |d_{0}| [cm] (straight line to (0,0))", 30., .05),
@@ -138,7 +138,7 @@ def draw(curves, var, header, path, logx, legend_title=""):
                         f"#splitline{{{label}}}{{{eff} overall, {n} matched}}", "p")
     legend.Draw()
     text.SetTextSize(.020)
-    spacing = .0235
+    spacing = .025
     y = bottom - .03
     for line in NOTE:
         text.DrawLatex(.70, y, line)
