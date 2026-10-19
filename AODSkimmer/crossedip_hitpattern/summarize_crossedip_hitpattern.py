@@ -361,9 +361,12 @@ def dc(files):
         flag = sum(1 for r, l, _ in out if l == lab and (dc_verdict(r, "A")[1] or dc_verdict(r, "B")[1]))
         print(f"{lab:>52}" + "".join(f"{x:>10}" for x in n) + f"{sum(n):>8}   flagged contradictory {flag}")
     print("\nkept copy vs interim policy (exact crossedIP): (interim, dc): count")
-    cmp = Counter((interim_kept(r), k) for r, _, k in out)
-    for key, n in sorted(cmp.items()):
-        print(f"  {key}: {n}{'' if key[0] == key[1] else '   DIFFERENT'}")
+    for title, sel in (("interim decides", lambda r: interim_kept(r) != "both"),
+                       ("interim unresolved (exact -1, or exact 0 with both/neither global)", lambda r: interim_kept(r) == "both")):
+        cmp = Counter((interim_kept(r), k) for r, _, k in out if sel(r))
+        print(f"  {title}: {sum(cmp.values())} pairs")
+        for key, n in sorted(cmp.items()):
+            print(f"    {key}: {n}{'   DIFFERENT' if title == 'interim decides' and key[0] != key[1] else ''}")
     print("fallback used in either copy, by outcome:",
           dict(Counter(l for r, l, _ in out if 1 in (int(r["dc_A_fb"]), int(r["dc_B_fb"])))))
     print("\nP undecided or invalid vs shared-track pT (copies; undecided / invalid attempts / copies):")

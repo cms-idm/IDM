@@ -89,8 +89,10 @@ uint32_t muonChamberId(DetId id) {
   switch (id.subdetId()) {
     case MuonSubdetId::DT:
       return DTChamberId(id.rawId()).rawId();
-    case MuonSubdetId::CSC:
-      return CSCDetId(id.rawId()).chamberId().rawId();
+    case MuonSubdetId::CSC: {  // ME1/1a (ring 4) hits belong to the ME1/1 (ring 1) chamber
+      const CSCDetId c(id.rawId());
+      return CSCDetId(c.endcap(), c.station(), c.ring() == 4 ? 1 : c.ring(), c.chamber(), 0).rawId();
+    }
     case MuonSubdetId::RPC:
       return id.rawId();
     case MuonSubdetId::GEM:
