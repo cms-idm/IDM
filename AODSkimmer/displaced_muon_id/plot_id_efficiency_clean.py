@@ -44,9 +44,16 @@ COLORS = [ROOT.kBlack, ROOT.kAzure+1, ROOT.kGreen+2, ROOT.kOrange+7, ROOT.kRed+1
           ROOT.kCyan+2, ROOT.kViolet+1, ROOT.kYellow+3, ROOT.kPink+9, ROOT.kSpring-6, ROOT.kTeal+3,
           ROOT.kBlue+2, ROOT.kGray+2, ROOT.kOrange+3, ROOT.kRed-7, ROOT.kAzure-6, ROOT.kGreen-6]
 MARKERS = [20, 21, 22, 23, 33, 34, 24, 25, 26, 32, 27, 28, 29, 30, 39, 41, 43, 45]
-NOTE = ["ID eff. = passing ID / pre-ID signal-matched displacedMuons (match held fixed)",
-        "same-charge St2 greedy 1-to-1, #DeltaR<0.06 (I, G), <0.10 (O); |#eta|<2.4, L_{xy}<740, |v_{z}|<960 cm",
-        "no gen p_{T} cut; unweighted; 68% CP; 2022EE iDM#mu, 09-23 production; edge bins hold under/overflow"]
+NOTE = ["ID eff. = passing ID / pre-ID",
+        "signal-matched displacedMuons",
+        "(match held fixed, no rematch)",
+        "Same-charge St2 greedy 1-to-1,",
+        "#DeltaR<0.06 (I, G), <0.10 (O)",
+        "|#eta|<2.4, L_{xy}<740, |v_{z}|<960 cm",
+        "No gen p_{T} cut; unweighted",
+        "68% Clopper-Pearson intervals",
+        "2022EE iDM#mu, 09-23 production",
+        "End bins include under/overflow"]
 
 
 def graph(k, n, edges, logx):
@@ -66,8 +73,8 @@ def graph(k, n, edges, logx):
     return g
 
 
-def draw(curves, var, header, path, logx):
-    """curves: list of (label, k, n, edges). One canvas, one frame, a legend below the title lines."""
+def draw(curves, var, header, path, logx, legend_title=""):
+    """curves: list of (label, k, n, edges). Frame on the left; legend and definitions on the right."""
     name, xtitle, xmax, logmin = var
     xmin = logmin if logx else XMIN[name]
     graphs, ymin = [], 1.
@@ -76,36 +83,39 @@ def draw(curves, var, header, path, logx):
         for i in range(g.GetN()):
             if xmin <= g.GetPointX(i) <= xmax:
                 ymin = min(ymin, g.GetPointY(i) - g.GetErrorYlow(i))
-        g.SetMarkerStyle(MARKERS[j % len(MARKERS)]); g.SetMarkerSize(1.0)
+        g.SetMarkerStyle(MARKERS[j % len(MARKERS)]); g.SetMarkerSize(1.1)
         g.SetMarkerColor(COLORS[j % len(COLORS)]); g.SetLineColor(COLORS[j % len(COLORS)])
         graphs.append((g, label, int(sum(k)), int(sum(n))))
     ylo = max(0., int((ymin - .05) * 10) / 10.)
-    ncol = 1 if len(curves) <= 5 else 3
-    rows = (len(curves) + ncol - 1) // ncol
-    top = .70 - .045 * rows
-    c = ROOT.TCanvas("c", "", 1000, 900)
-    c.SetLeftMargin(.12); c.SetRightMargin(.04); c.SetBottomMargin(.11); c.SetTopMargin(.30 + .045 * rows)
+    c = ROOT.TCanvas("c", "", 1400, 850)
+    c.SetLeftMargin(.08); c.SetRightMargin(.31); c.SetBottomMargin(.12); c.SetTopMargin(.08)
     c.SetGridy(); c.SetLogx(logx)
-    frame = c.DrawFrame(xmin, ylo, xmax, 1.02)
+    frame = c.DrawFrame(xmin, ylo, xmax, 1.01)
     frame.GetXaxis().SetTitle(xtitle); frame.GetYaxis().SetTitle("ID efficiency | matched")
     for axis in (frame.GetXaxis(), frame.GetYaxis()):
-        axis.SetTitleSize(.042); axis.SetLabelSize(.036)
-    frame.GetXaxis().SetTitleOffset(1.15); frame.GetYaxis().SetTitleOffset(1.35)
+        axis.SetTitleSize(.045); axis.SetLabelSize(.04)
+    frame.GetXaxis().SetTitleOffset(1.1); frame.GetYaxis().SetTitleOffset(.85)
     if logx:
         frame.GetXaxis().SetMoreLogLabels()
     for g, _, _, _ in graphs:
         g.Draw("P same")
     text = ROOT.TLatex(); text.SetNDC()
-    text.SetTextSize(.034); text.DrawLatex(.12, .955, "#bf{" + header + "}")
-    text.SetTextSize(.024)
-    for i, line in enumerate(NOTE):
-        text.DrawLatex(.12, .92 - .03 * i, line)
-    legend = ROOT.TLegend(.12, top + .005, .96, .83)
-    legend.SetNColumns(ncol); legend.SetBorderSize(0); legend.SetFillStyle(0)
-    legend.SetTextSize(.028 if ncol == 1 else .022)
+    text.SetTextSize(.040); text.DrawLatex(.08, .94, "#bf{" + header + "}")
+    many = len(graphs) > 5
+    step = .034 if many else .085
+    top = .92
+    legend = ROOT.TLegend(.70, top - step * len(graphs) - (.04 if legend_title else 0), .99, top)
+    legend.SetBorderSize(0); legend.SetFillStyle(0); legend.SetTextSize(.026 if many else .030)
+    if legend_title:
+        legend.SetHeader(legend_title)
     for g, label, k, n in graphs:
-        legend.AddEntry(g, f"{label}  ({100. * k / n:.1f}%, N_{{match}}={n})" if n else label, "p")
+        eff = f"{100. * k / n:.1f}%" if n else "n/a"
+        legend.AddEntry(g, f"{label}  ({eff})" if many else f"#splitline{{{label}}}{{{eff} overall, N_{{match}} = {n}}}", "p")
     legend.Draw()
+    text.SetTextSize(.022)
+    y0 = min(legend.GetY1NDC() - .04, .45)
+    for i, line in enumerate(NOTE):
+        text.DrawLatex(.71, y0 - .032 * i, line)
     c.SaveAs(path)
     c.Close()
 
@@ -127,10 +137,10 @@ def curve(group, setname, key, vname):
     return c["baseline_passed_id"], c["baseline_matched"], v["edges"]
 
 
-def outputs(path_base, var, curves, header):
-    draw(curves, var, header, path_base + ".png", False)
+def outputs(path_base, var, curves, header, legend_title=""):
+    draw(curves, var, header, path_base + ".png", False, legend_title)
     if args.log and var[3] is not None:
-        draw(curves, var, header, path_base + "_logx.png", True)
+        draw(curves, var, header, path_base + "_logx.png", True, legend_title)
 
 
 count = 0
@@ -150,10 +160,12 @@ for kind in ("lifetime", "mass"):
         target = os.path.join(args.outdir, "overlay_" + kind, pfile)
         os.makedirs(target, exist_ok=True)
         for var in VARS:
-            curves = [(label_of(g).replace(", all masses", "").replace(", all lifetimes", ""), *curve(g, s, key, var[0]))
-                      for g in members]
+            # Short legend labels: the numbers only, units in the legend title.
+            curves = [(" / ".join(x.replace("p", ".") for x in re.findall(r"[0-9p]+", g.split("/")[1])),
+                       *curve(g, s, key, var[0])) for g in members]
+            title = "c#tau [mm]" if kind == "lifetime" else "M_{#chi} / #DeltaM [GeV]"
             header = f"{plabel}: all {'lifetimes (each pooled over masses)' if kind == 'lifetime' else 'masses (each pooled over lifetimes)'}"
-            outputs(os.path.join(target, f"id_eff_vs_{var[0]}"), var, curves, header)
+            outputs(os.path.join(target, f"id_eff_vs_{var[0]}"), var, curves, header, title)
             count += 1
 for s, key, label in POLICIES:
     k, n, _ = curve("overall", s, key, "pt")
