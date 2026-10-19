@@ -27,6 +27,15 @@
 //   BestInChamberByDR && BelongsToTrackByDR (SegmentAndTrackArbitration); S = standalone innerPosition and
 //   outerPosition (outerTrack with available extra). Counts: ahead (s > 0), behind (s < 0), plane (s == 0),
 //   dropped (no geometry or non-finite s). Classes are formed offline.
+// Direction-consistency selection inputs (two-user tracks only; design "Direction-consistency selection" in
+//   the same note). Per copy, items = chambers: source M (as above); if M gives no chamber with geometry,
+//   fallback = the chamber of the global track's outerDetId (TrackExtra; the MC MINIAOD has no global rechits,
+//   so its outermost hit only). Per item, T: s = (centre - r0) . p_hat as above; P: from the shared track's
+//   state at r0 (initialFreeState, no TrackExtra), SteppingHelixPropagatorAlong and ...Opposite each to the
+//   chamber plane, each attempt in (valid, inside the bounds within muonMaxDistanceX/Y, distanceToChamber as
+//   SharedTrackTrajectoryCheck.cc), out (valid, outside) or invalid; ahead = along in and opposite not in,
+//   behind = opposite in and along not in, else bothIn / neitherIn. Only the first plane crossing is tested.
+//   Verdicts and the pair decision are formed offline.
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -34,6 +43,10 @@
 #include <vector>
 
 #include "CommonTools/UtilAlgos/interface/TFileService.h"
+#include "DataFormats/GeometrySurface/interface/TrapezoidalPlaneBounds.h"
+#include "DataFormats/MuonDetId/interface/CSCDetId.h"
+#include "DataFormats/MuonDetId/interface/DTChamberId.h"
+#include "DataFormats/MuonDetId/interface/GEMDetId.h"
 #include "DataFormats/MuonDetId/interface/MuonSubdetId.h"
 #include "DataFormats/MuonReco/interface/Muon.h"
 #include "DataFormats/TrackReco/interface/HitPattern.h"
@@ -46,17 +59,69 @@
 #include "FWCore/ParameterSet/interface/ParameterSet.h"
 #include "FWCore/ServiceRegistry/interface/Service.h"
 #include "FWCore/Utilities/interface/InputTag.h"
+#include "Geometry/CSCGeometry/interface/CSCChamber.h"
+#include "Geometry/CSCGeometry/interface/CSCChamberSpecs.h"
+#include "Geometry/CSCGeometry/interface/CSCLayerGeometry.h"
+#include "Geometry/CSCGeometry/interface/CSCWireTopology.h"
 #include "Geometry/CommonDetUnit/interface/GlobalTrackingGeometry.h"
+#include "Geometry/GEMGeometry/interface/GEMChamber.h"
+#include "Geometry/GEMGeometry/interface/GEMSuperChamber.h"
 #include "Geometry/Records/interface/GlobalTrackingGeometryRecord.h"
 #include "Geometry/Records/interface/TrackerDigiGeometryRecord.h"
 #include "Geometry/Records/interface/TrackerTopologyRcd.h"
 #include "Geometry/TrackerGeometryBuilder/interface/TrackerGeometry.h"
+#include "MagneticField/Engine/interface/MagneticField.h"
+#include "MagneticField/Records/interface/IdealMagneticFieldRecord.h"
 #include "TTree.h"
+#include "TrackingTools/GeomPropagators/interface/Propagator.h"
+#include "TrackingTools/Records/interface/TrackingComponentsRecord.h"
+#include "TrackingTools/TrajectoryState/interface/FreeTrajectoryState.h"
+#include "TrackingTools/TrajectoryState/interface/TrajectoryStateTransform.h"
 
 namespace {
 using RefKey = std::pair<edm::ProductID, unsigned int>;  // as in DimuonVertexTruth.cc
 RefKey refKey(const reco::TrackRef& r) { return {r.id(), static_cast<unsigned int>(r.key())}; }
 bool isBarrel(int subdet) { return subdet == 1 || subdet == 3 || subdet == 5; }
+
+// Muon detector id -> the chamber id used by matches() (DT/CSC chamber, RPC roll, GEM chamber); 0 otherwise.
+uint32_t muonChamberId(DetId id) {
+  if (id.det() != DetId::Muon) return 0;
+  switch (id.subdetId()) {
+    case MuonSubdetId::DT:
+      return DTChamberId(id.rawId()).rawId();
+    case MuonSubdetId::CSC:
+      return CSCDetId(id.rawId()).chamberId().rawId();
+    case MuonSubdetId::RPC:
+      return id.rawId();
+    case MuonSubdetId::GEM:
+      return GEMDetId(id.rawId()).chamberId().rawId();
+    default:
+      return 0;
+  }
+}
+
+// Chamber bounds: copied from SharedTrackTrajectoryCheck.cc (TrackDetectorAssociator distance definition).
+void distanceToChamber(const GeomDet* det, const LocalPoint& lp, double& dx, double& dy) {
+  if (const auto* csc = dynamic_cast<const CSCChamber*>(det)) {
+    const auto* wire = csc->specs()->oddLayerGeometry(1)->wireTopology();
+    const float wide = wire->wideWidthOfPlane(), narrow = wire->narrowWidthOfPlane(), length = wire->lengthOfPlane();
+    const float yFirst = std::abs(wire->wireAngle()) > 1.E-06f ? -0.5 * length : wire->yOfWire(1);
+    const float yOffset = yFirst + 0.5f * length;
+    const float tangent = (wide - narrow) / (2.f * length);
+    const float halfWidth = 0.5f * narrow + (lp.y() + std::abs(yFirst)) * tangent;
+    dx = std::abs(lp.x()) - halfWidth;
+    dy = std::abs(lp.y() - yOffset) - 0.5f * length;
+  } else if (dynamic_cast<const GEMChamber*>(det) || dynamic_cast<const GEMSuperChamber*>(det)) {
+    const auto* b = dynamic_cast<const TrapezoidalPlaneBounds*>(&det->surface().bounds());
+    const float wide = b->width(), narrow = 2.f * b->widthAtHalfLength() - wide, length = b->length();
+    const float tangent = (wide - narrow) / (2.f * length);
+    dx = std::abs(lp.x()) - (tangent * lp.y() + 0.25f * (narrow + wide));
+    dy = std::abs(lp.y()) - 0.5f * length;
+  } else {
+    dx = std::abs(lp.x()) - 0.5f * det->surface().bounds().width();
+    dy = std::abs(lp.y()) - 0.5f * det->surface().bounds().length();
+  }
+}
 }  // namespace
 
 class CrossedIPHitPatternCheck : public edm::one::EDAnalyzer<edm::one::SharedResources> {
@@ -65,7 +130,12 @@ public:
       : muonToken_(consumes<std::vector<reco::Muon>>(cfg.getParameter<edm::InputTag>("muons"))),
         geomToken_(esConsumes()),
         topoToken_(esConsumes()),
-        globalGeomToken_(esConsumes()) {
+        globalGeomToken_(esConsumes()),
+        fieldToken_(esConsumes()),
+        alongToken_(esConsumes(edm::ESInputTag("", "SteppingHelixPropagatorAlong"))),
+        oppositeToken_(esConsumes(edm::ESInputTag("", "SteppingHelixPropagatorOpposite"))),
+        maxDistX_(cfg.getParameter<double>("muonMaxDistanceX")),
+        maxDistY_(cfg.getParameter<double>("muonMaxDistanceY")) {
     usesResource(TFileService::kSharedResource);
   }
 
@@ -78,6 +148,9 @@ private:
   edm::ESGetToken<TrackerGeometry, TrackerDigiGeometryRecord> geomToken_;
   edm::ESGetToken<TrackerTopology, TrackerTopologyRcd> topoToken_;
   edm::ESGetToken<GlobalTrackingGeometry, GlobalTrackingGeometryRecord> globalGeomToken_;
+  edm::ESGetToken<MagneticField, IdealMagneticFieldRecord> fieldToken_;
+  edm::ESGetToken<Propagator, TrackingComponentsRecord> alongToken_, oppositeToken_;
+  const double maxDistX_, maxDistY_;
   std::map<std::pair<int, int>, double> layerPos_;  // (subdet, layer) -> mean radius (barrel) or |z| (endcap)
 
   TTree* tree_ = nullptr;
@@ -95,6 +168,12 @@ private:
   int sideN_[2][3][4];  // ahead, behind, plane, dropped
   float sideS_[2][3][3];  // s min, s max, min |s|
   int identicalM_;        // copies' source-M chamber sets identical (-1: not a two-user track)
+  // direction-consistency inputs: [copy A/B]
+  int dcSrc_[2];  // 0 source M, 1 global-outer fallback, -1 no item (-1 for all below if not two-user)
+  int dcFb_[2];   // fallback: 0 not needed, 1 used, 2 no global track, 3 no global extra, 4 no muon chamber/geometry
+  int dcT_[2][4];  // T items: ahead, behind, plane, dropped
+  int dcP_[2][6];  // P items: ahead, behind, bothIn, neitherIn; attempts invalid: along, opposite
+  int dcAgree_[2];  // items with T and P both ahead or both behind
 };
 
 void CrossedIPHitPatternCheck::beginJob() {
@@ -152,6 +231,15 @@ void CrossedIPHitPatternCheck::beginJob() {
         tree_->Branch((std::string("side") + sources[k] + "_" + copies[c] + "_" + svals[i]).c_str(), &sideS_[c][k][i]);
     }
   tree_->Branch("sideIdenticalM", &identicalM_);
+  const char* tCounts[4] = {"nAhead", "nBehind", "nPlane", "nDropped"};
+  const char* pCounts[6] = {"nAhead", "nBehind", "nBothIn", "nNeitherIn", "nInvalidAlong", "nInvalidOpposite"};
+  for (int c = 0; c < 2; ++c) {
+    tree_->Branch((std::string("dc_") + copies[c] + "_src").c_str(), &dcSrc_[c]);
+    tree_->Branch((std::string("dc_") + copies[c] + "_fb").c_str(), &dcFb_[c]);
+    tree_->Branch((std::string("dc_") + copies[c] + "_nTPAgree").c_str(), &dcAgree_[c]);
+    for (int i = 0; i < 4; ++i) tree_->Branch((std::string("dcT_") + copies[c] + "_" + tCounts[i]).c_str(), &dcT_[c][i]);
+    for (int i = 0; i < 6; ++i) tree_->Branch((std::string("dcP_") + copies[c] + "_" + pCounts[i]).c_str(), &dcP_[c][i]);
+  }
   tree_->Branch("hitCode", &hitCode_);  // valid tracker hits in order: 10 * subdet + layer
   tree_->Branch("hitD", &hitD_);
 }
@@ -285,6 +373,11 @@ void CrossedIPHitPatternCheck::analyze(const edm::Event& iEvent, const edm::Even
       for (auto& k : c)
         for (float& v : k) v = std::nanf("");
     identicalM_ = -1;
+    for (int c = 0; c < 2; ++c) {
+      dcSrc_[c] = dcFb_[c] = dcAgree_[c] = -1;
+      for (int& n : dcT_[c]) n = -1;
+      for (int& n : dcP_[c]) n = -1;
+    }
     if (idx.size() == 2) {
       const auto& gg = iSetup.getData(globalGeomToken_);
       const auto r0 = tk.referencePoint();
@@ -340,6 +433,69 @@ void CrossedIPHitPatternCheck::analyze(const edm::Event& iEvent, const edm::Even
         v.erase(std::unique(v.begin(), v.end()), v.end());
       }
       identicalM_ = chambersM[0] == chambersM[1];
+
+      // direction-consistency inputs
+      const auto& field = iSetup.getData(fieldToken_);
+      const Propagator& along = iSetup.getData(alongToken_);
+      const Propagator& opposite = iSetup.getData(oppositeToken_);
+      const FreeTrajectoryState fts = trajectoryStateTransform::initialFreeState(tk, &field);
+      auto attempt = [&](const Propagator& prop, const GeomDet* det) {  // 0 invalid, 1 out, 2 in
+        const auto tsos = prop.propagateWithPath(fts, det->surface()).first;
+        if (!tsos.isValid()) return 0;
+        double dx = 0, dy = 0;
+        distanceToChamber(det, tsos.localPosition(), dx, dy);
+        return dx < maxDistX_ && dy < maxDistY_ ? 2 : 1;
+      };
+      for (int c = 0; c < 2; ++c) {
+        const reco::Muon& mu = muons[idx[c]];
+        for (int& n : dcT_[c]) n = 0;
+        for (int& n : dcP_[c]) n = 0;
+        dcFb_[c] = dcAgree_[c] = 0;
+        std::vector<const GeomDet*> items;
+        int droppedM = 0;
+        for (const auto& m : mu.matches()) {
+          const int det = m.detector();
+          if (det != MuonSubdetId::DT && det != MuonSubdetId::CSC && det != MuonSubdetId::RPC &&
+              det != MuonSubdetId::GEM)
+            continue;
+          if (m.segmentMatches.empty() && m.rpcMatches.empty() && m.gemMatches.empty() && m.gemHitMatches.empty())
+            continue;
+          if (const GeomDet* gd = gg.idToDet(m.id))
+            items.push_back(gd);
+          else
+            ++droppedM;
+        }
+        dcSrc_[c] = items.empty() ? -1 : 0;
+        dcT_[c][3] = droppedM;
+        if (items.empty()) {
+          if (mu.globalTrack().isNull())
+            dcFb_[c] = 2;
+          else if (!mu.globalTrack()->extra().isAvailable())
+            dcFb_[c] = 3;
+          else {
+            const uint32_t ch = muonChamberId(mu.globalTrack()->outerDetId());
+            const GeomDet* gd = ch ? gg.idToDet(DetId(ch)) : nullptr;
+            if (gd) {
+              items.push_back(gd);
+              dcFb_[c] = 1;
+              dcSrc_[c] = 1;
+            } else
+              dcFb_[c] = 4;
+          }
+        }
+        for (const GeomDet* gd : items) {
+          const GlobalPoint x = gd->position();
+          const double sv = (x.x() - r0.x()) * pHat.x() + (x.y() - r0.y()) * pHat.y() + (x.z() - r0.z()) * pHat.z();
+          const int t = !std::isfinite(sv) ? 3 : sv > 0 ? 0 : sv < 0 ? 1 : 2;
+          ++dcT_[c][t];
+          const int a = attempt(along, gd), o = attempt(opposite, gd);
+          dcP_[c][4] += a == 0;
+          dcP_[c][5] += o == 0;
+          const int pv = a == 2 && o != 2 ? 0 : o == 2 && a != 2 ? 1 : a == 2 && o == 2 ? 2 : 3;
+          ++dcP_[c][pv];
+          dcAgree_[c] += t < 2 && t == pv;
+        }
+      }
     }
     tree_->Fill();
   }

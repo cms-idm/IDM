@@ -10,6 +10,7 @@ Compares the exact crossedIP (TrackExtra) of displacedMuon inner tracks with the
 import FWCore.ParameterSet.Config as cms
 from FWCore.ParameterSet.VarParsing import VarParsing
 from Configuration.Eras.Era_Run3_cff import Run3
+from RecoMuon.MuonIdentification.muons1stStep_cfi import muons1stStep
 
 options = VarParsing("analysis")
 options.register("flist", "", VarParsing.multiplicity.singleton, VarParsing.varType.string, "text file, one input file per line, or one ROOT file")
@@ -21,6 +22,7 @@ process = cms.Process("XIPHP", Run3)
 process.load("FWCore.MessageService.MessageLogger_cfi")
 process.MessageLogger.cerr.FwkReport.reportEvery = 10000
 process.load("Configuration.StandardSequences.GeometryRecoDB_cff")
+process.load("Configuration.StandardSequences.MagneticField_cff")
 process.load("Configuration.StandardSequences.FrontierConditions_GlobalTag_cff")
 from Configuration.AlCa.GlobalTag import GlobalTag
 process.GlobalTag = GlobalTag(process.GlobalTag, "130X_mcRun3_2022_realistic_postEE_v6", "")
@@ -32,7 +34,15 @@ else:
         files = [line.strip() for line in src if line.strip() and not line.startswith("#")]
 process.source = cms.Source("PoolSource", fileNames=cms.untracked.vstring(files))
 process.maxEvents = cms.untracked.PSet(input=cms.untracked.int32(options.nEvents))
+process.load("TrackPropagation.SteppingHelixPropagator.SteppingHelixPropagatorAlong_cfi")
+process.load("TrackPropagation.SteppingHelixPropagator.SteppingHelixPropagatorOpposite_cfi")
 process.TFileService = cms.Service("TFileService", fileName=cms.string(options.outFile))
 
-process.crossedIPHitPatternCheck = cms.EDAnalyzer("CrossedIPHitPatternCheck", muons=cms.InputTag("displacedMuons"))
+tap = muons1stStep.TrackAssociatorParameters
+process.crossedIPHitPatternCheck = cms.EDAnalyzer(
+    "CrossedIPHitPatternCheck",
+    muons=cms.InputTag("displacedMuons"),
+    muonMaxDistanceX=tap.muonMaxDistanceX,  # chamber-edge tolerance of the direction-consistency P test
+    muonMaxDistanceY=tap.muonMaxDistanceY,
+)
 process.p = cms.Path(process.crossedIPHitPatternCheck)

@@ -3,12 +3,19 @@
 
   python3 summarize_crossedip_hitpattern.py [--proxy proxyFix] crossedip_hitpattern_*.root
   python3 summarize_crossedip_hitpattern.py --side crossedip_hitpattern_*.root
+  python3 summarize_crossedip_hitpattern.py --dc crossedip_hitpattern_*.root
 
 --side: muon-system side test vs the exact crossedIP on the two-user tracks (kb/studies/
 shared-track-duplicates.md, "Muon-system side test vs crossedIP"). Sources M (all associated chambers),
 Arb (arbitrated DT/CSC segments), S (standalone endpoints). Copy class: ahead / behind / mixed (both
 signs or s = 0) / none; pair class, in order: undefined (a copy none), mixed (a copy mixed), opposite,
 same. Agreement: exact 1 with opposite, exact 0 with same.
+
+--dc: direction-consistency selection on the two-user tracks (same note, "Direction-consistency selection").
+Per copy and method (T tangent half-space, P propagation): ahead / behind / mixed / undecided (P: an item
+bothIn or neitherIn) / unknown (no items). Copy verdict: sense (T and P ahead), doesnt (T and P behind, or
+contradictory: one ahead, the other behind, flagged), unknown otherwise. Pair outcome labels as in the note;
+compared with the interim policy on the exact crossedIP.
 
 --proxy chooses the column compared with the exact flag: proxy (HitPattern only, default) or proxyFix
 (proxy OR rule E). With proxyFix, a rule E section follows: recovery of the HitPattern misses, false
@@ -255,8 +262,135 @@ def side(files):
     print(f"\nS vs M where both classified: {sum(pair_class(r, 'S') == pair_class(r, 'M') for r in both)} agree of {len(both)}")
 
 
+DC_OUTCOMES = ("kept: checked out, other rejected", "kept: both checked out, global tie-break",
+               "kept: checked out, other could not be checked", "kept: other rejected, this one could not be checked",
+               "unresolved")
+FB = {-1: "n/a", 0: "not needed", 1: "used", 2: "no global track", 3: "no global extra", 4: "no muon chamber/geometry"}
+
+
+def dc_t(r, c):
+    a, b, z = (int(r[f"dcT_{c}_{n}"]) for n in ("nAhead", "nBehind", "nPlane"))
+    if a + b + z == 0:
+        return "unknown"
+    if z or (a and b):
+        return "mixed"
+    return "ahead" if a else "behind"
+
+
+def dc_p(r, c):
+    a, b, both, neither = (int(r[f"dcP_{c}_{n}"]) for n in ("nAhead", "nBehind", "nBothIn", "nNeitherIn"))
+    if a + b + both + neither == 0:
+        return "unknown"
+    if both or neither:
+        return "undecided"
+    if a and b:
+        return "mixed"
+    return "ahead" if a else "behind"
+
+
+def dc_verdict(r, c):
+    """(verdict, contradictory flag)"""
+    t, p = dc_t(r, c), dc_p(r, c)
+    if t == p == "ahead":
+        return "sense", False
+    if t == p == "behind":
+        return "doesnt", False
+    if {t, p} == {"ahead", "behind"}:
+        return "doesnt", True
+    return "unknown", False
+
+
+def dc_outcome(r):
+    """(label, kept: 'A' / 'B' / 'both')"""
+    va, vb = dc_verdict(r, "A")[0], dc_verdict(r, "B")[0]
+    pair = {"A": va, "B": vb}
+    other = {"A": "B", "B": "A"}
+    for c in "AB":
+        o = other[c]
+        if pair[c] == "sense" and pair[o] == "doesnt":
+            return DC_OUTCOMES[0], c
+        if pair[c] == "sense" and pair[o] == "unknown":
+            return DC_OUTCOMES[2], c
+        if pair[c] == "unknown" and pair[o] == "doesnt":
+            return DC_OUTCOMES[3], c
+    if va == vb == "sense":
+        ga, gb = int(r["globalA"]), int(r["globalB"])
+        if ga != gb:
+            return DC_OUTCOMES[1], "A" if ga else "B"
+    return DC_OUTCOMES[4], "both"
+
+
+def interim_kept(r):
+    d = decision(int(r["exact"]), r["globalA"], r["globalB"])
+    return {"drop B": "A", "drop A": "B"}.get(d, "both")
+
+
+def dc(files):
+    chain = ROOT.TChain("crossedIPHitPatternCheck/tracks")
+    for f in files:
+        chain.Add(f)
+    df = ROOT.RDataFrame(chain).Filter("nUsers == 2")
+    cols = ["run", "lumi", "event", "idxA", "idxB", "globalA", "globalB", "exact", "pt", "eta", "sideIdenticalM"] + [
+        f"dc_{c}_{n}" for c in "AB" for n in ("src", "fb", "nTPAgree")] + [
+        f"dcT_{c}_{n}" for c in "AB" for n in ("nAhead", "nBehind", "nPlane", "nDropped")] + [
+        f"dcP_{c}_{n}" for c in "AB" for n in ("nAhead", "nBehind", "nBothIn", "nNeitherIn", "nInvalidAlong", "nInvalidOpposite")]
+    v = df.AsNumpy(cols)
+    rows = [{c: v[c][i] for c in cols} for i in range(len(v["exact"]))]
+    print(f"files: {len(files)}, two-user tracks: {len(rows)}; exact: {dict(Counter(int(r['exact']) for r in rows))}")
+    print("raw pair counts, unweighted")
+
+    print("\nitem source per copy (A and B together):",
+          dict(Counter({0: "M", 1: "global outer", -1: "none"}[int(r[f"dc_{c}_src"])] for r in rows for c in "AB")))
+    print("fallback status per copy:", dict(Counter(FB[int(r[f"dc_{c}_fb"])] for r in rows for c in "AB")))
+    items = sum(int(r[f"dcP_{c}_{n}"]) for r in rows for c in "AB" for n in ("nAhead", "nBehind", "nBothIn", "nNeitherIn"))
+    tp = sum(int(r[f"dc_{c}_nTPAgree"]) for r in rows for c in "AB")
+    print(f"items: {items}; T and P agree (both ahead or both behind): {tp}")
+    for n in ("nAhead", "nBehind", "nBothIn", "nNeitherIn", "nInvalidAlong", "nInvalidOpposite"):
+        print(f"  P {n}: {sum(int(r[f'dcP_{c}_{n}']) for r in rows for c in 'AB')}")
+    for n in ("nPlane", "nDropped"):
+        print(f"  T {n}: {sum(int(r[f'dcT_{c}_{n}']) for r in rows for c in 'AB')}")
+    print("copy (T, P) classes:", dict(Counter((dc_t(r, c), dc_p(r, c)) for r in rows for c in "AB")))
+    print("copy verdicts:", dict(Counter(dc_verdict(r, c)[0] for r in rows for c in "AB")),
+          "contradictory:", sum(dc_verdict(r, c)[1] for r in rows for c in "AB"))
+
+    out = [(r, *dc_outcome(r)) for r in rows]
+    print("\noutcome by exact crossedIP:")
+    print(f"{'':>52}" + "".join(f"{f'exact={e}':>10}" for e in (-1, 0, 1)) + f"{'total':>8}")
+    for lab in DC_OUTCOMES:
+        n = [sum(1 for r, l, _ in out if l == lab and int(r["exact"]) == e) for e in (-1, 0, 1)]
+        flag = sum(1 for r, l, _ in out if l == lab and (dc_verdict(r, "A")[1] or dc_verdict(r, "B")[1]))
+        print(f"{lab:>52}" + "".join(f"{x:>10}" for x in n) + f"{sum(n):>8}   flagged contradictory {flag}")
+    print("\nkept copy vs interim policy (exact crossedIP): (interim, dc): count")
+    cmp = Counter((interim_kept(r), k) for r, _, k in out)
+    for key, n in sorted(cmp.items()):
+        print(f"  {key}: {n}{'' if key[0] == key[1] else '   DIFFERENT'}")
+    print("fallback used in either copy, by outcome:",
+          dict(Counter(l for r, l, _ in out if 1 in (int(r["dc_A_fb"]), int(r["dc_B_fb"])))))
+    print("\nP undecided or invalid vs shared-track pT (copies; undecided / invalid attempts / copies):")
+    edges = [0, 3, 5, 10, 20, 1e9]
+    for lo, hi in zip(edges[:-1], edges[1:]):
+        sel = [(r, c) for r in rows for c in "AB" if lo <= r["pt"] < hi]
+        und = sum(dc_p(r, c) == "undecided" for r, c in sel)
+        inv = sum(int(r[f"dcP_{c}_nInvalidAlong"]) + int(r[f"dcP_{c}_nInvalidOpposite"]) for r, c in sel)
+        print(f"  pT [{lo}, {hi}): {und} / {inv} / {len(sel)}")
+    show = [(r, l, k) for r, l, k in out if l != DC_OUTCOMES[0] and l != DC_OUTCOMES[1] or k != interim_kept(r)
+            or dc_verdict(r, "A")[1] or dc_verdict(r, "B")[1]]
+    print(f"\npairs to inspect (not plain checked-out outcomes, differing from interim, or contradictory): {len(show)}")
+    for r, l, k in show:
+        print(f"  - {r['run']}:{r['lumi']}:{r['event']} idx {r['idxA']},{r['idxB']} exact {r['exact']} pt {r['pt']:.1f} "
+              f"eta {r['eta']:.2f} global {r['globalA']}/{r['globalB']} [{l}] kept {k} (interim {interim_kept(r)})"
+              + "".join(f" | {c}: src {int(r[f'dc_{c}_src'])} fb {FB[int(r[f'dc_{c}_fb'])]} T {dc_t(r, c)} P {dc_p(r, c)}"
+                        f" (a{int(r[f'dcP_{c}_nAhead'])} b{int(r[f'dcP_{c}_nBehind'])} both{int(r[f'dcP_{c}_nBothIn'])}"
+                        f" neither{int(r[f'dcP_{c}_nNeitherIn'])})" for c in "AB"))
+
+
 if __name__ == "__main__":
     args = sys.argv[1:]
+    if args[:1] == ["--dc"]:
+        if len(args) < 2:
+            sys.exit(__doc__)
+        dc(args[1:])
+        sys.exit(0)
     if args[:1] == ["--side"]:
         if len(args) < 2:
             sys.exit(__doc__)
