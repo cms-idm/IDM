@@ -35,7 +35,7 @@ groups = summary["groups"]
 POLICIES = [("all_components", "all", "Every piece must pass its own ID"),
             ("hierarchy", "both", "Best-piece rule; T+M: both IDs"),
             ("hierarchy", "tracker", "Best-piece rule; T+M: tracker ID"),
-            ("hierarchy", "dsa", "Best-piece rule; T+M: muon-system ID"),
+            ("hierarchy", "dsa", "Best-piece rule; T+M: muon-syst. ID"),
             ("hierarchy", "either", "Best-piece rule; T+M: either ID")]
 POLICY_FILES = ["every_piece_passes", "best_piece_TM_both", "best_piece_TM_tracker", "best_piece_TM_muonsystem",
                 "best_piece_TM_either"]
@@ -68,8 +68,8 @@ NOTE = ["#bf{What is plotted}",
         "2022EE iDM#mu signal MC (09-23 prod.),",
         "|#eta|<2.4, L_{xy}<740, |v_{z}|<960 cm, any p_{T};",
         "samples pooled unweighted. Bars: 68% CL.",
-        "Plots stop at p_{T}, |d_{0}| = 30; points beyond",
-        "are not drawn but count in the overall %."]
+        "Plots stop at 30 GeV (p_{T}), 30 cm (|d_{0}|);",
+        "points beyond count in the overall %."]
 
 
 def graph(k, n, edges, logx):
@@ -115,7 +115,7 @@ def draw(curves, var, header, path, logx, legend_title=""):
         frame.GetXaxis().SetMoreLogLabels()
     for g, _, _, _ in graphs:
         g.Draw("P same")
-    text = ROOT.TLatex(); text.SetNDC()
+    text = ROOT.TLatex(); text.SetNDC(); text.SetTextFont(42)
     text.SetTextSize(.038); text.DrawLatex(.08, .94, "#bf{" + header + "}")
     # Side panel: legend on top (two columns when there are many curves), definitions below.
     many = len(graphs) > 5
@@ -125,7 +125,7 @@ def draw(curves, var, header, path, logx, legend_title=""):
     top = .97
     bottom = top - step * rows - (.035 if legend_title else 0)
     legend = ROOT.TLegend(.695, bottom, .995, top)
-    legend.SetNColumns(ncol); legend.SetBorderSize(0); legend.SetFillStyle(0)
+    legend.SetTextFont(42); legend.SetNColumns(ncol); legend.SetBorderSize(0); legend.SetFillStyle(0)
     legend.SetTextSize(.021 if many else .025)
     if legend_title:
         legend.SetHeader(legend_title)
