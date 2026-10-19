@@ -15,6 +15,11 @@
 //   and some hit has a strictly larger d both before and after it (interior minimum).
 //   Undefined (undefReason): 1 fewer than 3 valid tracker hits, 2 HitPattern full (MaxHits), 3 endcap hit
 //   with pz = 0 or non-finite d, 4 (subdet, layer) not in the geometry map.
+// proxyFix = proxy OR rule E (one fix, design in the same study note): first valid hit on an endcap disk
+//   (mean |z| Z1) with sign(pz) * vz > Z1 (PCA to the beamline beyond that disk along the travel: the first
+//   hit precedes the PCA on either z side); the last hit follows the PCA (endcap: Z_L > sign(pz) * vz;
+//   barrel: assumed); rho lower bound at the first hit sqrt(dxy^2 + ((sign(pz) * vz - Z1) * pt / |pz|)^2) > 3
+//   and d(last) > 3. Evaluated only when the proxy is defined.
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -39,8 +44,8 @@
 #include "TTree.h"
 
 namespace {
-using RefKey = std::pair<unsigned int, unsigned int>;  // ProductID index, key
-RefKey refKey(const reco::TrackRef& r) { return {r.id().id(), static_cast<unsigned int>(r.key())}; }
+using RefKey = std::pair<edm::ProductID, unsigned int>;  // as in DimuonVertexTruth.cc
+RefKey refKey(const reco::TrackRef& r) { return {r.id(), static_cast<unsigned int>(r.key())}; }
 bool isBarrel(int subdet) { return subdet == 1 || subdet == 3 || subdet == 5; }
 }  // namespace
 
@@ -69,7 +74,9 @@ private:
   int nUsers_, idxA_, idxB_, globalA_, globalB_;
   int hasExtra_, exact_, proxy_, undefReason_, seqClass_, nValid_, nTrackHits_, saturated_, interiorMin_;
   int firstType_, lastType_, firstValidPXB1_, lastValidPXB1_;
+  int firstEndcap_, lastEndcap_, ruleE_, proxyFix_;
   float pt_, eta_, pz_, innerRho_, outerRho_, innerZ_, outerZ_, dFirst_, dLast_;
+  float vz_, dxy_, dzError_, marginFirst_, marginLast_, rhoFirstBound_;
   std::vector<int> hitCode_;
   std::vector<float> hitD_;
 };
@@ -107,6 +114,16 @@ void CrossedIPHitPatternCheck::beginJob() {
   tree_->Branch("lastValidPXB1", &lastValidPXB1_);
   tree_->Branch("dFirst", &dFirst_);
   tree_->Branch("dLast", &dLast_);
+  tree_->Branch("vz", &vz_);  // reference point = PCA to the beamline
+  tree_->Branch("dxy", &dxy_);  // about (0,0)
+  tree_->Branch("dzError", &dzError_);
+  tree_->Branch("firstEndcap", &firstEndcap_);  // first / last valid hit on an endcap disk
+  tree_->Branch("lastEndcap", &lastEndcap_);
+  tree_->Branch("marginFirst", &marginFirst_);  // sign(pz) * vz - Z1 (first hit endcap, else NaN)
+  tree_->Branch("marginLast", &marginLast_);    // Z_L - sign(pz) * vz (last hit endcap, else NaN)
+  tree_->Branch("rhoFirstBound", &rhoFirstBound_);
+  tree_->Branch("ruleE", &ruleE_);
+  tree_->Branch("proxyFix", &proxyFix_);  // proxy OR ruleE; -1 undefined
   tree_->Branch("hitCode", &hitCode_);  // valid tracker hits in order: 10 * subdet + layer
   tree_->Branch("hitD", &hitD_);
 }
@@ -174,6 +191,7 @@ void CrossedIPHitPatternCheck::analyze(const edm::Event& iEvent, const edm::Even
                             : -1;
     hitCode_.clear();
     hitD_.clear();
+    std::vector<float> hitPos;  // layer mean radius (barrel) or |z| (endcap)
     undefReason_ = 0;
     bool anyBarrel = false, anyEndcap = false;
     const double ptOverPz = tk.pz() != 0 ? tk.pt() / std::abs(tk.pz()) : std::nan("");
@@ -195,6 +213,7 @@ void CrossedIPHitPatternCheck::analyze(const edm::Event& iEvent, const edm::Even
         if (!std::isfinite(d) && !undefReason_) undefReason_ = 3;
       }
       hitD_.push_back(d);
+      hitPos.push_back(it == layerPos_.end() ? std::nanf("") : it->second);
     }
     nValid_ = hitD_.size();
     seqClass_ = anyBarrel && anyEndcap ? 2 : anyEndcap ? 1 : 0;
@@ -215,6 +234,20 @@ void CrossedIPHitPatternCheck::analyze(const edm::Event& iEvent, const edm::Even
         interiorMin_ = prefixMax[j - 1] > hitD_[j] && suffixMax[j + 1] > hitD_[j];
     }
     proxy_ = undefReason_ ? -1 : (dFirst_ > 3 && dLast_ > 3 && interiorMin_);
+
+    // rule E
+    vz_ = tk.vz();
+    dxy_ = tk.dxy();
+    dzError_ = tk.dzError();
+    const double sigma = tk.pz() >= 0 ? 1 : -1;
+    firstEndcap_ = nValid_ && !isBarrel(hitCode_.front() / 10);
+    lastEndcap_ = nValid_ && !isBarrel(hitCode_.back() / 10);
+    marginFirst_ = firstEndcap_ ? sigma * vz_ - hitPos.front() : std::nanf("");
+    marginLast_ = lastEndcap_ ? hitPos.back() - sigma * vz_ : std::nanf("");
+    rhoFirstBound_ = firstEndcap_ ? std::hypot(dxy_, marginFirst_ * ptOverPz) : std::nanf("");
+    ruleE_ = !undefReason_ && firstEndcap_ && marginFirst_ > 0 && (!lastEndcap_ || marginLast_ > 0) &&
+             rhoFirstBound_ > 3 && dLast_ > 3;
+    proxyFix_ = undefReason_ ? -1 : (proxy_ || ruleE_);
     tree_->Fill();
   }
 }
