@@ -1,0 +1,222 @@
+// CrossedIPHitPatternCheck: compares the exact crossedIP of a displacedMuon inner track (TrackExtra) with a
+// proxy from the track's HitPattern alone, which is also stored in data AOD (design:
+// kb/studies/shared-track-duplicates.md, "HitPattern crossedIP for data AOD").
+//
+// One tree entry per distinct inner track (ProductID + key) used by at least one displacedMuon; users are
+// grouped exactly as in DimuonVertexTruth.cc. Policy decisions are derived offline from nUsers and the
+// users' global flags.
+//
+// exact (needs TrackExtra, else -1): ip.rho() > 3 && op.rho() > 3 && radial momentum sign differs between
+//   inner and outer state, as in SharedInnerTrackDuplicatePolicy.cc / DimuonVertexTruth.cc.
+// proxy (-1 = undefined): valid tracker hits in HitPattern order (fit order, along the momentum). Hit
+//   distance d: barrel (PXB, TIB, TOB) = mean module radius of the layer; endcap (PXF, TID, TEC) = mean
+//   module |z| of the disk times pt/|pz|. Layer means from TrackerGeometry detUnits, keyed by
+//   (subdetId, TrackerTopology::layer), the key HitPattern encodes. proxy = 1 iff d(first) > 3, d(last) > 3
+//   and some hit has a strictly larger d both before and after it (interior minimum).
+//   Undefined (undefReason): 1 fewer than 3 valid tracker hits, 2 HitPattern full (MaxHits), 3 endcap hit
+//   with pz = 0 or non-finite d, 4 (subdet, layer) not in the geometry map.
+#include <algorithm>
+#include <cmath>
+#include <map>
+#include <utility>
+#include <vector>
+
+#include "CommonTools/UtilAlgos/interface/TFileService.h"
+#include "DataFormats/MuonReco/interface/Muon.h"
+#include "DataFormats/TrackReco/interface/HitPattern.h"
+#include "DataFormats/TrackReco/interface/Track.h"
+#include "DataFormats/TrackerCommon/interface/TrackerTopology.h"
+#include "FWCore/Framework/interface/Event.h"
+#include "FWCore/Framework/interface/EventSetup.h"
+#include "FWCore/Framework/interface/MakerMacros.h"
+#include "FWCore/Framework/interface/one/EDAnalyzer.h"
+#include "FWCore/ParameterSet/interface/ParameterSet.h"
+#include "FWCore/ServiceRegistry/interface/Service.h"
+#include "FWCore/Utilities/interface/InputTag.h"
+#include "Geometry/Records/interface/TrackerDigiGeometryRecord.h"
+#include "Geometry/Records/interface/TrackerTopologyRcd.h"
+#include "Geometry/TrackerGeometryBuilder/interface/TrackerGeometry.h"
+#include "TTree.h"
+
+namespace {
+using RefKey = std::pair<unsigned int, unsigned int>;  // ProductID index, key
+RefKey refKey(const reco::TrackRef& r) { return {r.id().id(), static_cast<unsigned int>(r.key())}; }
+bool isBarrel(int subdet) { return subdet == 1 || subdet == 3 || subdet == 5; }
+}  // namespace
+
+class CrossedIPHitPatternCheck : public edm::one::EDAnalyzer<edm::one::SharedResources> {
+public:
+  explicit CrossedIPHitPatternCheck(const edm::ParameterSet& cfg)
+      : muonToken_(consumes<std::vector<reco::Muon>>(cfg.getParameter<edm::InputTag>("muons"))),
+        geomToken_(esConsumes()),
+        topoToken_(esConsumes()) {
+    usesResource(TFileService::kSharedResource);
+  }
+
+private:
+  void beginJob() override;
+  void analyze(const edm::Event&, const edm::EventSetup&) override;
+  void buildLayerMap(const edm::EventSetup&);
+
+  edm::EDGetTokenT<std::vector<reco::Muon>> muonToken_;
+  edm::ESGetToken<TrackerGeometry, TrackerDigiGeometryRecord> geomToken_;
+  edm::ESGetToken<TrackerTopology, TrackerTopologyRcd> topoToken_;
+  std::map<std::pair<int, int>, double> layerPos_;  // (subdet, layer) -> mean radius (barrel) or |z| (endcap)
+
+  TTree* tree_ = nullptr;
+  unsigned int run_, lumi_;
+  unsigned long long event_;
+  int nUsers_, idxA_, idxB_, globalA_, globalB_;
+  int hasExtra_, exact_, proxy_, undefReason_, seqClass_, nValid_, nTrackHits_, saturated_, interiorMin_;
+  int firstType_, lastType_, firstValidPXB1_, lastValidPXB1_;
+  float pt_, eta_, pz_, innerRho_, outerRho_, innerZ_, outerZ_, dFirst_, dLast_;
+  std::vector<int> hitCode_;
+  std::vector<float> hitD_;
+};
+
+void CrossedIPHitPatternCheck::beginJob() {
+  edm::Service<TFileService> fs;
+  tree_ = fs->make<TTree>("tracks", "displacedMuon inner tracks: exact vs HitPattern crossedIP");
+  tree_->Branch("run", &run_);
+  tree_->Branch("lumi", &lumi_);
+  tree_->Branch("event", &event_);
+  tree_->Branch("nUsers", &nUsers_);  // displacedMuons with this inner track
+  tree_->Branch("idxA", &idxA_);      // lowest user index
+  tree_->Branch("idxB", &idxB_);      // second user index (-1 if one user)
+  tree_->Branch("globalA", &globalA_);
+  tree_->Branch("globalB", &globalB_);  // -1 if one user
+  tree_->Branch("pt", &pt_);
+  tree_->Branch("eta", &eta_);
+  tree_->Branch("pz", &pz_);
+  tree_->Branch("hasExtra", &hasExtra_);
+  tree_->Branch("exact", &exact_);  // -1 no TrackExtra
+  tree_->Branch("innerRho", &innerRho_);
+  tree_->Branch("outerRho", &outerRho_);
+  tree_->Branch("innerZ", &innerZ_);
+  tree_->Branch("outerZ", &outerZ_);
+  tree_->Branch("proxy", &proxy_);  // -1 undefined
+  tree_->Branch("undefReason", &undefReason_);
+  tree_->Branch("interiorMin", &interiorMin_);  // interior minimum, before the 3 cm endpoint cut
+  tree_->Branch("seqClass", &seqClass_);        // valid hits: 0 barrel only, 1 endcap only, 2 mixed
+  tree_->Branch("nValid", &nValid_);
+  tree_->Branch("nTrackHits", &nTrackHits_);  // TRACK_HITS entries, any type
+  tree_->Branch("saturated", &saturated_);
+  tree_->Branch("firstType", &firstType_);  // hit type of the first / last TRACK_HITS entry (0 = valid)
+  tree_->Branch("lastType", &lastType_);
+  tree_->Branch("firstValidPXB1", &firstValidPXB1_);
+  tree_->Branch("lastValidPXB1", &lastValidPXB1_);
+  tree_->Branch("dFirst", &dFirst_);
+  tree_->Branch("dLast", &dLast_);
+  tree_->Branch("hitCode", &hitCode_);  // valid tracker hits in order: 10 * subdet + layer
+  tree_->Branch("hitD", &hitD_);
+}
+
+void CrossedIPHitPatternCheck::buildLayerMap(const edm::EventSetup& iSetup) {
+  const auto& geom = iSetup.getData(geomToken_);
+  const auto& topo = iSetup.getData(topoToken_);
+  std::map<std::pair<int, int>, std::pair<double, int>> sums;
+  for (const auto* det : geom.detUnits()) {
+    const DetId id = det->geographicalId();
+    const int subdet = id.subdetId();
+    const auto pos = det->surface().position();
+    auto& s = sums[{subdet, static_cast<int>(topo.layer(id))}];
+    s.first += isBarrel(subdet) ? pos.perp() : std::abs(pos.z());
+    ++s.second;
+  }
+  for (const auto& [key, s] : sums) layerPos_[key] = s.first / s.second;
+}
+
+void CrossedIPHitPatternCheck::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup) {
+  if (layerPos_.empty()) buildLayerMap(iSetup);
+  const auto& muons = iEvent.get(muonToken_);
+  std::map<RefKey, std::vector<size_t>> users;
+  for (size_t i = 0; i < muons.size(); ++i)
+    if (muons[i].innerTrack().isNonnull()) users[refKey(muons[i].innerTrack())].push_back(i);
+
+  run_ = iEvent.id().run();
+  lumi_ = iEvent.id().luminosityBlock();
+  event_ = iEvent.id().event();
+  for (const auto& [key, idx] : users) {
+    const reco::Track& tk = *muons[idx[0]].innerTrack();
+    nUsers_ = idx.size();
+    idxA_ = idx[0];
+    idxB_ = idx.size() > 1 ? static_cast<int>(idx[1]) : -1;
+    globalA_ = muons[idx[0]].globalTrack().isNonnull();
+    globalB_ = idx.size() > 1 ? static_cast<int>(muons[idx[1]].globalTrack().isNonnull()) : -1;
+    pt_ = tk.pt();
+    eta_ = tk.eta();
+    pz_ = tk.pz();
+
+    // exact
+    hasExtra_ = tk.extra().isAvailable();
+    exact_ = -1;
+    innerRho_ = outerRho_ = innerZ_ = outerZ_ = std::nanf("");
+    if (hasExtra_) {
+      const auto ip = tk.innerPosition(), op = tk.outerPosition();
+      const auto im = tk.innerMomentum(), om = tk.outerMomentum();
+      const double rpIn = ip.x() * im.x() + ip.y() * im.y(), rpOut = op.x() * om.x() + op.y() * om.y();
+      exact_ = ip.rho() > 3 && op.rho() > 3 && ((rpIn < 0) != (rpOut < 0));
+      innerRho_ = ip.rho();
+      outerRho_ = op.rho();
+      innerZ_ = ip.z();
+      outerZ_ = op.z();
+    }
+
+    // proxy
+    const reco::HitPattern& hp = tk.hitPattern();
+    nTrackHits_ = hp.numberOfAllHits(reco::HitPattern::TRACK_HITS);
+    saturated_ = nTrackHits_ + hp.numberOfAllHits(reco::HitPattern::MISSING_INNER_HITS) +
+                     hp.numberOfAllHits(reco::HitPattern::MISSING_OUTER_HITS) >=
+                 reco::HitPattern::MaxHits;
+    firstType_ = nTrackHits_ ? reco::HitPattern::getHitType(hp.getHitPattern(reco::HitPattern::TRACK_HITS, 0)) : -1;
+    lastType_ = nTrackHits_ ? reco::HitPattern::getHitType(
+                                  hp.getHitPattern(reco::HitPattern::TRACK_HITS, nTrackHits_ - 1))
+                            : -1;
+    hitCode_.clear();
+    hitD_.clear();
+    undefReason_ = 0;
+    bool anyBarrel = false, anyEndcap = false;
+    const double ptOverPz = tk.pz() != 0 ? tk.pt() / std::abs(tk.pz()) : std::nan("");
+    for (int i = 0; i < nTrackHits_; ++i) {
+      const uint16_t p = hp.getHitPattern(reco::HitPattern::TRACK_HITS, i);
+      if (!reco::HitPattern::trackerHitFilter(p) || !reco::HitPattern::validHitFilter(p)) continue;
+      const int subdet = reco::HitPattern::getSubStructure(p), layer = reco::HitPattern::getLayer(p);
+      hitCode_.push_back(10 * subdet + layer);
+      const auto it = layerPos_.find({subdet, layer});
+      double d = std::nan("");
+      if (it == layerPos_.end()) {
+        if (!undefReason_) undefReason_ = 4;
+      } else if (isBarrel(subdet)) {
+        d = it->second;
+        anyBarrel = true;
+      } else {
+        d = it->second * ptOverPz;
+        anyEndcap = true;
+        if (!std::isfinite(d) && !undefReason_) undefReason_ = 3;
+      }
+      hitD_.push_back(d);
+    }
+    nValid_ = hitD_.size();
+    seqClass_ = anyBarrel && anyEndcap ? 2 : anyEndcap ? 1 : 0;
+    firstValidPXB1_ = nValid_ && hitCode_.front() == 11;
+    lastValidPXB1_ = nValid_ && hitCode_.back() == 11;
+    dFirst_ = nValid_ ? hitD_.front() : std::nanf("");
+    dLast_ = nValid_ ? hitD_.back() : std::nanf("");
+    if (!undefReason_ && nValid_ < 3) undefReason_ = 1;
+    if (!undefReason_ && saturated_) undefReason_ = 2;
+    interiorMin_ = 0;
+    if (nValid_ >= 3 && (undefReason_ == 0 || undefReason_ == 2)) {
+      std::vector<float> prefixMax(nValid_), suffixMax(nValid_);
+      prefixMax[0] = hitD_[0];
+      for (int i = 1; i < nValid_; ++i) prefixMax[i] = std::max(prefixMax[i - 1], hitD_[i]);
+      suffixMax[nValid_ - 1] = hitD_[nValid_ - 1];
+      for (int i = nValid_ - 2; i >= 0; --i) suffixMax[i] = std::max(suffixMax[i + 1], hitD_[i]);
+      for (int j = 1; j + 1 < nValid_ && !interiorMin_; ++j)
+        interiorMin_ = prefixMax[j - 1] > hitD_[j] && suffixMax[j + 1] > hitD_[j];
+    }
+    proxy_ = undefReason_ ? -1 : (dFirst_ > 3 && dLast_ > 3 && interiorMin_);
+    tree_->Fill();
+  }
+}
+
+DEFINE_FWK_MODULE(CrossedIPHitPatternCheck);

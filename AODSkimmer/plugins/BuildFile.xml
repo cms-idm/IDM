@@ -56,6 +56,8 @@
 <use name="DataFormats/TrackingRecHit"/>
 <use name="Geometry/CommonDetUnit"/>
 <use name="Geometry/Records"/>
+<use name="Geometry/TrackerGeometryBuilder"/>
+<use name="DataFormats/TrackerCommon"/>
 
 
 <use name="Geometry/DTGeometry"/>
