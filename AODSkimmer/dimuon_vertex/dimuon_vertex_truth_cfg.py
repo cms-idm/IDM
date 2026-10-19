@@ -44,7 +44,7 @@ process.TFileService = cms.Service("TFileService", fileName=cms.string(options.o
 
 process.dimuonVertexTruth = cms.EDAnalyzer(
     "DimuonVertexTruth",
-    muons=cms.InputTag("displacedMuons"),
+    muons=cms.InputTag("cleanedDisplacedMuons"),  # deduplicated (kb/DECISIONS.md 2026-10-19)
     genParticles=cms.InputTag("prunedGenParticles"),
     beamspot=cms.InputTag("offlineBeamSpot"),
     standAloneMuons=cms.InputTag("displacedStandAloneMuons"),  # raw DSA tracks for the hierarchy merging check
@@ -69,4 +69,11 @@ process.dimuonVertexTruth = cms.EDAnalyzer(
     ),
 )
 process.dimuonVertexTruth.propagatorSt1 = process.dimuonVertexTruth.propagatorSt2.clone(useStation2=False)
-process.p = cms.Path(process.dimuonVertexTruth)
+# Same module as python/cleanedDisplacedMuons_cff.py, defined inline because the condor jobs ship
+# only lib/ (condor_dimuon_vertex_truth.sh), not the python area.
+process.cleanedDisplacedMuons = cms.EDProducer(
+    "DisplacedMuonDuplicateCleaner",
+    muons=cms.InputTag("displacedMuons", "", "RECO"),
+    validate=cms.bool(False),
+)
+process.p = cms.Path(process.cleanedDisplacedMuons + process.dimuonVertexTruth)

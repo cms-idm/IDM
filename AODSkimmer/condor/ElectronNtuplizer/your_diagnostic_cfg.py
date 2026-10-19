@@ -45,7 +45,8 @@ skimmer = skimmers[0]
 
 process.doubleCounting = cms.EDAnalyzer(
     "DisplacedMuonDoubleCounting",
-    displacedMuons=skimmer.displacedMuons,
+    # Raw collection: this diagnostic studies duplicates (the ntuplizer reads the cleaned one).
+    displacedMuons=cms.InputTag("displacedMuons", "", "RECO"),
     genParticle=skimmer.genParticle,
     genMuonPropagatorSt2=skimmer.genMuonPropagatorSt2.clone(),
     maxDR=cms.double(0.1),

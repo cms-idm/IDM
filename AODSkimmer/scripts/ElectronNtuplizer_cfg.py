@@ -295,6 +295,10 @@ process.ntuples = ElectronSkimmer.clone(
     effAreasConfigFile = cms.FileInPath(effAreaInputPath),
     standAloneMuons = cms.InputTag("standAloneMuons", "UpdatedAtVtx"),
     displacedStandAloneMuons = cms.InputTag("displacedStandAloneMuons"),
+    # Deduplicated displacedMuons by default (kb/DECISIONS.md 2026-10-19).
+    displacedMuons = cms.InputTag("cleanedDisplacedMuons"),
+    displacedMuonsOriginalIndex = cms.InputTag("cleanedDisplacedMuons", "originalIndex"),
+    displacedMuonsNRaw = cms.InputTag("cleanedDisplacedMuons", "nRaw"),
 
     # Strict propagation to station 1.
     genMuonPropagatorSt1 = cms.PSet(
@@ -408,7 +412,8 @@ process.nanoElectronSequence = cms.Sequence(
 ###### Paths and schedule ####
 ##############################
 
-process.ntupleSequence = cms.Sequence(process.ntuples)
+process.load("iDMe.AODSkimmer.cleanedDisplacedMuons_cff")
+process.ntupleSequence = cms.Sequence(process.cleanedDisplacedMuons + process.ntuples)
 process.ntuplePath = cms.Path(process.ntupleSequence)
 
 process.iDMEgammaPostRecoSequence = cms.Sequence(process.egammaPostRecoSeq)

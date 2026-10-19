@@ -483,6 +483,10 @@ public:
         DisplacedTrackFields outer, inner, global;
         void clear() { *this = DisplacedMuonFields{}; }
     } slimmedMuon_, recoDisplacedMuon_, slimmedDisplacedMuon_;
+    // Only for cleaned displacedMuons (DisplacedMuonDuplicateCleaner): raw index of each muon and the
+    // raw collection size (-1 = input not cleaned).
+    vector<int> recoDisplacedMuonOriginalIndex_;
+    int nRecoDisplacedMuonRaw_ = -1;
 
     // Complete PF-muon view of slimmedMuons, with no pT or acceptance cuts.
     // pfMuonPatIdx_ is the index in the input slimmedMuons collection.

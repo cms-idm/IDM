@@ -78,6 +78,8 @@ void NtupleContainerV2::CreateTreeBranches() {
     branchDisplacedTrack("DisplacedGlobalTrack", displacedGlobalTrack_);
     branchDisplacedMuon("SlimmedMuon", slimmedMuon_);
     branchDisplacedMuon("RecoDisplacedMuon", recoDisplacedMuon_);
+    outT->Branch("RecoDisplacedMuon_originalIndex", &recoDisplacedMuonOriginalIndex_);
+    outT->Branch("nRecoDisplacedMuonRaw", &nRecoDisplacedMuonRaw_);
     branchDisplacedMuon("SlimmedDisplacedMuon", slimmedDisplacedMuon_);
 
     auto branchDisplacedTrackPropagation = [this](
@@ -1434,6 +1436,8 @@ void NtupleContainerV2::ClearTreeBranches() {
     displacedGlobalTrack_.clear();
     slimmedMuon_.clear();
     recoDisplacedMuon_.clear();
+    recoDisplacedMuonOriginalIndex_.clear();
+    nRecoDisplacedMuonRaw_ = -1;
     slimmedDisplacedMuon_.clear();
 
     nPFMuon_ = 0;

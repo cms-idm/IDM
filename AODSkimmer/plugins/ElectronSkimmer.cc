@@ -16,6 +16,7 @@
 //
 
 #include <algorithm>
+#include "FWCore/Utilities/interface/Exception.h"
 #include <cmath> 
 #include <map>
 #include <memory>
@@ -218,6 +219,9 @@ class ElectronSkimmer : public edm::one::EDAnalyzer<edm::one::WatchRuns, edm::on
       const edm::EDGetTokenT<vector<reco::Track> > displacedGlobalTrackToken_;
       const edm::EDGetTokenT<vector<reco::Muon> > recoDisplacedMuonToken_;
       const edm::EDGetTokenT<vector<pat::Muon> > slimmedDisplacedMuonToken_;
+      // DisplacedMuonDuplicateCleaner products; unset when displacedMuons is the raw collection.
+      edm::EDGetTokenT<vector<int> > displacedMuonOriginalIndexToken_;
+      edm::EDGetTokenT<int> displacedMuonNRawToken_;
       // Added to allow "RECO" or "PAT" tags
       edm::EDGetTokenT<vector<reco::Conversion> > conversionsAltToken_;
       edm::EDGetTokenT<edm::TriggerResults> metFilterResultsAltToken_;
@@ -656,6 +660,13 @@ ElectronSkimmer::ElectronSkimmer(const edm::ParameterSet& ps)
 {
    usesResource("TFileService");
    m_random_generator = std::mt19937(37428479);
+   // Set when displacedMuons is the cleaned collection; then both products are required.
+   const auto& originalIndexTag = ps.getParameter<edm::InputTag>("displacedMuonsOriginalIndex");
+   const auto& nRawTag = ps.getParameter<edm::InputTag>("displacedMuonsNRaw");
+   if (!originalIndexTag.label().empty())
+      displacedMuonOriginalIndexToken_ = consumes<vector<int> >(originalIndexTag);
+   if (!nRawTag.label().empty())
+      displacedMuonNRawToken_ = consumes<int>(nRawTag);
 
 }
 
@@ -826,6 +837,9 @@ ElectronSkimmer::fillDescriptions(edm::ConfigurationDescriptions& descriptions) 
    desc.add<edm::InputTag>("displacedTracks", edm::InputTag("displacedTracks", "", "RECO"));
    desc.add<edm::InputTag>("displacedGlobalMuons", edm::InputTag("displacedGlobalMuons", "", "RECO"));
    desc.add<edm::InputTag>("displacedMuons", edm::InputTag("displacedMuons", "", "RECO"));
+   // Cleaner products (cleanedDisplacedMuons_cff); empty = displacedMuons is raw, branches left empty.
+   desc.add<edm::InputTag>("displacedMuonsOriginalIndex", edm::InputTag(""));
+   desc.add<edm::InputTag>("displacedMuonsNRaw", edm::InputTag(""));
    desc.add<edm::InputTag>("slimmedDisplacedMuons", edm::InputTag("slimmedDisplacedMuons", "", "PAT"));
 
    // Propagators used for gen/reco muon matching at the muon stations.
@@ -1034,6 +1048,14 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    };
    fillMuonCollection(pfRecoMuHandle_, nt.slimmedMuon_, true);
    fillMuonCollection(recoDisplacedMuonHandle_, nt.recoDisplacedMuon_, true);
+   if (!displacedMuonOriginalIndexToken_.isUninitialized()) {
+      nt.recoDisplacedMuonOriginalIndex_ = iEvent.get(displacedMuonOriginalIndexToken_);
+      if (nt.recoDisplacedMuonOriginalIndex_.size() != static_cast<size_t>(nt.recoDisplacedMuon_.n))
+         throw cms::Exception("ElectronSkimmer") << "displacedMuonsOriginalIndex size "
+            << nt.recoDisplacedMuonOriginalIndex_.size() << " != displacedMuons size " << nt.recoDisplacedMuon_.n;
+   }
+   if (!displacedMuonNRawToken_.isUninitialized())
+      nt.nRecoDisplacedMuonRaw_ = iEvent.get(displacedMuonNRawToken_);
    fillMuonCollection(slimmedDisplacedMuonHandle_, nt.slimmedDisplacedMuon_, true);
       
    double nPV = 0;
