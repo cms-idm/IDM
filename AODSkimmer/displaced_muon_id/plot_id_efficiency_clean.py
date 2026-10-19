@@ -102,10 +102,11 @@ def draw(curves, var, header, path, logx, legend_title=""):
     text = ROOT.TLatex(); text.SetNDC()
     text.SetTextSize(.040); text.DrawLatex(.08, .94, "#bf{" + header + "}")
     many = len(graphs) > 5
-    step = .034 if many else .085
+    step = .028 if many else .085
     top = .92
-    legend = ROOT.TLegend(.70, top - step * len(graphs) - (.04 if legend_title else 0), .99, top)
-    legend.SetBorderSize(0); legend.SetFillStyle(0); legend.SetTextSize(.026 if many else .030)
+    bottom = top - step * len(graphs) - (.04 if legend_title else 0)
+    legend = ROOT.TLegend(.70, bottom, .99, top)
+    legend.SetBorderSize(0); legend.SetFillStyle(0); legend.SetTextSize(.024 if many else .030)
     if legend_title:
         legend.SetHeader(legend_title)
     for g, label, k, n in graphs:
@@ -113,7 +114,8 @@ def draw(curves, var, header, path, logx, legend_title=""):
         legend.AddEntry(g, f"{label}  ({eff})" if many else f"#splitline{{{label}}}{{{eff} overall, N_{{match}} = {n}}}", "p")
     legend.Draw()
     text.SetTextSize(.022)
-    y0 = min(legend.GetY1NDC() - .04, .45)
+    # Definitions under the legend; with many curves they move to the bottom-right corner.
+    y0 = min(bottom - .04, .45) if bottom - .04 - .032 * (len(NOTE) - 1) > .02 else .02 + .032 * (len(NOTE) - 1)
     for i, line in enumerate(NOTE):
         text.DrawLatex(.71, y0 - .032 * i, line)
     c.SaveAs(path)
