@@ -36,6 +36,10 @@
 //   SharedTrackTrajectoryCheck.cc), out (valid, outside) or invalid; ahead = along in and opposite not in,
 //   behind = opposite in and along not in, else bothIn / neitherIn. Only the first plane crossing is tested.
 //   Verdicts and the pair decision are formed offline.
+// ID-first type priority inputs (two-user tracks only; design "ID-first type priority" in the same note). Per
+//   copy, its own flags: G = isGlobalMuon() && globalTrack nonnull; D = outerTrack nonnull passing the DSA ID
+//   (DimuonVertexTruth.cc passesDisplacedID plus the ID macro's pt > 0 guard); T = isTrackerMuon(). Ranks and
+//   the pair outcome are formed offline.
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -82,6 +86,14 @@ namespace {
 using RefKey = std::pair<edm::ProductID, unsigned int>;  // as in DimuonVertexTruth.cc
 RefKey refKey(const reco::TrackRef& r) { return {r.id(), static_cast<unsigned int>(r.key())}; }
 bool isBarrel(int subdet) { return subdet == 1 || subdet == 3 || subdet == 5; }
+
+// ElectronSkimmer::passesDisplacedID (DSA ID), with the pt > 0 guard of displaced_muon_id.C.
+bool passesDisplacedID(const reco::Track& t) {
+  const int csc = t.hitPattern().numberOfValidMuonCSCHits();
+  const int dt = t.hitPattern().numberOfValidMuonDTHits();
+  return csc + dt > 12 && (csc != 0 || dt > 18) && t.normalizedChi2() < 2.5 && t.pt() > 0 &&
+         t.ptError() / t.pt() < 1;
+}
 
 // Muon detector id -> the chamber id used by matches() (DT/CSC chamber, RPC roll, GEM chamber); 0 otherwise.
 uint32_t muonChamberId(DetId id) {
@@ -176,6 +188,10 @@ private:
   int dcT_[2][4];  // T items: ahead, behind, plane, dropped
   int dcP_[2][6];  // P items: ahead, behind, bothIn, neitherIn; attempts invalid: along, opposite
   int dcAgree_[2];  // items with T and P both ahead or both behind
+  // ID-first inputs: [copy A/B]; -1 if not a two-user track
+  int idG_[2], idD_[2], idT_[2], hasOuter_[2];
+  int dsaCSC_[2], dsaDT_[2];  // outer-track valid CSC / DT hits (-1: no outer track)
+  float dsaChi2_[2], dsaPt_[2], dsaPtErr_[2];
 };
 
 void CrossedIPHitPatternCheck::beginJob() {
@@ -241,6 +257,18 @@ void CrossedIPHitPatternCheck::beginJob() {
     tree_->Branch((std::string("dc_") + copies[c] + "_nTPAgree").c_str(), &dcAgree_[c]);
     for (int i = 0; i < 4; ++i) tree_->Branch((std::string("dcT_") + copies[c] + "_" + tCounts[i]).c_str(), &dcT_[c][i]);
     for (int i = 0; i < 6; ++i) tree_->Branch((std::string("dcP_") + copies[c] + "_" + pCounts[i]).c_str(), &dcP_[c][i]);
+  }
+  for (int c = 0; c < 2; ++c) {
+    const std::string p = std::string("_") + copies[c];
+    tree_->Branch(("id" + p + "_G").c_str(), &idG_[c]);
+    tree_->Branch(("id" + p + "_D").c_str(), &idD_[c]);
+    tree_->Branch(("id" + p + "_T").c_str(), &idT_[c]);
+    tree_->Branch(("hasOuter" + p).c_str(), &hasOuter_[c]);
+    tree_->Branch(("dsa" + p + "_nCSC").c_str(), &dsaCSC_[c]);
+    tree_->Branch(("dsa" + p + "_nDT").c_str(), &dsaDT_[c]);
+    tree_->Branch(("dsa" + p + "_chi2").c_str(), &dsaChi2_[c]);
+    tree_->Branch(("dsa" + p + "_pt").c_str(), &dsaPt_[c]);
+    tree_->Branch(("dsa" + p + "_ptErr").c_str(), &dsaPtErr_[c]);
   }
   tree_->Branch("hitCode", &hitCode_);  // valid tracker hits in order: 10 * subdet + layer
   tree_->Branch("hitD", &hitD_);
@@ -379,8 +407,26 @@ void CrossedIPHitPatternCheck::analyze(const edm::Event& iEvent, const edm::Even
       dcSrc_[c] = dcFb_[c] = dcAgree_[c] = -1;
       for (int& n : dcT_[c]) n = -1;
       for (int& n : dcP_[c]) n = -1;
+      idG_[c] = idD_[c] = idT_[c] = hasOuter_[c] = dsaCSC_[c] = dsaDT_[c] = -1;
+      dsaChi2_[c] = dsaPt_[c] = dsaPtErr_[c] = std::nanf("");
     }
     if (idx.size() == 2) {
+      // ID-first inputs
+      for (int c = 0; c < 2; ++c) {
+        const reco::Muon& mu = muons[idx[c]];
+        idG_[c] = mu.isGlobalMuon() && mu.globalTrack().isNonnull();
+        idT_[c] = mu.isTrackerMuon();
+        hasOuter_[c] = mu.outerTrack().isNonnull();
+        idD_[c] = hasOuter_[c] && passesDisplacedID(*mu.outerTrack());
+        if (hasOuter_[c]) {
+          const reco::Track& ot = *mu.outerTrack();
+          dsaCSC_[c] = ot.hitPattern().numberOfValidMuonCSCHits();
+          dsaDT_[c] = ot.hitPattern().numberOfValidMuonDTHits();
+          dsaChi2_[c] = ot.normalizedChi2();
+          dsaPt_[c] = ot.pt();
+          dsaPtErr_[c] = ot.ptError();
+        }
+      }
       const auto& gg = iSetup.getData(globalGeomToken_);
       const auto r0 = tk.referencePoint();
       const auto pHat = tk.momentum().unit();

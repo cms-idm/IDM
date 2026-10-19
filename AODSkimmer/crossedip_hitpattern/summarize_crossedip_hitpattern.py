@@ -4,6 +4,7 @@
   python3 summarize_crossedip_hitpattern.py [--proxy proxyFix] crossedip_hitpattern_*.root
   python3 summarize_crossedip_hitpattern.py --side crossedip_hitpattern_*.root
   python3 summarize_crossedip_hitpattern.py --dc crossedip_hitpattern_*.root
+  python3 summarize_crossedip_hitpattern.py --id crossedip_hitpattern_*.root
 
 --side: muon-system side test vs the exact crossedIP on the two-user tracks (kb/studies/
 shared-track-duplicates.md, "Muon-system side test vs crossedIP"). Sources M (all associated chambers),
@@ -16,6 +17,12 @@ Per copy and method (T tangent half-space, P propagation): ahead / behind / mixe
 bothIn or neitherIn) / unknown (no items). Copy verdict: sense (T and P ahead), doesnt (T and P behind, or
 contradictory: one ahead, the other behind, flagged), unknown otherwise. Pair outcome labels as in the note;
 compared with the interim policy on the exact crossedIP.
+
+--id: ID-first type priority on the two-user tracks (same note, "ID-first type priority"). Rank per copy,
+cascade: first ID passed in the order G (isGlobal), D (DSA ID on the outer track), T (isTracker) -> 3 / 2 / 1,
+none -> 0. Pair: both 0 -> 0 retained; one 0 -> 1 retained (ID decides); different -> 1 retained (priority
+decides); equal > 0 -> 2 retained (tie). Retained copy compared with the interim policy, the side-test
+source-M ahead copy (opposite pairs only) and the direction-consistency kept copy.
 
 --proxy chooses the column compared with the exact flag: proxy (HitPattern only, default) or proxyFix
 (proxy OR rule E). With proxyFix, a rule E section follows: recovery of the HitPattern misses, false
@@ -387,7 +394,102 @@ def dc(files):
                         f" neither{int(r[f'dcP_{c}_nNeitherIn'])})" for c in "AB"))
 
 
+ID_OUTCOMES = ("0 retained: both fail ID", "1 retained: ID decides", "1 retained: priority decides",
+               "2 retained: tie")
+RANK = {3: "G", 2: "D", 1: "T", 0: "none"}
+
+
+def id_rank(r, c):
+    for k, n in (("G", 3), ("D", 2), ("T", 1)):
+        if int(r[f"id_{c}_{k}"]) == 1:
+            return n
+    return 0
+
+
+def id_outcome(r):
+    """(label, retained: 'A' / 'B' / 'none' / 'both')"""
+    ra, rb = id_rank(r, "A"), id_rank(r, "B")
+    if ra == rb == 0:
+        return ID_OUTCOMES[0], "none"
+    if 0 in (ra, rb):
+        return ID_OUTCOMES[1], "A" if ra else "B"
+    if ra != rb:
+        return ID_OUTCOMES[2], "A" if ra > rb else "B"
+    return ID_OUTCOMES[3], "both"
+
+
+def idfirst(files):
+    chain = ROOT.TChain("crossedIPHitPatternCheck/tracks")
+    for f in files:
+        chain.Add(f)
+    df = ROOT.RDataFrame(chain).Filter("nUsers == 2")
+    cols = ["run", "lumi", "event", "idxA", "idxB", "globalA", "globalB", "exact", "pt", "eta", "sideIdenticalM"] + [
+        f"side{s}_{c}_{n}" for s in SOURCES for c in "AB" for n in ("nAhead", "nBehind", "nPlane")] + [
+        f"dc_{c}_{n}" for c in "AB" for n in ("src", "fb", "nTPAgree")] + [
+        f"dcT_{c}_{n}" for c in "AB" for n in ("nAhead", "nBehind", "nPlane", "nDropped")] + [
+        f"dcP_{c}_{n}" for c in "AB" for n in ("nAhead", "nBehind", "nBothIn", "nNeitherIn", "nInvalidAlong", "nInvalidOpposite")] + [
+        f"id_{c}_{k}" for c in "AB" for k in "GDT"] + [f"hasOuter_{c}" for c in "AB"] + [
+        f"dsa_{c}_{n}" for c in "AB" for n in ("nCSC", "nDT", "chi2", "pt", "ptErr")]
+    v = df.AsNumpy(cols)
+    rows = [{c: v[c][i] for c in cols} for i in range(len(v["exact"]))]
+    print(f"files: {len(files)}, two-user tracks: {len(rows)}; exact: {dict(Counter(int(r['exact']) for r in rows))}")
+    print("raw pair counts, unweighted")
+    print("\nper-copy ID bits (A, B):")
+    for k in "GDT":
+        print(f"  {k}: A {sum(int(r[f'id_A_{k}']) for r in rows)}, B {sum(int(r[f'id_B_{k}']) for r in rows)}")
+    print(f"  outer track: A {sum(int(r['hasOuter_A']) for r in rows)}, B {sum(int(r['hasOuter_B']) for r in rows)}")
+
+    def ranks(sel, title):
+        t = Counter((RANK[id_rank(r, 'A')], RANK[id_rank(r, 'B')]) for r in sel)
+        print(f"\n(rank A, rank B), {title}: {len(sel)} pairs")
+        for k, n in sorted(t.items()):
+            print(f"  {k}: {n}")
+    ranks(rows, "all pairs")
+    cohort = [r for r in rows if not int(r["globalA"]) and not int(r["globalB"]) and
+              int(r["hasOuter_B"]) and not int(r["hasOuter_A"])]
+    ranks(cohort, "no global, only B has an outer track")
+
+    out = [(r, *id_outcome(r)) for r in rows]
+    print("\noutcome by exact crossedIP:")
+    print(f"{'':>32}" + "".join(f"{f'exact={e}':>10}" for e in (-1, 0, 1)) + f"{'total':>8}")
+    for lab in ID_OUTCOMES:
+        n = [sum(1 for r, l, _ in out if l == lab and int(r["exact"]) == e) for e in (-1, 0, 1)]
+        print(f"{lab:>32}" + "".join(f"{x:>10}" for x in n) + f"{sum(n):>8}")
+
+    def compare(title, ref, sel):
+        cmp = Counter((ref(r), k) for r, _, k in out if sel(r))
+        print(f"  {title}: {sum(cmp.values())} pairs; (reference, ID-first): count")
+        for key, n in sorted(cmp.items()):
+            flag = "   DIFFERENT" if key[1] in "AB" and key[0] in "AB" and key[0] != key[1] else ""
+            print(f"    {key}: {n}{flag}")
+    print("\nretained copy vs references:")
+    for e in (1, 0, -1):
+        compare(f"interim decides, exact={e}", interim_kept, lambda r, e=e: interim_kept(r) != "both" and int(r["exact"]) == e)
+    compare("interim unresolved", interim_kept, lambda r: interim_kept(r) == "both")
+    ahead = lambda r: "A" if copy_class(r, "M", "A") == "ahead" else "B"
+    compare("side test source M, opposite pairs (reference = ahead copy)", ahead, lambda r: pair_class(r, "M") == "opposite")
+    print("  side test source M, other pair classes:",
+          dict(Counter((pair_class(r, "M"), k) for r, _, k in out if pair_class(r, "M") != "opposite")))
+    dck = {id(r): dc_outcome(r)[1] for r in rows}
+    compare("direction consistency, where it keeps one copy", lambda r: dck[id(r)], lambda r: dck[id(r)] != "both")
+    compare("direction consistency unresolved", lambda r: dck[id(r)], lambda r: dck[id(r)] == "both")
+
+    show = [(r, l, k) for r, l, k in out if k in "AB" and interim_kept(r) in "AB" and k != interim_kept(r)]
+    print(f"\npairs where ID-first retains the other copy than the interim policy: {len(show)}")
+    for r, l, k in show:
+        print(f"  - {r['run']}:{r['lumi']}:{r['event']} idx {r['idxA']},{r['idxB']} exact {r['exact']} pt {r['pt']:.1f} "
+              f"eta {r['eta']:.2f} [{l}] retained {k}, side M A {copy_class(r, 'M', 'A')} B {copy_class(r, 'M', 'B')}"
+              + "".join(f" | {c}: rank {RANK[id_rank(r, c)]} G{int(r[f'id_{c}_G'])} D{int(r[f'id_{c}_D'])} T{int(r[f'id_{c}_T'])}"
+                        f" csc {int(r[f'dsa_{c}_nCSC'])} dt {int(r[f'dsa_{c}_nDT'])} chi2 {r[f'dsa_{c}_chi2']:.2f}"
+                        f" pt {r[f'dsa_{c}_pt']:.1f} ptErr {r[f'dsa_{c}_ptErr']:.1f}" for c in "AB"))
+
+
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["--id"]:
+        if len(sys.argv) < 3:
+            sys.exit(__doc__)
+        idfirst(sys.argv[2:])
+        sys.exit(0)
     args = sys.argv[1:]
     if args[:1] == ["--dc"]:
         if len(args) < 2:
