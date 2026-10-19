@@ -46,9 +46,13 @@ def failure_mode(r, col):
     if p == -1:
         return "proxy undefined: " + UNDEF[r["undefReason"]]
     if e == 1 and p == 0:
+        if col == "proxyFix" and r["firstEndcap"]:
+            return "missed crossing: endcap first hit, rule E not met"
         if not r["interiorMin"]:
             return "missed crossing: no sampled interior minimum"
         return "missed crossing: endpoint d <= 3 cm" + (" (PXB1 endpoint)" if r["firstValidPXB1"] or r["lastValidPXB1"] else "")
+    if e == 0 and p == 1 and col == "proxyFix" and r["ruleE"] and not r["proxy"]:
+        return "false crossing: rule E only"
     if e == 0 and p == 1:
         if min(r["innerRho"], r["outerRho"]) <= 3:
             return "false crossing: exact endpoint rho <= 3 cm"
@@ -142,8 +146,8 @@ def rule_e(df, rows):
     print("  recovered marginFirst / dzError:", quantiles([r["marginFirst"] / r["dzError"] for r in rec if r["dzError"] > 0]))
     left = [r for r in miss if r["firstEndcap"] and not r["ruleE"]]
     print("  endcap-first not recovered, marginFirst [cm]:", quantiles([r["marginFirst"] for r in left]))
-    false2 = [r for r in rows if r["exact"] == 0 and r["ruleE"]]
-    print(f"TWO-USER rule E firings on exact 0: {len(false2)}")
+    false2 = [r for r in rows if r["exact"] == 0 and r["ruleE"] and r["proxy"] == 0]
+    print(f"TWO-USER rule E new firings (proxy 0) on exact 0: {len(false2)}")
     print("  marginFirst [cm]:", quantiles([r["marginFirst"] for r in false2]))
     # secondary, separating rule E's false firings from the HitPattern proxy's
     v = df.Filter("exact != -1").AsNumpy(["exact", "proxy", "ruleE", "marginFirst", "marginLast", "dzError",
