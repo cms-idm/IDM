@@ -2,6 +2,13 @@
 """Summarize CrossedIPHitPatternCheck output: exact crossedIP (TrackExtra) vs HitPattern proxy.
 
   python3 summarize_crossedip_hitpattern.py [--proxy proxyFix] crossedip_hitpattern_*.root
+  python3 summarize_crossedip_hitpattern.py --side crossedip_hitpattern_*.root
+
+--side: muon-system side test vs the exact crossedIP on the two-user tracks (kb/studies/
+shared-track-duplicates.md, "Muon-system side test vs crossedIP"). Sources M (all associated chambers),
+Arb (arbitrated DT/CSC segments), S (standalone endpoints). Copy class: ahead / behind / mixed (both
+signs or s = 0) / none; pair class, in order: undefined (a copy none), mixed (a copy mixed), opposite,
+same. Agreement: exact 1 with opposite, exact 0 with same.
 
 --proxy chooses the column compared with the exact flag: proxy (HitPattern only, default) or proxyFix
 (proxy OR rule E). With proxyFix, a rule E section follows: recovery of the HitPattern misses, false
@@ -167,8 +174,94 @@ def rule_e(df, rows):
               f"{sum(1 for r in rec if r['marginFirst'] > m)}, two-user false {sum(1 for r in false2 if r['marginFirst'] > m)}")
 
 
+SOURCES = ("M", "Arb", "S")
+PAIR = ("opposite", "same", "mixed", "undefined")
+
+
+def copy_class(r, src, c):
+    a, b, z = (int(r[f"side{src}_{c}_{n}"]) for n in ("nAhead", "nBehind", "nPlane"))
+    if a + b + z == 0:
+        return "none"
+    if z or (a and b):
+        return "mixed"
+    return "ahead" if a else "behind"
+
+
+def pair_class(r, src):
+    ca, cb = copy_class(r, src, "A"), copy_class(r, src, "B")
+    if "none" in (ca, cb):
+        return "undefined"
+    if "mixed" in (ca, cb):
+        return "mixed"
+    return "opposite" if ca != cb else "same"
+
+
+def agrees(r, src):
+    pc = pair_class(r, src)
+    return (r["exact"] == 1 and pc == "opposite") or (r["exact"] == 0 and pc == "same")
+
+
+def binned(rows, src, key, edges, label):
+    print(f"  agreement vs {label} (all pairs per bin; agree / total):")
+    for lo, hi in zip(edges[:-1], edges[1:]):
+        sel = [r for r in rows if lo <= key(r) < hi]
+        print(f"    [{lo}, {hi}): {sum(agrees(r, src) for r in sel)} / {len(sel)}")
+
+
+def side(files):
+    chain = ROOT.TChain("crossedIPHitPatternCheck/tracks")
+    for f in files:
+        chain.Add(f)
+    df = ROOT.RDataFrame(chain).Filter("nUsers == 2")
+    cols = ["run", "lumi", "event", "idxA", "idxB", "exact", "pt", "eta", "sideIdenticalM"] + [
+        f"side{s}_{c}_{n}" for s in SOURCES for c in "AB"
+        for n in ("nAhead", "nBehind", "nPlane", "nDropped", "sMin", "sMax", "absSMin")]
+    v = df.AsNumpy(cols)
+    rows = [{c: v[c][i] for c in cols} for i in range(len(v["exact"]))]
+    print(f"files: {len(files)}, two-user tracks: {len(rows)}; exact: {dict(Counter(int(r['exact']) for r in rows))}")
+    print(f"source M identical chamber sets: {sum(int(r['sideIdenticalM']) == 1 for r in rows)}")
+    for src in SOURCES:
+        print(f"\n=== source {src} ===")
+        t = Counter((int(r["exact"]), pair_class(r, src)) for r in rows)
+        print(f"{'':>10}" + "".join(f"{p:>11}" for p in PAIR) + f"{'total':>8}")
+        for e in (-1, 0, 1):
+            n = [t.get((e, p), 0) for p in PAIR]
+            if sum(n):
+                print(f"{f'exact={e}':>10}" + "".join(f"{x:>11}" for x in n) + f"{sum(n):>8}")
+        print(f"agree (exact 1 & opposite, exact 0 & same): {sum(agrees(r, src) for r in rows)} of {len(rows)}")
+        cc = Counter(copy_class(r, src, c) for r in rows for c in "AB")
+        print("copy classes (A and B together):", dict(cc))
+        dropped = sum(int(r[f"side{src}_{c}_nDropped"]) for r in rows for c in "AB")
+        plane = sum(int(r[f"side{src}_{c}_nPlane"]) for r in rows for c in "AB")
+        print(f"items dropped (no geometry / non-finite s): {dropped}; items with s = 0: {plane}")
+        binned(rows, src, lambda r: r["pt"], [0, 3, 5, 10, 20, 1e9], "shared-track pT [GeV]")
+        binned(rows, src, lambda r: abs(r["eta"]), [0, 0.9, 1.2, 2.1, 2.5, 9], "shared-track |eta|")
+        opp = [r for r in rows if pair_class(r, src) == "opposite"]
+        aheadA = sum(copy_class(r, src, "A") == "ahead" for r in opp)
+        print(f"opposite pairs: ahead copy is the lower index (A) in {aheadA} of {len(opp)} (information only)")
+        for cls in PAIR[:3]:
+            vals = sorted(min(float(r[f"side{src}_{c}_absSMin"]) for c in "AB") for r in rows if pair_class(r, src) == cls)
+            if vals:
+                print(f"  smallest |s| over both copies [cm], {cls}: min {vals[0]:.0f} median {vals[len(vals) // 2]:.0f} max {vals[-1]:.0f} (n {len(vals)})")
+        bad = [r for r in rows if r["exact"] != -1 and not agrees(r, src) and pair_class(r, src) in ("opposite", "same")]
+        print(f"disagreements with both copies classified: {len(bad)}")
+        for r in bad:
+            print(f"  - {r['run']}:{r['lumi']}:{r['event']} idx {r['idxA']},{r['idxB']} exact {r['exact']} {pair_class(r, src)} "
+                  f"pt {r['pt']:.1f} eta {r['eta']:.2f} A {copy_class(r, src, 'A')} "
+                  f"s [{r[f'side{src}_A_sMin']:.0f}, {r[f'side{src}_A_sMax']:.0f}] B {copy_class(r, src, 'B')} "
+                  f"s [{r[f'side{src}_B_sMin']:.0f}, {r[f'side{src}_B_sMax']:.0f}] identicalM {r['sideIdenticalM']}")
+    # S vs M where both are classified
+    both = [r for r in rows if pair_class(r, "S") in ("opposite", "same") and pair_class(r, "M") in ("opposite", "same")]
+    print(f"\nS vs M where both classified: {sum(pair_class(r, 'S') == pair_class(r, 'M') for r in both)} agree of {len(both)}")
+
+
 if __name__ == "__main__":
     args = sys.argv[1:]
+    if args[:1] == ["--side"]:
+        if len(args) < 2:
+            sys.exit(__doc__)
+        side(args[1:])
+        sys.exit(0)
     col = "proxy"
     if args[:1] == ["--proxy"]:
         col, args = args[1], args[2:]
