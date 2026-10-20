@@ -261,6 +261,69 @@ def analyze(args):
         print("%s: %d / %d accepted gen" % (metric, np.sum(masks[metric]), len(rows)), flush=True)
 
 
+def rebin_saved(args):
+    """Build unit-width view histograms from saved assignments; never rematch or modify source."""
+    import ROOT
+    import uproot
+    if args.output.exists():
+        raise RuntimeError("Refusing to overwrite numerical ROOT source")
+    with uproot.open(args.source_root) as saved:
+        columns = saved["matches"].arrays(library="np")
+        samples = saved["samples"].member("fTitle").splitlines()
+    matched = np.column_stack([columns[name] for name in EFF])
+    good = matched >= 0
+    masks = {name: good[:, c] for c, name in enumerate(EFF)}
+    differences = []
+    for name, compare, (x, y) in zip(DISC[:3], COMPARE[:3], PAIRS):
+        masks[compare] = good[:, x] & good[:, y]
+        masks[name] = masks[compare] & (matched[:, x] != matched[:, y])
+        differences.append(masks[name])
+    masks["independent_any"] = np.any(differences, axis=0)
+    masks["multiple_independent"] = good[:, :3].sum(axis=1) >= 2
+    for name, compare, c in zip(DISC[4:7], COMPARE[4:7], (2, 1, 0)):
+        masks[compare] = good[:, 3] & good[:, c]
+        masks[name] = masks[compare] & (matched[:, 3] != matched[:, c])
+    masks["hier_any"] = np.any([masks[name] for name in DISC[4:7]], axis=0)
+    masks["any_hier_comparison"] = np.any([masks[name] for name in COMPARE[4:7]], axis=0)
+    groups = {"overall": np.ones(len(matched), dtype=bool)}
+    for si, sample in enumerate(samples):
+        selection = columns["sample"] == si
+        groups["sample_" + sample] = selection
+        mass, lifetime = sample.rsplit("_ctau-", 1)
+        for key in ("mass_" + mass, "ctau_" + lifetime):
+            groups.setdefault(key, np.zeros(len(matched), dtype=bool))[:] |= selection
+    source = ROOT.TFile.Open(str(args.source_root))
+    target = ROOT.TFile.Open(str(args.output), "CREATE")
+    if not source or source.IsZombie() or not target or target.IsZombie():
+        raise RuntimeError("Cannot open saved source/create rebinned ROOT")
+    for key in ("definitions", "inputRevision", "analysisRevision", "samples", "coverage"):
+        target.cd(); source.Get(key).Write()
+    ROOT.TNamed("histogramRevision", args.revision).Write()
+    ROOT.TNamed("assignmentSource", str(args.source_root)).Write()
+    summary = target.mkdir("groups")
+    for group, selection in groups.items():
+        directory = summary.mkdir(group)
+        for var in EDGES:
+            edges = EDGES[var] if var == "eta" else np.arange(31, dtype=float)
+            bins = np.searchsorted(edges, columns[var], side="right")
+            for metric in ("den",) + METRICS:
+                chosen = selection if metric == "den" else selection & masks[metric]
+                counts = np.bincount(bins[chosen], minlength=len(edges) + 1)
+                original = source.Get("groups/%s/%s__%s" % (group, metric, var))
+                if int(sum(counts)) != int(original.Integral(0, original.GetNbinsX() + 1)):
+                    raise RuntimeError("Saved-assignment total differs from original histogram")
+                directory.cd()
+                h = ROOT.TH1D(metric + "__" + var, LABELS[var], len(edges)-1, array("d", edges))
+                h.Sumw2(); h.GetXaxis().SetTitle(LABELS[var])
+                h.GetYaxis().SetTitle("Gen muons (unweighted count)")
+                for bi, count in enumerate(counts):
+                    h.SetBinContent(bi, float(count)); h.SetBinError(bi, float(np.sqrt(count)))
+                h.SetEntries(float(chosen.sum())); h.Write()
+    target.Close(); source.Close()
+    print("VALIDATED unit-width histograms: %d accepted gen, %d groups; all totals including flow agree with source" %
+          (len(matched), len(groups)), flush=True)
+
+
 def plot(args):
     import ROOT
     import matplotlib
@@ -343,9 +406,10 @@ def plot(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--mode", choices=("analyze", "replot"), default="analyze")
+    parser.add_argument("--mode", choices=("analyze", "replot", "rebin-saved"), default="analyze")
     parser.add_argument("--revision", default="unspecified", help="analysis code revision stored in numerical ROOT")
     parser.add_argument("--input-dir", type=Path)
+    parser.add_argument("--source-root", type=Path, help="saved per-gen assignments for rebin-saved")
     parser.add_argument("--report-dir", type=Path, help="per-sample FrameworkJobReport directory (required for full analysis)")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--plot-dir", type=Path)
@@ -360,6 +424,10 @@ def main():
     for maximum in (args.pt_max, args.d0_max, args.lxy_max):
         if maximum is not None and (not np.isfinite(maximum) or maximum <= 0):
             parser.error("plot maxima must be finite and positive")
+    if args.mode == "rebin-saved":
+        if args.source_root is None or args.revision == "unspecified":
+            parser.error("rebin-saved requires --source-root and --revision")
+        rebin_saved(args)
     if args.mode == "analyze":
         if args.input_dir is None:
             parser.error("--input-dir required in analyze mode")
