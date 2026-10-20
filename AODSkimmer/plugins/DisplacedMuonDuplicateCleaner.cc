@@ -63,10 +63,10 @@ public:
     const size_t n = muons.size();
 
     std::vector<std::vector<RefKey>> keys(n);
-    std::vector<int> rank(n);  // 2 = global, 1 = outer only, 0 = neither
+    std::vector<int> rank(n);  // global presence first, then outer presence (including among globals)
     for (size_t i = 0; i < n; ++i) {
       keys[i] = componentKeys(muons[i]);
-      rank[i] = muons[i].globalTrack().isNonnull() ? 2 : (muons[i].outerTrack().isNonnull() ? 1 : 0);
+      rank[i] = 2 * muons[i].globalTrack().isNonnull() + muons[i].outerTrack().isNonnull();
     }
 
     std::vector<size_t> order(n);
