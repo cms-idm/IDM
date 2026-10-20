@@ -26,6 +26,7 @@ process.load("Configuration.StandardSequences.MagneticField_cff")
 process.load("Configuration.StandardSequences.FrontierConditions_GlobalTag_cff")
 from Configuration.AlCa.GlobalTag import GlobalTag
 process.GlobalTag = GlobalTag(process.GlobalTag, "130X_mcRun3_2022_realistic_postEE_v6", "")
+process.load("TrackingTools.TransientTrack.TransientTrackBuilder_cfi")
 for name in ("Along", "Opposite", "Any"):
     process.load("TrackPropagation.SteppingHelixPropagator.SteppingHelixPropagator%s_cfi" % name)
 process.source = cms.Source("PoolSource", fileNames=cms.untracked.vstring(files))
