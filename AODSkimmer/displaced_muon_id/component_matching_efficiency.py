@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Match ID-passing cleaned components, retain ROOT counts/rows, plot or replot without MINIAOD scans.
 
-python3 component_matching_efficiency.py --input-dir RUN/inputs --output RUN/efficiency.root --plot-dir RUN/plots
+python3 component_matching_efficiency.py --input-dir RUN/inputs --report-dir RUN/logs --revision <sha> --output RUN/efficiency.root --plot-dir RUN/plots
 python3 component_matching_efficiency.py --mode replot --output RUN/efficiency.root --plot-dir RUN/new_plots
 --no-plots supports the one-file runtime check; --log adds log-x copies, never replaces linear PNGs.
 Every plotted fraction uses ALL accepted signal gen. Comparable-match counts are stored separately.
@@ -10,6 +10,7 @@ import argparse
 from array import array
 from pathlib import Path
 import re
+import xml.etree.ElementTree as ET
 import numpy as np
 
 TYPES = ("inner", "outer", "global")
@@ -127,6 +128,26 @@ def analyze(args):
             tree = source["componentInputs/events"]
             event_counts.append(tree.num_entries)
             events_total += tree.num_entries
+            if args.report_dir is not None:
+                report = ET.parse(args.report_dir / (sample + ".xml")).getroot()
+                failures = [e for e in report.findall(".//FrameworkError") if e.get("ExitStatus") != "0"]
+                if failures:
+                    raise RuntimeError("FrameworkJobReport reports a processing error: " + sample)
+                flist = Path(__file__).resolve().parents[2] / "AODSkimmer/fileLists/signal/2022EE/iDMmu" / (sample + "_flist.txt")
+                originals = [line.strip() for line in flist.read_text().splitlines()
+                             if line.strip() and not line.lstrip().startswith("#")]
+                def canonical(path):
+                    index = path.find("/store/")
+                    if index < 0:
+                        raise RuntimeError("Unexpected input PFN: " + path)
+                    return path[index:]
+                observed = [(canonical(f.findtext("PFN", "")), int(f.findtext("EventsRead", "-1")))
+                            for f in report.findall(".//InputFile")]
+                if (len(originals) != 4 or len(observed) != 4 or len(set(p for p, n in observed)) != 4
+                        or set(p for p, n in observed) != set(map(canonical, originals))
+                        or any(n <= 0 for p, n in observed) or sum(n for p, n in observed) != tree.num_entries):
+                    raise RuntimeError("Per-file coverage/events mismatch: " + sample)
+                print("COVERAGE %s: 4 original files, %d events verified" % (sample, tree.num_entries), flush=True)
             columns = tree.arrays(names, library="ak")
             values = [ak.to_list(columns[name]) for name in names]
             for ei, row in enumerate(zip(*values)):
@@ -199,6 +220,7 @@ def analyze(args):
         "independent categories one-to-one; hierarchy global>outer>inner reserves whole parent; "
         "raw/unweighted; no surface fallback; flow bins preserved.").Write()
     ROOT.TNamed("inputRevision", next(iter(revisions))).Write()
+    ROOT.TNamed("analysisRevision", args.revision).Write()
     ROOT.TNamed("samples", "\n".join(samples)).Write()
     ROOT.TNamed("coverage", "\n".join("%s: %d events" % item for item in zip(samples, event_counts))).Write()
     summary = root.mkdir("groups")
@@ -256,7 +278,8 @@ def plot(args):
     def draw(curves, var, title, path, ylabel, logarithmic=False):
         fig, ax = plt.subplots(figsize=(10, 6.5))
         ptmax = 1.
-        for label, group, metric in curves:
+        colors = plt.cm.get_cmap("tab20" if len(curves) > 10 else "tab10", max(1, len(curves)))
+        for ci, (label, group, metric) in enumerate(curves):
             k, edges = counts(group, metric, var)
             n, _ = counts(group, "den", var)
             ok = n > 0
@@ -271,13 +294,14 @@ def plot(args):
                             for kk, nn in zip(kval, nval)])
             high = np.array([ROOT.TEfficiency.ClopperPearson(int(nn), int(kk), .682689492, True)
                              for kk, nn in zip(kval, nval)])
-            ax.errorbar(centers[ok], y, yerr=[y - low, high - y], marker=".", ms=4, lw=1, label=label)
+            ax.errorbar(centers[ok], y, yerr=[y - low, high - y], marker=".", ms=4, lw=1,
+                        color=colors(ci), label=label)
         ax.set_xlabel(LABELS[var]); ax.set_ylabel(ylabel)
         ax.set_ylim(0, 1.02); ax.grid(alpha=.25)
         if var == "pt": ax.set_xlim(0.1 if logarithmic else 0, ptmax)
         if logarithmic: ax.set_xscale("log")
         ax.set_title(title, fontsize=10)
-        ax.legend(fontsize=7, ncol=2, loc="upper center", bbox_to_anchor=(.5, -.14))
+        ax.legend(fontsize=7, ncol=3 if len(curves) > 8 else 2, loc="upper center", bbox_to_anchor=(.5, -.14))
         fig.text(.01, .01, "All accepted signal gen; unweighted; ID before matching; same-charge station 2\n"
                  "ΔR <0.06 inner/global, <0.10 outer; propagation failures in denominator; flow bins saved in ROOT; 68.27% intervals",
                  fontsize=7)
@@ -309,7 +333,9 @@ def plot(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--mode", choices=("analyze", "replot"), default="analyze")
+    parser.add_argument("--revision", default="unspecified", help="analysis code revision stored in numerical ROOT")
     parser.add_argument("--input-dir", type=Path)
+    parser.add_argument("--report-dir", type=Path, help="per-sample FrameworkJobReport directory (required for full analysis)")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--plot-dir", type=Path)
     parser.add_argument("--no-plots", action="store_true")
@@ -321,6 +347,10 @@ def main():
     if args.mode == "analyze":
         if args.input_dir is None:
             parser.error("--input-dir required in analyze mode")
+        if args.expected_samples > 1 and args.report_dir is None:
+            parser.error("--report-dir required to verify full original-input coverage")
+        if args.expected_samples > 1 and args.revision == "unspecified":
+            parser.error("--revision required for full analysis provenance")
         analyze(args)
     if not args.no_plots:
         if args.plot_dir is None:
