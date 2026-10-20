@@ -88,7 +88,10 @@ def main():
         q = Path(item)
         files += sorted(q.glob("*.root")) if q.is_dir() else [q]
     for path in files:
-        print(check_file(path, old, args.oracle_events), flush=True)
+        res = check_file(path, old, args.oracle_events)
+        print(res, flush=True)
+        if res["oracle_mismatch"] or res["old_mismatch"]:
+            raise SystemExit("MISMATCH in " + str(path))
 
 
 if __name__ == "__main__":

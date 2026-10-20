@@ -49,6 +49,8 @@ CUTFLOW = ("all events", "two signal muons (mu-,mu+)", "both accepted", "both ma
 
 
 def wrap(x):
+    """Wrapped difference; NaN when an input is the -999 sentinel (missing MET or leg)."""
+    x = np.where(np.abs(x) > 500, np.nan, x)
     return (x + np.pi) % (2 * np.pi) - np.pi
 
 
@@ -164,6 +166,9 @@ def analyze(args):
         [e["two"] & (e["nElig"] >= 2), anyvalid, e["matched"] & anyvalid]
     # Distribution entries
     evsel = st == 3
+    for k in ("genMetPhi", "pfMetPhi", "genPhi", "recoPhi"):
+        e[k] = np.where(e[k] < -900, np.nan, e[k])
+    p["pRecoMuMuPhi"] = np.where(p["pRecoMuMuPhi"] < -900, np.nan, p["pRecoMuMuPhi"])
     ev_vals = {"chi2": e["chi2"], "drGen": e["genDR"], "drReco": e["drReco"],
                "dphiGen": wrap(e["genMetPhi"] - e["genPhi"]), "dphiPF": wrap(e["pfMetPhi"] - e["recoPhi"])}
     pv = p["pStatus"] == 3
@@ -218,8 +223,13 @@ def analyze(args):
         for s, (sel, vals, sid) in dist.items():
             gsel = sel & (np.ones(len(sel), bool) if ids is None else np.isin(sid, list(ids)))
             for var, edges in DIST_EDGES.items():
-                write_hist("%s__%s" % (s, var), DIST_LABELS[var], edges, flowcounts(vals[var][gsel], edges))
+                write_hist("%s__%s" % (s, var), DIST_LABELS[var], edges, flowcounts(vals[var][gsel & np.isfinite(vals[var])], edges))
     root.Close()
+    for s_, (sel, vals, sid) in dist.items():
+        for var in ("dphiGen", "dphiPF"):
+            bad = int((sel & ~np.isfinite(vals[var])).sum())
+            if bad:
+                print("EXCLUDED %d %s entries with missing MET/leg phi in %s" % (bad, var, s_), flush=True)
     print("VALIDATED: events=%d groups=%d" % (total, len(groups)), flush=True)
     print("CUTFLOW (overall):")
     allc = [int(m.sum()) for m in cutflow]
