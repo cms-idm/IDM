@@ -318,7 +318,7 @@ def plot(args):
                 curve(ax[i], *ratio(group, num, den, var), "best–best (hierarchy)", "k")
                 for j, c in enumerate(CATS):
                     n_, d_ = typed + c, ("tmatched_" + c if den == "matched" else "den")
-                    curve(ax[i], *ratio(group, n_, d_, var), CAT_NAMES[c], cmap(j))
+                    curve(ax[i], *ratio(group, n_, d_, var), CAT_NAMES[c], plt.get_cmap("tab10")(j))
                 if den == "matched":
                     curve(ax[i], *ratio(group, "anyMatchedValid", "matched", var), "any pair (≥1 valid, matched events)", "0.5")
                 if den == "den" and num == "valid":
