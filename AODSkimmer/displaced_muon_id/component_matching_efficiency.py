@@ -278,6 +278,7 @@ def plot(args):
     def draw(curves, var, title, path, ylabel, logarithmic=False):
         fig, ax = plt.subplots(figsize=(10, 6.5))
         ptmax = 1.
+        rate_max = 0.
         colors = plt.cm.get_cmap("tab20" if len(curves) > 10 else "tab10", max(1, len(curves)))
         for ci, (label, group, metric) in enumerate(curves):
             k, edges = counts(group, metric, var)
@@ -294,18 +295,24 @@ def plot(args):
                             for kk, nn in zip(kval, nval)])
             high = np.array([ROOT.TEfficiency.ClopperPearson(int(nn), int(kk), .682689492, True)
                              for kk, nn in zip(kval, nval)])
+            if len(high): rate_max = max(rate_max, float(np.max(high)))
             ax.errorbar(centers[ok], y, yerr=[y - low, high - y], marker=".", ms=4, lw=1,
                         color=colors(ci), label=label)
         ax.set_xlabel(LABELS[var]); ax.set_ylabel(ylabel)
-        ax.set_ylim(0, 1.02); ax.grid(alpha=.25)
+        discrepancy = all(metric in DISC for label, group, metric in curves)
+        ax.set_ylim(0, min(1.02, max(.001, 1.1 * rate_max)) if discrepancy else 1.02)
+        ax.grid(alpha=.25)
         if var == "pt": ax.set_xlim(0.1 if logarithmic else 0, ptmax)
         if logarithmic: ax.set_xscale("log")
-        ax.set_title(title, fontsize=10)
-        ax.legend(fontsize=7, ncol=3 if len(curves) > 8 else 2, loc="upper center", bbox_to_anchor=(.5, -.14))
-        fig.text(.01, .01, "All accepted signal gen; unweighted; ID before matching; same-charge station 2\n"
-                 "ΔR <0.06 inner/global, <0.10 outer; propagation failures in denominator; flow bins saved in ROOT; 68.27% intervals",
-                 fontsize=7)
-        fig.subplots_adjust(bottom=.30)
+        ax.set_title(title + " | 2022EE iDMμ signal MC (09-28)", fontsize=10)
+        ax.legend(fontsize=6.5 if len(curves) > 8 else 7, ncol=3 if len(curves) > 8 else 2,
+                  loc="upper center", bbox_to_anchor=(.5, -.14))
+        fig.text(.01, .01, "Signal: status-1 last-copy muons; first different-PDG ancestor |PDG ID|=1000023.\n"
+                 "Accepted gen: |η|<2.4, 0≤Lxy<740 cm, |z|<960 cm, any pT; raw/unweighted.\n"
+                 "Cleaned embedded components; ID first; no reco η/pT cut; same charge at station 2.\n"
+                 "ΔR<0.06 inner/global, <0.10 outer; propagation failures count as failures; 68.27% intervals; flow bins in ROOT.",
+                 fontsize=6.5)
+        fig.subplots_adjust(bottom=.33)
         fig.savefig(path, dpi=130); plt.close(fig)
     panels = (("efficiency", EFF), ("independent_discrepancy", DISC[:4]), ("hierarchy_discrepancy", DISC[4:]))
     for group in groups:
