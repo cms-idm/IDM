@@ -26,6 +26,7 @@ def check_file(path, old, oracle_events):
         t = f["preselectedVertexing/events"]
         a = t.arrays(library="np")
         npairs = f["preselectedVertexing/pairs"].num_entries
+        combos = f["preselectedVertexing/combos"].arrays(library="np")
     n = t.num_entries
     two = np.flatnonzero(a["twoAcc"])
     out = dict(sample=sample, events=n, twoAcc=len(two))
@@ -35,8 +36,9 @@ def check_file(path, old, oracle_events):
     if old is not None:
         si = old["samples"].index(sample)
         sel = old["sample"] == si
-        old_sel = {(int(e), int(g)): (int(h), int(ht)) for e, g, h, ht in
-                   zip(old["inputEntry"][sel], old["genParticleIndex"][sel], old["hierarchy"][sel], old["hierType"][sel])}
+        old_sel = {(int(e), int(g)): (int(h), int(ht), int(i0), int(i1), int(i2)) for e, g, h, ht, i0, i1, i2 in
+                   zip(old["inputEntry"][sel], old["genParticleIndex"][sel], old["hierarchy"][sel], old["hierType"][sel],
+                       old["inner"][sel], old["outer"][sel], old["global"][sel])}
     for k, ei in enumerate(two):
         gq = np.asarray(a["sigQ"][ei]); gp = np.asarray(a["sigProp"][ei]).astype(int)
         ge = np.asarray(a["sigEta2"][ei], dtype=np.float32); gf = np.asarray(a["sigPhi2"][ei], dtype=np.float32)
@@ -44,29 +46,42 @@ def check_file(path, old, oracle_events):
         idp = np.asarray(a["cIdPass"][ei]).astype(bool); eta = np.asarray(a["cInEta"][ei]).astype(bool)
         cp = np.asarray(a["cProp"][ei]).astype(int)
         ce = np.asarray(a["cEta2"][ei], dtype=np.float32); cf = np.asarray(a["cPhi2"][ei], dtype=np.float32)
-        for gated, objs, types in ((True, a["matchObj"][ei], a["matchType"][ei]),
-                                   (False, a["matchObjNoEta"][ei], a["matchTypeNoEta"][ei])):
+        for gated, objs, types, inds in ((True, a["matchObj"][ei], a["matchType"][ei], a["indObj"][ei]),
+                                         (False, a["matchObjNoEta"][ei], a["matchTypeNoEta"][ei], a["indObjNoEta"][ei])):
             if k < oracle_events:
                 elig = idp & (eta if gated else True)
-                _, hier, tier = cme.oracle(gq, gp, ge, gf, ct, co, cq, (cp * elig).astype(int), ce, cf)
-                if not (np.array_equal(hier, objs) and np.array_equal(tier, types)):
+                indep, hier, tier = cme.oracle(gq, gp, ge, gf, ct, co, cq, (cp * elig).astype(int), ce, cf)
+                ind_flat = np.asarray(inds).reshape(3, 2)  # [type][gen]
+                if not (np.array_equal(hier, objs) and np.array_equal(tier, types)
+                        and np.array_equal(indep.T, ind_flat)):
                     mism_oracle += 1
                 if gated:
                     checked += 1
             if not gated and old_sel is not None:
                 for g, gi in enumerate(a["sigIndex"][ei]):
                     ref = old_sel.get((int(ei), int(gi)))
-                    if ref is None or ref != (int(objs[g]), int(types[g])):
+                    mine = (int(objs[g]), int(types[g]), *(int(inds[2 * t + g]) for t in range(3)))
+                    if ref is None or ref != mine:
                         mism_old += 1
     out.update(oracle_events=checked, oracle_mismatch=mism_oracle, old_mismatch=mism_old if old_sel else None)
     # bookkeeping
-    st, cat, ok = a["bbStatus"], a["bbCat"], a["twoAcc"]
+    st, ok = a["bbStatus"], a["twoAcc"]
     matched = np.array([len(m) == 2 and m[0] >= 0 and m[1] >= 0 for m in a["matchComp"]])
     assert np.array_equal(matched, st > 0), "bbStatus>0 must equal both matched"
-    assert np.all((cat >= 0) == (st > 0)) and np.all(cat < 6)
     assert ok[st > 0].all()
     assert a["anyNPairs"].sum() == npairs, "pair tree rows != sum(anyNPairs)"
     assert np.all(a["anyNValid"] <= a["anyNPairs"])
+    # combos: one row per ordered (a,b) where gen0 has an independent type-a and gen1 a type-b match
+    expected = []
+    for ei in two:
+        ind = np.asarray(a["indObj"][ei]).reshape(3, 2)
+        expected += [(int(ei), ta, tb) for ta in range(3) if ind[ta, 0] >= 0 for tb in range(3) if ind[tb, 1] >= 0]
+    got = list(zip(combos["kEvent"].tolist(), combos["kTypeA"].tolist(), combos["kTypeB"].tolist()))
+    assert len(set(got)) == len(got), "duplicate (event, typeA, typeB) combo rows"
+    assert sorted(got) == sorted(expected), "combo (event, typeA, typeB) set differs from independent matches"
+    exp = len(expected)
+    assert np.all(ok[combos["kEvent"]]), "combo in non-twoAcc event"
+    out.update(combos=int(exp), combos_valid=int((combos["kStatus"] == 3).sum()))
     out.update(matched=int(matched.sum()), valid=int((st == 3).sum()), failed=int((st == 2).sum()),
                shared=int((st == 1).sum()), pairs=int(npairs))
     return out

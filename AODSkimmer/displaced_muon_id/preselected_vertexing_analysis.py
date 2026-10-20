@@ -5,8 +5,10 @@ python3 preselected_vertexing_analysis.py analyze --input-dir RUN/inputs --repor
 python3 preselected_vertexing_analysis.py plot --output RUN/vertexing.root --plot-dir RUN/plots [--log]
 Study note: kb/studies/preselected-vertexing-efficiency.md. ROOT is the numerical source (raw unweighted counts,
 Sumw2, flow bins kept); `plot` reads only that ROOT file. --log adds log copies, never replaces linear PNGs.
-Efficiency denominators: events with two accepted gen ('den') unless stated 'matched' (both signal muons matched
-by the hierarchy). Any-pair distributions have one entry per valid pair; best-best one entry per event.
+Efficiency denominators: events with two accepted gen ('den') unless stated 'matched'. Sets: bb = hierarchy
+best-best (one set), any = all pairs of eligible objects, six typed sets (independent per-type matching, ordered
+combos). Distribution entries: bb one per event; any one per valid pair; typed one per valid ORDERED fit.
+Initial events = all processed events (10000 per sample).
 """
 import argparse
 from array import array
@@ -18,33 +20,33 @@ import numpy as np
 CATS = ("GG", "II", "OO", "GO", "GI", "OI")
 CAT_NAMES = {"GG": "Global–Global", "II": "Inner–Inner", "OO": "DSA–DSA", "GO": "Global–DSA",
              "GI": "Global–Inner", "OI": "DSA–Inner"}
-SETS = ("bb_all",) + tuple("bb_" + c for c in CATS) + ("any_all",) + tuple("any_" + c for c in CATS)
-SET_NAMES = {"bb": "Best–best (hierarchy)", "any": "Any two pre-selected objects"}
+# Types: 0 inner, 1 outer (DSA), 2 global. Ordered combos (gen0 type, gen1 type) per unordered category.
+ORDERINGS = {"GG": ((2, 2),), "II": ((0, 0),), "OO": ((1, 1),), "GO": ((2, 1), (1, 2)),
+             "GI": ((2, 0), (0, 2)), "OI": ((1, 0), (0, 1))}
+SETS = ("bb", "any") + CATS
+SET_NAMES = {"bb": "Best–best (hierarchy)", "any": "Any two pre-selected objects",
+             **{c: CAT_NAMES[c] + " (typed fit)" for c in CATS}}
 EFF_EDGES = {
-    "pt": np.r_[np.arange(0, 31, 1), np.arange(35, 105, 5), np.arange(125, 525, 25), np.arange(600, 2100, 100)],
+    "d0": np.arange(0, 16, 1.0), "lxy": np.arange(0, 31, 1.0), "pt": np.arange(0, 31, 1.0),
     "eta": np.linspace(0, 2.4, 13),
-    "lxy": np.r_[np.arange(0, 21, 1), np.arange(30, 751, 10)],
-    "d0": np.r_[np.arange(0, 10.5, .5), np.arange(15, 105, 5), np.arange(120, 741, 20)],
-    "lxy30": np.arange(31, dtype=float),
-    "d030": np.arange(31, dtype=float),
 }
-EFF_LABELS = {"pt": r"Min gen signal-muon $p_T$ [GeV]", "eta": r"Max gen signal-muon $|\eta|$",
-              "lxy": r"Gen production $L_{xy}$ [cm]", "d0": r"Max gen $|d_0|$ to origin [cm]",
-              "lxy30": r"Gen production $L_{xy}$ [cm] (0–30)", "d030": r"Max gen $|d_0|$ to origin [cm] (0–30)"}
+EFF_LABELS = {"pt": r"Leading gen signal-muon $p_T$ [GeV]", "eta": r"Max gen signal-muon $|\eta|$",
+              "lxy": r"Gen production $L_{xy}$ [cm]", "d0": r"Max gen $|d_0|$ to origin [cm]"}
 DIST_EDGES = {
     "chi2": np.r_[np.arange(0, 10.01, .25), 12, 15, 20, 30, 50, 100, 1000],
     "drGen": np.arange(0, 5.01, .1), "drReco": np.arange(0, 5.01, .1),
     "dphiGen": np.linspace(-np.pi, np.pi, 33), "dphiPF": np.linspace(-np.pi, np.pi, 33),
     "absdphiGen": np.linspace(0, np.pi, 33), "absdphiPF": np.linspace(0, np.pi, 33),
 }
+PLOT_DISTS = ("chi2", "drGen", "drReco", "absdphiGen", "absdphiPF")
 DIST_LABELS = {"chi2": r"Vertex $\chi^2$/ndof", "drGen": r"$\Delta R$(gen signal pair)",
-               "drReco": r"$\Delta R$(reco pair, track reference point)",
+               "drReco": r"$\Delta R$(reco pair, track ref. point)",
                "dphiGen": r"$\Delta\phi$(gen MET, gen $\mu\mu$ $p_T$) [rad]",
                "dphiPF": r"$\Delta\phi$(PF MET, reco $\mu\mu$ $p_T$) [rad]",
                "absdphiGen": r"$|\Delta\phi|$(gen MET, gen $\mu\mu$ $p_T$) [rad]",
                "absdphiPF": r"$|\Delta\phi|$(PF MET, reco $\mu\mu$ $p_T$) [rad]"}
-CUTFLOW = ("all events", "two signal muons (mu-,mu+)", "both accepted", "both matched (hierarchy)",
-           "best-best vertex valid") + tuple("matched " + c for c in CATS) + tuple("valid " + c for c in CATS) + (
+CUTFLOW = ("initial events", "two signal muons (mu-,mu+)", "both accepted", "both matched (hierarchy)",
+           "best-best vertex valid") + tuple("typed matched " + c for c in CATS) + tuple("typed valid " + c for c in CATS) + (
           "accepted & >=2 pre-selected objects", "accepted & >=1 valid any-pair", "matched & >=1 valid any-pair")
 
 
@@ -60,7 +62,7 @@ def load_samples(args):
     paths = sorted(Path(args.input_dir).glob("*.root"))
     if len(paths) != args.expected_samples:
         raise RuntimeError("Unexpected number of sample ROOT inputs: %d" % len(paths))
-    names, revisions, cols, pcols, counts = [], set(), [], [], []
+    names, revisions, cols, pcols, kcols, counts = [], set(), [], [], [], []
     base = 0
     for si, path in enumerate(paths):
         with uproot.open(path) as f:
@@ -85,9 +87,9 @@ def load_samples(args):
                 return out
             cols.append(dict(
                 sample=np.full(n, si), sig2=np.asarray(sig2), two=two,
-                matched=np.asarray(a["bbStatus"]) > 0, status=np.asarray(a["bbStatus"]), cat=np.asarray(a["bbCat"]),
+                matched=np.asarray(a["bbStatus"]) > 0, status=np.asarray(a["bbStatus"]),
                 nElig=np.asarray(a["nElig"]), anyN=np.asarray(a["anyNPairs"]), anyV=np.asarray(a["anyNValid"]),
-                pt=per2(a["sigPt"], lambda v: v.min(axis=1)), eta=per2(a["sigEta"], lambda v: np.abs(v).max(axis=1)),
+                pt=per2(a["sigPt"], lambda v: v.max(axis=1)), eta=per2(a["sigEta"], lambda v: np.abs(v).max(axis=1)),
                 d0=per2(a["sigD0"], lambda v: v.max(axis=1)), lxy=per2(a["sigLxy"], lambda v: v[:, 0]),
                 genDR=np.asarray(a["genDR"]), genPhi=np.asarray(a["genMuMuPhi"]), genMetPhi=np.asarray(a["genMetPhi"]),
                 pfMetPhi=np.asarray(a["pfMetPhi"]), chi2=np.asarray(a["bbChi2"]), drReco=np.asarray(a["bbRecoDR"]),
@@ -95,13 +97,17 @@ def load_samples(args):
             p = f["preselectedVertexing/pairs"].arrays(library="np")
             p["pEvent"] = p["pEvent"] + base
             pcols.append(p)
+            k = f["preselectedVertexing/combos"].arrays(library="np")
+            k["kEvent"] = k["kEvent"] + base
+            kcols.append(k)
             counts.append(n)
             base += n
     cat_cols = {k: np.concatenate([c[k] for c in cols]) for k in cols[0]}
     pair_cols = {k: np.concatenate([p[k] for p in pcols]) for k in pcols[0]}
+    combo_cols = {k: np.concatenate([c[k] for c in kcols]) for k in kcols[0]}
     if len(revisions) != 1 or "unspecified" in revisions:
         raise RuntimeError("Mixed/unspecified processing revision")
-    return names, counts, cat_cols, pair_cols, next(iter(revisions))
+    return names, counts, cat_cols, pair_cols, combo_cols, next(iter(revisions))
 
 
 def check_report(report_dir, sample, n_events):
@@ -137,58 +143,55 @@ def analyze(args):
     import ROOT
     if Path(args.output).exists():
         raise RuntimeError("Refusing to overwrite numerical ROOT source")
-    names, counts, e, p, revision = load_samples(args)
+    names, counts, e, p, k, revision = load_samples(args)
     total = sum(counts)
     if args.expected_events and total != args.expected_events:
         raise RuntimeError("Event total %d != expected %d" % (total, args.expected_events))
-    # Consistency checks on the arrays
     st = e["status"]
-    if np.any(e["matched"] & ~e["two"]) or np.any((e["cat"] >= 0) != e["matched"]):
-        raise RuntimeError("Matched/category/acceptance inconsistency")
-    if np.any(e["two"] & ~e["sig2"]):
-        raise RuntimeError("twoAcc without two opposite-charge signal muons")
-    if int(p["pStatus"].size) != int(e["anyN"].sum()):
-        raise RuntimeError("Pair rows != sum anyNPairs")
-    if int((p["pStatus"] == 3).sum()) != int(e["anyV"].sum()):
-        raise RuntimeError("Valid pair rows != sum anyNValid")
+    if np.any(e["matched"] & ~e["two"]) or np.any(e["two"] & ~e["sig2"]):
+        raise RuntimeError("Matched/acceptance inconsistency")
+    if int(p["pStatus"].size) != int(e["anyN"].sum()) or int((p["pStatus"] == 3).sum()) != int(e["anyV"].sum()):
+        raise RuntimeError("Pair rows differ from per-event counts")
+    if not np.all(e["two"][k["kEvent"]]):
+        raise RuntimeError("Typed combo in a non-two-accepted event")
     anyvalid = e["two"] & (e["anyV"] > 0)
-    # Event-level masks
-    masks = {"den": e["two"], "matched": e["matched"], "valid": st == 3,
-             "anyValid": anyvalid, "anyMatchedValid": e["matched"] & anyvalid}
-    for i, c in enumerate(CATS):
-        masks["matched_" + c] = e["matched"] & (e["cat"] == i)
-        masks["valid_" + c] = (st == 3) & (e["cat"] == i)
-    if sum(int(masks["matched_" + c].sum()) for c in CATS) != int(masks["matched"].sum()) or \
-       sum(int(masks["valid_" + c].sum()) for c in CATS) != int(masks["valid"].sum()):
-        raise RuntimeError("Categories do not partition best-best")
+    masks = {"den": e["two"], "matched": e["matched"], "valid": st == 3, "anyValid": anyvalid,
+             "anyMatchedValid": e["matched"] & anyvalid}
+    combo_sel = {}
+    for c in CATS:
+        sel = np.zeros(len(k["kEvent"]), bool)
+        for a_, b_ in ORDERINGS[c]:
+            sel |= (k["kTypeA"] == a_) & (k["kTypeB"] == b_)
+        combo_sel[c] = sel
+        m_ev = np.zeros(total, bool); m_ev[k["kEvent"][sel]] = True
+        v_ev = np.zeros(total, bool); v_ev[k["kEvent"][sel & (k["kStatus"] == 3)]] = True
+        masks["tmatched_" + c] = m_ev
+        masks["tvalid_" + c] = v_ev
+    if np.any(masks["den"] < (masks["matched"])) or any(np.any(masks["tvalid_" + c] & ~masks["tmatched_" + c]) for c in CATS):
+        raise RuntimeError("Numerator outside denominator")
     cutflow = [np.ones(total, bool), e["sig2"], e["two"], e["matched"], st == 3] + \
-        [masks["matched_" + c] for c in CATS] + [masks["valid_" + c] for c in CATS] + \
+        [masks["tmatched_" + c] for c in CATS] + [masks["tvalid_" + c] for c in CATS] + \
         [e["two"] & (e["nElig"] >= 2), anyvalid, e["matched"] & anyvalid]
-    # Distribution entries
-    evsel = st == 3
-    for k in ("genMetPhi", "pfMetPhi", "genPhi", "recoPhi"):
-        e[k] = np.where(e[k] < -900, np.nan, e[k])
-    p["pRecoMuMuPhi"] = np.where(p["pRecoMuMuPhi"] < -900, np.nan, p["pRecoMuMuPhi"])
-    ev_vals = {"chi2": e["chi2"], "drGen": e["genDR"], "drReco": e["drReco"],
-               "dphiGen": wrap(e["genMetPhi"] - e["genPhi"]), "dphiPF": wrap(e["pfMetPhi"] - e["recoPhi"])}
-    pv = p["pStatus"] == 3
+    for k_ in ("genMetPhi", "pfMetPhi", "genPhi", "recoPhi"):
+        e[k_] = np.where(e[k_] < -900, np.nan, e[k_])
+    for k_ in ("pRecoMuMuPhi",):
+        p[k_] = np.where(p[k_] < -900, np.nan, p[k_])
+    k["kRecoMuMuPhi"] = np.where(k["kRecoMuMuPhi"] < -900, np.nan, k["kRecoMuMuPhi"])
+    def vals(chi2, drgen, drreco, genmetphi, genphi, pfmetphi, recophi):
+        d = {"chi2": chi2, "drGen": drgen, "drReco": drreco, "dphiGen": wrap(genmetphi - genphi),
+             "dphiPF": wrap(pfmetphi - recophi)}
+        d["absdphiGen"] = np.abs(d["dphiGen"]); d["absdphiPF"] = np.abs(d["dphiPF"])
+        return d
+    dist = {"bb": (st == 3, vals(e["chi2"], e["genDR"], e["drReco"], e["genMetPhi"], e["genPhi"], e["pfMetPhi"], e["recoPhi"]),
+                   e["sample"])}
     pe = p["pEvent"]
-    pair_vals = {"chi2": p["pChi2"], "drGen": e["genDR"][pe], "drReco": p["pRecoDR"],
-                 "dphiGen": wrap(e["genMetPhi"][pe] - e["genPhi"][pe]),
-                 "dphiPF": wrap(e["pfMetPhi"][pe] - p["pRecoMuMuPhi"])}
-    for d in (ev_vals, pair_vals):
-        d["absdphiGen"] = np.abs(d["dphiGen"])
-        d["absdphiPF"] = np.abs(d["dphiPF"])
-    dist = {}
-    for s in SETS:
-        kind, c = s.split("_")
-        if kind == "bb":
-            sel = evsel & (True if c == "all" else e["cat"] == CATS.index(c))
-            dist[s] = (sel, ev_vals, e["sample"])
-        else:
-            sel = pv & (True if c == "all" else p["pCat"] == CATS.index(c))
-            dist[s] = (sel, pair_vals, e["sample"][pe])
-    # Groups
+    dist["any"] = (p["pStatus"] == 3, vals(p["pChi2"], e["genDR"][pe], p["pRecoDR"], e["genMetPhi"][pe], e["genPhi"][pe],
+                                          e["pfMetPhi"][pe], p["pRecoMuMuPhi"]), e["sample"][pe])
+    ke = k["kEvent"]
+    kv = vals(k["kChi2"], e["genDR"][ke], k["kRecoDR"], e["genMetPhi"][ke], e["genPhi"][ke], e["pfMetPhi"][ke],
+              k["kRecoMuMuPhi"])
+    for c in CATS:
+        dist[c] = (combo_sel[c] & (k["kStatus"] == 3), kv, e["sample"][ke])
     groups = {"overall": None}
     for si, sample in enumerate(names):
         mass, tau = sample.rsplit("_ctau-", 1)
@@ -199,10 +202,11 @@ def analyze(args):
     if not root or root.IsZombie():
         raise RuntimeError("Cannot create ROOT output")
     ROOT.TNamed("definitions", "Events with two accepted gen = exactly two opposite-charge signal muons both accepted "
-        "(|eta|<2.4,0<=Lxy<740,|vz|<960,no pT). Hierarchy global>outer>inner, station-2, same charge, dR<0.06 (I,G) <0.10 (O), "
-        "whole-object claim. Eligible component = own ID and own |eta|<2.4. Best-best = fit of matched components; "
-        "categories partition best-best. Any = all pairs of distinct eligible objects at best component (G>O>I). "
-        "Raw unweighted. Any distributions one entry per valid pair; best-best one per event. Flow kept.").Write()
+        "(|eta|<2.4,0<=Lxy<740,|vz|<960,no pT). Eligible component = own ID and own |eta|<2.4. bb = hierarchy "
+        "global>outer>inner (station-2, same charge, dR<0.06 I,G <0.10 O, whole-object claim) best-best fit, one set. "
+        "Typed sets GG,II,OO,GO,GI,OI = independent per-type matching and ordered combo fits; event matched/valid = "
+        "any ordering; distributions one entry per valid ordered fit. any = all pairs of distinct eligible objects at "
+        "best component (G>O>I), one entry per valid pair. Raw unweighted; flow kept; initial events = all processed.").Write()
     ROOT.TNamed("analysisRevision", args.revision).Write()
     ROOT.TNamed("inputRevision", revision).Write()
     ROOT.TNamed("samples", "\n".join(names)).Write()
@@ -212,29 +216,42 @@ def analyze(args):
         d = top.mkdir(gname)
         d.cd()
         ev_sel = np.ones(total, bool) if ids is None else np.isin(e["sample"], list(ids))
-        # cutflow
         write_hist("cutflow", "cutflow", np.arange(len(CUTFLOW) + 1, dtype=float),
                    np.r_[0, [int((m & ev_sel).sum()) for m in cutflow], 0])
         for var, edges in EFF_EDGES.items():
-            key = {"lxy30": "lxy", "d030": "d0"}.get(var, var)
             for mname, m in masks.items():
-                write_hist("%s__%s" % (mname, var), EFF_LABELS[var], edges,
-                           flowcounts(e[key][m & ev_sel], edges))
-        for s, (sel, vals, sid) in dist.items():
+                write_hist("%s__%s" % (mname, var), EFF_LABELS[var], edges, flowcounts(e[var][m & ev_sel], edges))
+        for s_, (sel, v, sid) in dist.items():
             gsel = sel & (np.ones(len(sel), bool) if ids is None else np.isin(sid, list(ids)))
             for var, edges in DIST_EDGES.items():
-                write_hist("%s__%s" % (s, var), DIST_LABELS[var], edges, flowcounts(vals[var][gsel & np.isfinite(vals[var])], edges))
+                write_hist("%s__%s" % (s_, var), DIST_LABELS[var], edges, flowcounts(v[var][gsel & np.isfinite(v[var])], edges))
     root.Close()
-    for s_, (sel, vals, sid) in dist.items():
+    chk = ROOT.TFile.Open(str(args.output))  # histogram totals incl. flow == selected entries (overall)
+    for s_, (sel, v, sid) in dist.items():
+        hh = chk.Get("groups/overall/%s__chi2" % s_)
+        if int(hh.Integral(0, hh.GetNbinsX() + 1)) != int((sel & np.isfinite(v["chi2"])).sum()):
+            raise RuntimeError("Histogram total differs from valid entries: " + s_)
+    for m_ in ("den", "matched", "valid", "anyValid", "anyMatchedValid") + tuple(
+            p_ + c for p_ in ("tmatched_", "tvalid_") for c in CATS):
+        hh = chk.Get("groups/overall/%s__d0" % m_)
+        if int(hh.Integral(0, hh.GetNbinsX() + 1)) != int((masks[m_] & np.isfinite(e["d0"])).sum()):
+            raise RuntimeError("Efficiency histogram total differs: " + m_)
+    chk.Close()
+    for s_, (sel, v, sid) in dist.items():
         for var in ("dphiGen", "dphiPF"):
-            bad = int((sel & ~np.isfinite(vals[var])).sum())
+            bad = int((sel & ~np.isfinite(v[var])).sum())
             if bad:
                 print("EXCLUDED %d %s entries with missing MET/leg phi in %s" % (bad, var, s_), flush=True)
     print("VALIDATED: events=%d groups=%d" % (total, len(groups)), flush=True)
-    print("CUTFLOW (overall):")
+    print("CUTFLOW (overall; initial events = %d):" % total)
     allc = [int(m.sum()) for m in cutflow]
     for label, c in zip(CUTFLOW, allc):
-        print("  %-40s %9d  %.4f of all  %.4f of accepted" % (label, c, c / allc[0], c / max(allc[2], 1)), flush=True)
+        print("  %-38s %9d  %.4f of initial  %.4f of accepted" % (label, c, c / allc[0], c / max(allc[2], 1)), flush=True)
+    print("PER-SAMPLE CUTFLOW: sample, initial, accepted, matched, vertexed, matched/initial, vertexed/initial")
+    for si, name in enumerate(names):
+        sel = e["sample"] == si
+        n0, n2, n3, n4 = (int((m & sel).sum()) for m in (cutflow[0], cutflow[2], cutflow[3], cutflow[4]))
+        print("  %-36s %6d %6d %6d %6d  %.4f %.4f" % (name, n0, n2, n3, n4, n3 / n0, n4 / n0), flush=True)
 
 
 # ---------------------------------------------------------------------------------------------- plotting
@@ -247,6 +264,8 @@ def cp(k, n, level=0.6827):
 
 
 def plot(args):
+    """Deliberately small PNG set from the ROOT file only: cutflow (overall/mass/lifetime), efficiencies vs
+    d0/Lxy/pT/eta (overall + mass and lifetime overlays), distribution panels per set (overall + overlays)."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -255,24 +274,23 @@ def plot(args):
     out.mkdir(parents=True, exist_ok=True)
     f = uproot.open(args.output)
     groups = sorted({k.split("/")[1] for k in f.keys() if k.startswith("groups/") and k.count("/") == 2})
-    definitions = str(f["definitions"].member("fTitle"))
-    foot = "Pre-selected displacedMuons (ID+|eta|<2.4), hierarchy G>O>I; accepted gen = exactly 2 signal, both accepted; raw unweighted"
+    foot = ("Pre-selected displacedMuons (ID, |eta|<2.4); accepted = exactly 2 signal muons, both accepted; "
+            "raw unweighted; 68% Clopper-Pearson")
+    cmap = plt.get_cmap("tab10")
 
     def h(group, name):
         o = f["groups/%s/%s" % (group, name)]
         return o.values(flow=True), o.axis().edges()
 
-    def finish(fig, path, logx=False, logy=False):
+    def finish(fig, path):
         fig.text(0.01, 0.005, foot, fontsize=6.5, color="0.35")
         fig.tight_layout(rect=(0, 0.02, 1, 1))
         fig.savefig(path, dpi=110)
-        if args.log and (logx or logy):  # extra copy only; the linear PNG above is never replaced
-            for a in fig.axes:
-                if logx:
-                    a.set_xscale("symlog", linthresh=1)
-                if logy:
+        if args.log:  # extra log-y copy for distributions only; the linear PNG is never replaced
+            if path.name.startswith(("dist_", "overlay_dist")):
+                for a in fig.axes:
                     a.set_yscale("log")
-            fig.savefig(path.with_name(path.stem + "_log.png"), dpi=110)
+                fig.savefig(path.with_name(path.stem + "_log.png"), dpi=110)
         plt.close(fig)
 
     def ratio(group, num, den, var):
@@ -287,101 +305,98 @@ def plot(args):
     def curve(ax, edges, r, lo, hi, d, label, color=None):
         x = 0.5 * (edges[1:] + edges[:-1])
         ok = d > 0
-        ax.errorbar(x[ok], r[ok], yerr=[(r - lo)[ok], (hi - r)[ok]], fmt="o", ms=3, lw=1, label=label, color=color,
-                    xerr=0.5 * np.diff(edges)[ok] if len(x) < 40 else None)
+        ax.errorbar(x[ok], r[ok], yerr=[(r - lo)[ok], (hi - r)[ok]], fmt="o", ms=3, lw=1, label=label, color=color)
 
-    def eff_figs(group):
+    METRICS = (("matched", "den", "tmatched_", "Both matched / accepted"),
+               ("valid", "matched", "tvalid_", "Vertexed / both matched"),
+               ("valid", "den", "tvalid_", "Vertexed / accepted"))
+
+    def eff_overall(group):
         for var in EFF_EDGES:
-            fig, ax = plt.subplots(1, 2, figsize=(11, 4.2))
-            for num, den, lab in (("matched", "den", "both matched / accepted"),
-                                  ("valid", "den", "best–best vertexed / accepted"),
-                                  ("anyValid", "den", "≥1 valid any-pair / accepted")):
-                curve(ax[0], *ratio(group, num, den, var), lab)
-            for num, den, lab in (("valid", "matched", "best–best vertexed / matched"),
-                                  ("anyMatchedValid", "matched", "matched & ≥1 valid any-pair / matched")):
-                curve(ax[1], *ratio(group, num, den, var), lab)
-            for a, t in zip(ax, ("Relative to events with two accepted gen", "Relative to events with both matched")):
-                a.set_xlabel(EFF_LABELS[var]); a.set_ylabel("Efficiency"); a.set_title(t, fontsize=9)
-                a.set_ylim(0, 1.05); a.legend(fontsize=7); a.grid(alpha=.3)
-            fig.suptitle(group, fontsize=9)
-            finish(fig, out / ("eff_%s__%s.png" % (group, var)), logx=var in ("pt", "lxy", "d0"))
-            fig, ax = plt.subplots(1, 2, figsize=(11, 4.2))
-            for c in CATS:
-                curve(ax[0], *ratio(group, "valid_" + c, "matched_" + c, var), CAT_NAMES[c])
-                curve(ax[1], *ratio(group, "valid_" + c, "den", var), CAT_NAMES[c])
-            for a, t in zip(ax, ("Vertexed / matched in that category", "Vertexed in category / events with two accepted gen")):
-                a.set_xlabel(EFF_LABELS[var]); a.set_ylabel("Efficiency"); a.set_title(t, fontsize=9)
-                a.set_ylim(0, 1.05); a.legend(fontsize=7); a.grid(alpha=.3)
-            fig.suptitle(group, fontsize=9)
-            finish(fig, out / ("effcat_%s__%s.png" % (group, var)), logx=var in ("pt", "lxy", "d0"))
+            fig, ax = plt.subplots(1, 3, figsize=(15, 4.4))
+            for i, (num, den, typed, title) in enumerate(METRICS):
+                curve(ax[i], *ratio(group, num, den, var), "best–best (hierarchy)", "k")
+                for j, c in enumerate(CATS):
+                    n_, d_ = typed + c, ("tmatched_" + c if den == "matched" else "den")
+                    curve(ax[i], *ratio(group, n_, d_, var), CAT_NAMES[c], cmap(j))
+                if den == "matched":
+                    curve(ax[i], *ratio(group, "anyMatchedValid", "matched", var), "any pair (≥1 valid, matched events)", "0.5")
+                if den == "den" and num == "valid":
+                    curve(ax[i], *ratio(group, "anyValid", "den", var), "any pair (≥1 valid)", "0.5")
+                ax[i].set_xlabel(EFF_LABELS[var]); ax[i].set_ylabel("Efficiency"); ax[i].set_title(title, fontsize=9)
+                ax[i].set_ylim(0, 1.05); ax[i].grid(alpha=.3)
+            ax[2].legend(fontsize=6.5)
+            fig.suptitle("overall (typed sets: own matched count in the vertexing-given-matched panel)", fontsize=8)
+            finish(fig, out / ("eff_overall__%s.png" % var))
+
+    def eff_overlay(prefix, tag):
+        gs = [g for g in groups if g.startswith(prefix)]
+        for var in EFF_EDGES:
+            fig, ax = plt.subplots(1, 3, figsize=(15, 4.4))
+            for i, (num, den, typed, title) in enumerate(METRICS):
+                for j, g in enumerate(gs):
+                    curve(ax[i], *ratio(g, num, den, var), g[len(prefix):], cmap(j % 10))
+                ax[i].set_xlabel(EFF_LABELS[var]); ax[i].set_ylabel("Efficiency"); ax[i].set_ylim(0, 1.05)
+                ax[i].set_title("Best–best: " + title, fontsize=9); ax[i].grid(alpha=.3)
+            ax[2].legend(fontsize=6, ncol=2)
+            finish(fig, out / ("overlay_%s_eff__%s.png" % (tag, var)))
 
     def cutflow_fig(group):
         v, _ = h(group, "cutflow")
         v = v[1:-1]
-        fig, ax = plt.subplots(figsize=(8, 6))
+        fig, ax = plt.subplots(figsize=(9, 6.5))
         y = np.arange(len(CUTFLOW))[::-1]
         ax.barh(y, v)
         for yi, c in zip(y, v):
-            ax.text(c, yi, " %d (%.2f%% of all, %.2f%% of accepted)" % (c, 100 * c / max(v[0], 1), 100 * c / max(v[2], 1)),
+            ax.text(c, yi, " %d  (%.2f%% of initial, %.2f%% of accepted)" % (c, 100 * c / max(v[0], 1), 100 * c / max(v[2], 1)),
                     va="center", fontsize=7)
         ax.set_yticks(y); ax.set_yticklabels(CUTFLOW, fontsize=8); ax.set_xlabel("Events (raw)")
-        ax.set_xlim(0, v.max() * 1.6 if v.max() else 1); ax.set_title("Cutflow: " + group, fontsize=9)
+        ax.set_xlim(0, v.max() * 1.9 if v.max() else 1); ax.set_title("Cutflow: " + group, fontsize=9)
         finish(fig, out / ("cutflow_%s.png" % group))
 
-    def dist_figs(group, with_sample):
-        for s in SETS:
-            for var, edges in DIST_EDGES.items():
-                v, _ = h(group, "%s__%s" % (s, var))
-                if v[1:-1].sum() == 0:
+    def panels(groupnames, labels, s, norm, fname, title):
+        fig, ax = plt.subplots(2, 3, figsize=(14, 7.5))
+        ax = ax.ravel()
+        for pi, var in enumerate(PLOT_DISTS):
+            edges = DIST_EDGES[var]
+            if var == "chi2":
+                edges = edges[edges <= 20]
+            for gi, (g, lab) in enumerate(zip(groupnames, labels)):
+                v, e_full = h(g, "%s__%s" % (s, var))
+                tot = v.sum()
+                nb = len(edges) - 1
+                vals = v[1:nb + 1]
+                if tot == 0:
                     continue
-                fig, ax = plt.subplots(figsize=(5.6, 4.2))
-                ax.stairs(v[1:-1], edges)
-                ax.set_xlabel(DIST_LABELS[var]); ax.set_ylabel("Entries (raw)")
-                kind, c = s.split("_")
-                ax.set_title("%s %s: %s\nunder/overflow: %d/%d" % (SET_NAMES[kind], "" if c == "all" else CAT_NAMES[c],
-                             group, v[0], v[-1]), fontsize=8)
-                finish(fig, out / ("dist_%s__%s__%s.png" % (group, s, var)), logy=True)
+                ax[pi].stairs(vals / (tot if norm else 1), edges, label=lab, color=cmap(gi % 10))
+            ax[pi].set_xlabel(DIST_LABELS[var]); ax[pi].set_ylabel("Unit area (incl. overflow)" if norm else "Entries (raw)")
+            if var == "chi2":
+                ax[pi].set_title("range 0–20; larger values in overflow", fontsize=7)
+        if len(groupnames) > 1:
+            ax[0].legend(fontsize=6, ncol=2)
+        ax[5].axis("off")
+        v, _ = h(groupnames[0], "%s__chi2" % s)
+        if len(groupnames) == 1:
+            ax[5].text(0, 0.5, "%s\n%s\nvalid fits: %d" % (SET_NAMES[s], title, v.sum()), fontsize=10)
+        else:
+            ax[5].text(0, 0.5, "%s\n%s" % (SET_NAMES[s], title), fontsize=10)
+        finish(fig, out / fname)
 
-    def overlay_figs(prefix, tag):
-        gs = [g for g in groups if g.startswith(prefix)]
-        for var in ("d0", "d030"):
-            for num, den, lab in (("matched", "den", "both matched / accepted"), ("valid", "den", "vertexed / accepted"),
-                                  ("valid", "matched", "vertexed / matched")):
-                fig, ax = plt.subplots(figsize=(7, 4.5))
-                for g in gs:
-                    curve(ax, *ratio(g, num, den, var), g[len(prefix):])
-                ax.set_xlabel(EFF_LABELS[var]); ax.set_ylabel(lab); ax.set_ylim(0, 1.05); ax.grid(alpha=.3)
-                ax.legend(fontsize=6, ncol=2); ax.set_title("%s overlay: %s" % (tag, lab), fontsize=9)
-                finish(fig, out / ("overlay_%s_%s_%s_%s.png" % (tag, num, den, var)))
-        for s in SETS:
-            for var, edges in DIST_EDGES.items():
-                for norm in (False, True):
-                    fig, ax = plt.subplots(figsize=(6.5, 4.5))
-                    drawn = False
-                    for g in gs:
-                        v, _ = h(g, "%s__%s" % (s, var))
-                        tot = v.sum()
-                        if v[1:-1].sum() == 0:
-                            continue
-                        ax.stairs(v[1:-1] / (tot if norm and tot else 1), edges, label=g[len(prefix):])
-                        drawn = True
-                    if drawn:
-                        kind, c = s.split("_")
-                        ax.set_xlabel(DIST_LABELS[var]); ax.set_ylabel("Unit area (incl. flow)" if norm else "Entries (raw)")
-                        ax.legend(fontsize=6, ncol=2)
-                        ax.set_title("%s %s, %s overlay%s" % (SET_NAMES[kind], "" if c == "all" else CAT_NAMES[c], tag,
-                                     ", unit area" if norm else ""), fontsize=8)
-                        finish(fig, out / ("overlay_%s_dist_%s__%s%s.png" % (tag, s, var, "_norm" if norm else "")), logy=True)
-                    else:
-                        plt.close(fig)
-
+    cutflow_fig("overall")
     for g in groups:
-        eff_figs(g)
-        cutflow_fig(g)
-        if not g.startswith("sample_"):
-            dist_figs(g, False)
-    overlay_figs("mass_", "mass")
-    overlay_figs("ctau_", "lifetime")
+        if g.startswith(("mass_", "ctau_")):
+            cutflow_fig(g)
+    eff_overall("overall")
+    eff_overlay("mass_", "mass")
+    eff_overlay("ctau_", "lifetime")
+    mg = [g for g in groups if g.startswith("mass_")]
+    lg = [g for g in groups if g.startswith("ctau_")]
+    for s in SETS:
+        panels(["overall"], ["overall"], s, False, "dist_overall__%s.png" % s, "overall")
+        for tag, gs, pre in (("mass", mg, "mass_"), ("lifetime", lg, "ctau_")):
+            for norm in (False, True):
+                panels(gs, [g[len(pre):] for g in gs], s, norm,
+                       "overlay_dist_%s__%s%s.png" % (tag, s, "_norm" if norm else ""), tag + " overlay")
     print("Plots done in", out, flush=True)
 
 

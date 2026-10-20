@@ -144,6 +144,33 @@ namespace {
     return m;
   }
 
+  // Independent per-type matching (no cross-type reservation): one-to-one within the type, objects used at most once.
+  std::array<int, 2> independentMatch(const std::array<Gen, 2>& gen, const std::vector<Comp>& comps, int type,
+                                      bool requireEta) {
+    const double threshold = type == 1 ? 0.10 : 0.06;
+    std::vector<std::tuple<double, int, int, int>> pairs;  // dR, genParticleIndex, obj, comp
+    for (int g = 0; g < 2; ++g) {
+      if (!gen[g].st2.ok) continue;
+      for (size_t c = 0; c < comps.size(); ++c) {
+        const auto& k = comps[c];
+        if (k.type != type || !k.idPass || (requireEta && !k.inEta) || !k.st2.ok || k.q != gen[g].q) continue;
+        const double d = std::hypot(static_cast<double>(gen[g].st2.eta) - k.st2.eta,
+                                    reco::deltaPhi(static_cast<double>(gen[g].st2.phi), static_cast<double>(k.st2.phi)));
+        if (d < threshold) pairs.emplace_back(d, gen[g].index, k.obj, static_cast<int>(c));
+      }
+    }
+    std::sort(pairs.begin(), pairs.end());
+    std::array<int, 2> m{{-1, -1}};
+    std::set<int> used;
+    for (const auto& [d, gi, obj, c] : pairs) {
+      const int g = gen[0].index == gi ? 0 : 1;
+      if (m[g] >= 0 || used.count(obj)) continue;
+      m[g] = c;
+      used.insert(obj);
+    }
+    return m;
+  }
+
   struct Fit {
     int status = kNotFitted;
     float vx = -999, vy = -999, vz = -999, chi2 = -999, ndof = -999, prob = -999, lxyBS = -999, mass = -999;
@@ -201,20 +228,22 @@ public:
       "abs(eta)<2.4,0<=Lxy<740,abs(vz)<960,no pT cut. twoAcc: exactly two signal muons, opposite charge, both accepted. "
       "Comp types 0 inner,1 outer(DSA),2 global; eligible = own ID and own |eta|<2.4. Hierarchy global,outer,inner, "
       "station-2 position eta/phi, dR<0.06 (I,G) <0.10 (O), same charge, whole-object claim, no fallback. "
-      "Best-best = fit of the matched components' tracks; categories 0 GG,1 II,2 OO,3 GO,4 GI,5 OI. "
+      "Best-best = fit of the hierarchy-matched components' tracks (one set). Typed combos: independent per-type matching, ordered (gen0 type a, gen1 type b), types 0 I,1 O,2 G; "
       "Pairs = all unordered pairs of distinct eligible-object best components (global>outer>inner) in twoAcc events. "
       "KalmanVertexFitter(refit), status 0 not fitted,1 shared,2 failed,3 valid. *NoEta = cross-check without reco-eta gate. "
       "Reco dR/pT from track reference-point momenta. dPhi = phi(MET)-phi(mumu) wrapped.");
     evt_ = fs->make<TTree>("events", "One row per event");
     pair_ = fs->make<TTree>("pairs", "Any-pair fits in twoAcc events; event = entry in events");
+    combo_ = fs->make<TTree>("combos", "Typed ordered fits (gen0 type a, gen1 type b); one row per existing combo; event = entry in events");
 #define E(x) evt_->Branch(#x, &x##_)
     E(run); E(lumi); E(event); E(nSig); E(twoAcc); E(nObj); E(nElig);
     E(sigIndex); E(sigQ); E(sigAcc); E(sigPt); E(sigEta); E(sigPhi); E(sigLxy); E(sigD0); E(sigProp); E(sigEta2); E(sigPhi2);
     E(cObj); E(cType); E(cQ); E(cIdPass); E(cInEta); E(cProp); E(cEta2); E(cPhi2);
     E(matchComp); E(matchType); E(matchObj); E(matchDR);
     E(matchCompNoEta); E(matchTypeNoEta); E(matchObjNoEta);
+    E(indObj); E(indObjNoEta);
     E(genDR); E(genMuMuPt); E(genMuMuPhi); E(genMetPt); E(genMetPhi); E(pfMetPt); E(pfMetPhi);
-    E(bbStatus); E(bbCat); E(bbChi2); E(bbNdof); E(bbProb); E(bbVx); E(bbVy); E(bbVz); E(bbLxyBS); E(bbMass);
+    E(bbStatus); E(bbChi2); E(bbNdof); E(bbProb); E(bbVx); E(bbVy); E(bbVz); E(bbLxyBS); E(bbMass);
     E(bbRecoDR); E(bbRecoMuMuPt); E(bbRecoMuMuPhi);
     E(anyNPairs); E(anyNValid);
 #undef E
@@ -222,6 +251,10 @@ public:
     P(pEvent); P(pObjA); P(pObjB); P(pTypeA); P(pTypeB); P(pCat); P(pIsBB); P(pStatus); P(pChi2); P(pNdof); P(pProb);
     P(pVx); P(pVy); P(pVz); P(pLxyBS); P(pMass); P(pRecoDR); P(pRecoMuMuPt); P(pRecoMuMuPhi);
 #undef P
+#define K(x) combo_->Branch(#x, &x##_)
+    K(kEvent); K(kTypeA); K(kTypeB); K(kStatus); K(kChi2); K(kNdof); K(kProb); K(kVx); K(kVy); K(kVz); K(kLxyBS);
+    K(kMass); K(kRecoDR); K(kRecoMuMuPt); K(kRecoMuMuPhi);
+#undef K
   }
 
   void analyze(const edm::Event& ev, const edm::EventSetup& es) override {
@@ -327,11 +360,42 @@ public:
         matchCompNoEta_.push_back(mn.comp[g]); matchTypeNoEta_.push_back(mn.type[g]);
         matchObjNoEta_.push_back(mn.obj[g]);
       }
+      // Independent per-type matches (gated and, for validation, ungated), objects reported by original index.
+      std::array<std::array<int, 2>, 3> ind, indn;
+      for (int t = 0; t < 3; ++t) {
+        ind[t] = independentMatch(gen, comps, t, true);
+        indn[t] = independentMatch(gen, comps, t, false);
+        for (int g = 0; g < 2; ++g) {
+          indObj_.push_back(ind[t][g] >= 0 ? comps[ind[t][g]].obj : -1);
+          indObjNoEta_.push_back(indn[t][g] >= 0 ? comps[indn[t][g]].obj : -1);
+        }
+      }
+      for (int a = 0; a < 3; ++a)
+        for (int b = 0; b < 3; ++b) {
+          if (ind[a][0] < 0 || ind[b][1] < 0) continue;
+          const auto& ca = comps[ind[a][0]];
+          const auto& cb = comps[ind[b][1]];
+          const auto ka = keys(muons[std::lower_bound(indices.begin(), indices.end(), ca.obj) - indices.begin()]);
+          const auto kb = keys(muons[std::lower_bound(indices.begin(), indices.end(), cb.obj) - indices.begin()]);
+          bool shared = ca.obj == cb.obj;
+          for (const auto& k : ka) shared |= kb.count(k) > 0;
+          Fit f;
+          if (shared)
+            f.status = kShared;
+          else
+            f = fitLegs(ca.ref, cb.ref, ttb, kvf, bs);
+          const double rx = ca.ref->px() + cb.ref->px(), ry = ca.ref->py() + cb.ref->py();
+          kEvent_ = eventRow; kTypeA_ = a; kTypeB_ = b; kStatus_ = f.status; kChi2_ = f.chi2; kNdof_ = f.ndof;
+          kProb_ = f.prob; kVx_ = f.vx; kVy_ = f.vy; kVz_ = f.vz; kLxyBS_ = f.lxyBS; kMass_ = f.mass;
+          kRecoDR_ = reco::deltaR(ca.ref->eta(), ca.ref->phi(), cb.ref->eta(), cb.ref->phi());
+          kRecoMuMuPt_ = std::hypot(rx, ry);
+          kRecoMuMuPhi_ = std::atan2(ry, rx);
+          combo_->Fill();
+        }
       const bool both = m.comp[0] >= 0 && m.comp[1] >= 0;
       std::array<int, 2> bbPos{{-1, -1}};  // best-best legs by component index
       if (both) {
         bbPos = m.comp;
-        bbCat_ = categoryOf(m.type[0], m.type[1]);
         const auto& a = comps[m.comp[0]];
         const auto& b = comps[m.comp[1]];
         const auto ka = keys(muons[std::lower_bound(indices.begin(), indices.end(), a.obj) - indices.begin()]);
@@ -392,12 +456,12 @@ private:
   void reset() {
     nSig_ = 0; twoAcc_ = false; nObj_ = nElig_ = 0;
     for (auto* v : {&sigIndex_, &sigQ_, &sigAcc_, &sigProp_, &cObj_, &cType_, &cQ_, &cIdPass_, &cInEta_, &cProp_,
-                    &matchComp_, &matchType_, &matchObj_, &matchCompNoEta_, &matchTypeNoEta_, &matchObjNoEta_})
+                    &matchComp_, &matchType_, &matchObj_, &indObj_, &indObjNoEta_, &matchCompNoEta_, &matchTypeNoEta_, &matchObjNoEta_})
       v->clear();
     for (auto* v : {&sigPt_, &sigEta_, &sigPhi_, &sigLxy_, &sigD0_, &sigEta2_, &sigPhi2_, &cEta2_, &cPhi2_, &matchDR_})
       v->clear();
     genDR_ = genMuMuPt_ = genMuMuPhi_ = genMetPt_ = genMetPhi_ = pfMetPt_ = pfMetPhi_ = -999.f;
-    bbStatus_ = kNotFitted; bbCat_ = -1;
+    bbStatus_ = kNotFitted;
     bbChi2_ = bbNdof_ = bbProb_ = bbVx_ = bbVy_ = bbVz_ = bbLxyBS_ = bbMass_ = bbRecoDR_ = bbRecoMuMuPt_ =
         bbRecoMuMuPhi_ = -999.f;
     anyNPairs_ = anyNValid_ = 0;
@@ -412,7 +476,7 @@ private:
   const edm::ESGetToken<MagneticField, IdealMagneticFieldRecord> field_;
   const edm::ESGetToken<TransientTrackBuilder, TransientTrackRecord> ttb_;
   const PropagateToMuonSetup setup_;
-  TTree *evt_ = nullptr, *pair_ = nullptr;
+  TTree *evt_ = nullptr, *pair_ = nullptr, *combo_ = nullptr;
   int tree_entries_ = 0;
 
   unsigned int run_ = 0, lumi_ = 0;
@@ -421,11 +485,15 @@ private:
   bool twoAcc_ = false;
   std::vector<int> sigIndex_, sigQ_, sigAcc_, sigProp_, cObj_, cType_, cQ_, cIdPass_, cInEta_, cProp_;
   std::vector<float> sigPt_, sigEta_, sigPhi_, sigLxy_, sigD0_, sigEta2_, sigPhi2_, cEta2_, cPhi2_;
+  std::vector<int> indObj_, indObjNoEta_;
+  int kEvent_ = 0, kTypeA_ = 0, kTypeB_ = 0, kStatus_ = 0;
+  float kChi2_ = 0, kNdof_ = 0, kProb_ = 0, kVx_ = 0, kVy_ = 0, kVz_ = 0, kLxyBS_ = 0, kMass_ = 0, kRecoDR_ = 0,
+        kRecoMuMuPt_ = 0, kRecoMuMuPhi_ = 0;
   std::vector<int> matchComp_, matchType_, matchObj_, matchCompNoEta_, matchTypeNoEta_, matchObjNoEta_;
   std::vector<float> matchDR_;
   float genDR_ = -999, genMuMuPt_ = -999, genMuMuPhi_ = -999, genMetPt_ = -999, genMetPhi_ = -999,
         pfMetPt_ = -999, pfMetPhi_ = -999;
-  int bbStatus_ = 0, bbCat_ = -1, anyNPairs_ = 0, anyNValid_ = 0;
+  int bbStatus_ = 0, anyNPairs_ = 0, anyNValid_ = 0;
   float bbChi2_ = -999, bbNdof_ = -999, bbProb_ = -999, bbVx_ = -999, bbVy_ = -999, bbVz_ = -999,
         bbLxyBS_ = -999, bbMass_ = -999, bbRecoDR_ = -999, bbRecoMuMuPt_ = -999, bbRecoMuMuPhi_ = -999;
   int pEvent_ = 0, pObjA_ = 0, pObjB_ = 0, pTypeA_ = 0, pTypeB_ = 0, pCat_ = 0, pStatus_ = 0;
