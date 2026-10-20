@@ -287,6 +287,9 @@ def plot(args):
             centers = .5 * (edges[:-1] + edges[1:])
             if var == "pt" and np.any(ok):
                 ptmax = max(ptmax, float(edges[1:][ok][-1]))
+            xmax = {"pt": args.pt_max, "d0": args.d0_max, "lxy": args.lxy_max}.get(var)
+            if xmax is not None:
+                ok &= centers < xmax
             if logarithmic:
                 ok &= centers > 0
             kval, nval = k[ok].astype(int), n[ok].astype(int)
@@ -303,6 +306,7 @@ def plot(args):
         ax.set_ylim(0, min(1.02, max(.001, 1.1 * rate_max)) if discrepancy else 1.02)
         ax.grid(alpha=.25)
         if var == "pt": ax.set_xlim(0.1 if logarithmic else 0, ptmax)
+        if xmax is not None: ax.set_xlim(0.1 if logarithmic else 0, xmax)
         if logarithmic: ax.set_xscale("log")
         ax.set_title(title + " | 2022EE iDMμ signal MC (09-28)", fontsize=10)
         ax.legend(fontsize=6.5 if len(curves) > 8 else 7, ncol=3 if len(curves) > 8 else 2,
@@ -345,12 +349,17 @@ def main():
     parser.add_argument("--report-dir", type=Path, help="per-sample FrameworkJobReport directory (required for full analysis)")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--plot-dir", type=Path)
+    for variable in ("pt", "d0", "lxy"):
+        parser.add_argument("--" + variable + "-max", type=float, help="plot display maximum only; preserve ROOT counts")
     parser.add_argument("--no-plots", action="store_true")
     parser.add_argument("--log", action="store_true")
     parser.add_argument("--expected-samples", type=int, default=72)
     parser.add_argument("--expected-events", type=int, default=720000)
     parser.add_argument("--validation-events", type=int, default=200)
     args = parser.parse_args()
+    for maximum in (args.pt_max, args.d0_max, args.lxy_max):
+        if maximum is not None and (not np.isfinite(maximum) or maximum <= 0):
+            parser.error("plot maxima must be finite and positive")
     if args.mode == "analyze":
         if args.input_dir is None:
             parser.error("--input-dir required in analyze mode")
