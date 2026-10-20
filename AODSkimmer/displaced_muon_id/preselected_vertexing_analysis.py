@@ -360,7 +360,7 @@ def plot(args):
         for pi, var in enumerate(PLOT_DISTS):
             edges = DIST_EDGES[var]
             if var == "chi2":
-                edges = edges[edges <= 20]
+                edges = edges[edges <= 10]
             for gi, (g, lab) in enumerate(zip(groupnames, labels)):
                 v, e_full = h(g, "%s__%s" % (s, var))
                 tot = v.sum()
@@ -371,7 +371,7 @@ def plot(args):
                 ax[pi].stairs(vals / (tot if norm else 1), edges, label=lab, color=cmap(gi % 10))
             ax[pi].set_xlabel(DIST_LABELS[var]); ax[pi].set_ylabel("Unit area (incl. overflow)" if norm else "Entries (raw)")
             if var == "chi2":
-                ax[pi].set_title("range 0–20; larger values in overflow", fontsize=7)
+                ax[pi].set_title("range 0–10 (uniform bins); larger values in ROOT overflow/tail bins", fontsize=7)
         if len(groupnames) > 1:
             ax[0].legend(fontsize=6, ncol=2)
         ax[5].axis("off")
