@@ -276,7 +276,7 @@ def plot(args):
     groups = sorted({k.split("/")[1] for k in f.keys() if k.startswith("groups/") and k.count("/") == 2})
     foot = ("Pre-selected displacedMuons (ID, |eta|<2.4); accepted = exactly 2 signal muons, both accepted; "
             "raw unweighted; 68% Clopper-Pearson")
-    cmap = plt.get_cmap("tab10")
+    cmap = plt.get_cmap("tab20")
 
     def h(group, name):
         o = f["groups/%s/%s" % (group, name)]
@@ -335,7 +335,7 @@ def plot(args):
             fig, ax = plt.subplots(1, 3, figsize=(15, 4.4))
             for i, (num, den, typed, title) in enumerate(METRICS):
                 for j, g in enumerate(gs):
-                    curve(ax[i], *ratio(g, num, den, var), g[len(prefix):], cmap(j % 10))
+                    curve(ax[i], *ratio(g, num, den, var), g[len(prefix):], cmap(j % 20))
                 ax[i].set_xlabel(EFF_LABELS[var]); ax[i].set_ylabel("Efficiency"); ax[i].set_ylim(0, 1.05)
                 ax[i].set_title("Best–best: " + title, fontsize=9); ax[i].grid(alpha=.3)
             ax[2].legend(fontsize=6, ncol=2)
@@ -368,7 +368,7 @@ def plot(args):
                 vals = v[1:nb + 1]
                 if tot == 0:
                     continue
-                ax[pi].stairs(vals / (tot if norm else 1), edges, label=lab, color=cmap(gi % 10))
+                ax[pi].stairs(vals / (tot if norm else 1), edges, label=lab, color=cmap(gi % 20))
             ax[pi].set_xlabel(DIST_LABELS[var]); ax[pi].set_ylabel("Unit area (incl. overflow)" if norm else "Entries (raw)")
             if var == "chi2":
                 ax[pi].set_title("range 0–10 (uniform bins); larger values in ROOT overflow/tail bins", fontsize=7)
