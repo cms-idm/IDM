@@ -29,6 +29,21 @@ EFF_EDGES = {"d0": np.arange(0, 16, 1.0), "pt": np.arange(0, 51, 1.0), "lxy": np
              "eta": np.linspace(0, 2.4, 13)}
 EFF_LABELS = {"d0": r"Max gen $|d_0|$ to origin [cm]", "pt": r"Gen dimuon $p_T$ [GeV]",
               "lxy": r"Gen production $L_{xy}$ [cm]", "eta": r"Max gen $|\eta|$"}
+# Extended x variables (Priority 2, 2026-10-21): full-acceptance Lxy, 0-10 GeV zooms, leading/subleading gen muon pT.
+# Each maps to its source array (dimuon pT = |vector sum| of the two gen signal muon pT; lead/sub = max/min gen muon pT).
+EXT_EDGES = {"lxyfull": np.arange(0, 741, 10.0), "ptlow": np.arange(0, 10.01, 0.25),
+             "lead": np.arange(0, 51, 1.0), "sub": np.arange(0, 51, 1.0),
+             "leadlow": np.arange(0, 10.01, 0.25), "sublow": np.arange(0, 10.01, 0.25)}
+EXT_SRC = {"lxyfull": "lxy", "ptlow": "pt", "lead": "lead", "sub": "sub", "leadlow": "lead", "sublow": "sub"}
+EXT_LABELS = {"lxyfull": r"Gen production $L_{xy}$ [cm] (full acceptance)", "ptlow": r"Gen dimuon $p_T$ [GeV] (0–10 zoom)",
+              "lead": r"Leading gen muon $p_T$ [GeV]", "sub": r"Subleading gen muon $p_T$ [GeV]",
+              "leadlow": r"Leading gen muon $p_T$ [GeV] (0–10 zoom)", "sublow": r"Subleading gen muon $p_T$ [GeV] (0–10 zoom)"}
+ALL_EDGES = {**EFF_EDGES, **EXT_EDGES}
+ALL_LABELS = {**EFF_LABELS, **EXT_LABELS}
+XSRC = {**{v: v for v in EFF_EDGES}, **EXT_SRC}
+# Dip decomposition: gen opening angle classes (genDR from the gen momenta at production), dimuon pT axes
+DR_CLASSES = ((0.0, 0.3), (0.3, 1.0), (1.0, np.inf))
+DR_LABELS = (r"$\Delta R_{gen}<0.3$", r"$0.3\leq\Delta R_{gen}<1$", r"$\Delta R_{gen}\geq 1$")
 # Colour-blind-safe palette (Okabe-Ito based). Sets whose curves nearly coincide also differ in line width and marker.
 SETCOL = {"GG": "#0072B2", "II": "#E69F00", "OO": "#009E73", "GO": "#D55E00", "GI": "#CC79A7", "OI": "#6A3D9A"}
 SETLW = {"GG": 3.4, "II": 2.2, "GI": 1.1, "OO": 3.4, "GO": 2.2, "OI": 1.1}
@@ -82,7 +97,7 @@ def load(args):
             names.append(sample)
             revs.add(str(f["preselectedVertexing/revision"].member("fTitle")))
             a = f["preselectedVertexing/events"].arrays(
-                ["twoAcc", "bbStatus", "sigQ", "sigD0", "sigLxy", "sigEta", "genMuMuPt"], library="ak")
+                ["twoAcc", "bbStatus", "sigQ", "sigD0", "sigLxy", "sigEta", "sigPt", "genMuMuPt", "genDR"], library="ak")
             n = len(a["twoAcc"])
             two = np.asarray(a["twoAcc"])
             sq = a["sigQ"]
@@ -93,9 +108,11 @@ def load(args):
             d0 = np.nanmax(pad(a["sigD0"]).astype(float), axis=1)
             eta = np.nanmax(np.abs(pad(a["sigEta"]).astype(float)), axis=1)
             lxy = pad(a["sigLxy"]).astype(float)[:, 0]
+            spt = pad(a["sigPt"]).astype(float)
             ev.append(dict(sample=np.full(n, si), two=two, sig2=sig2, hm=np.asarray(a["bbStatus"]) > 0,
                            hv=np.asarray(a["bbStatus"]) == 3, q0=q[:, 0], d0=d0, eta=eta, lxy=lxy,
-                           pt=np.asarray(a["genMuMuPt"]).astype(float)))
+                           pt=np.asarray(a["genMuMuPt"]).astype(float), lead=np.nanmax(spt, axis=1),
+                           sub=np.nanmin(spt, axis=1), dr=np.asarray(a["genDR"]).astype(float)))
             k = f["preselectedVertexing/combos"].arrays(library="np")
             k["kEvent"] = k["kEvent"] + base
             cb.append(k)
@@ -182,9 +199,16 @@ def analyze(args):
                   masks["valid_any"]]
         write_hist("cutflow", "cutflow", np.arange(len(stages) + 1, dtype=float),
                    np.r_[0, [int((m & gs).sum()) for m in stages], 0])
-        for var, edges in EFF_EDGES.items():
+        for var, edges in ALL_EDGES.items():
             for mname, m in masks.items():
-                write_hist("%s__%s" % (mname, var), EFF_LABELS[var], edges, flowcounts(e[var][m & gs], edges))
+                write_hist("%s__%s" % (mname, var), ALL_LABELS[var], edges, flowcounts(e[XSRC[var]][m & gs], edges))
+        if gname == "overall":  # dip decomposition: every event-level mask versus dimuon pT, per gen opening-angle class
+            for ci, (lo_, hi_) in enumerate(DR_CLASSES):
+                dsel = (e["dr"] >= lo_) & (e["dr"] < hi_)
+                for var in ("pt", "ptlow"):
+                    for mname, m in masks.items():
+                        write_hist("dr%d__%s__%s" % (ci, mname, var), ALL_LABELS[var], ALL_EDGES[var],
+                                   flowcounts(e[XSRC[var]][m & dsel], ALL_EDGES[var]))
         ks = np.ones(len(ke), bool) if ids is None else np.isin(e["sample"][ke], list(ids))
         for u in uk:
             sel = uk[u] & ks
@@ -206,13 +230,15 @@ def analyze(args):
             sel0 = uk[u] & ks
             for var in QMETRICS:
                 ok = sel0 & np.isfinite(q[var])
-                for xv, edges in EFF_EDGES.items():
-                    xs = e[xv][ke]
-                    bins = np.searchsorted(edges, xs, side="right") - 1
+                for xv, edges in ALL_EDGES.items():
                     nb = len(edges) - 1
+                    bins = np.searchsorted(edges, e[XSRC[xv]][ke][ok], side="right") - 1
+                    vals_ok = q[var][ok]
                     qs = np.zeros((3, nb)); ns = np.zeros(nb)
+                    order_ = np.argsort(bins, kind="stable")
+                    bounds = np.searchsorted(bins[order_], np.arange(nb + 1))
                     for b in range(nb):
-                        vv = q[var][ok & (bins == b)]
+                        vv = vals_ok[order_[bounds[b]:bounds[b + 1]]]
                         ns[b] = len(vv)
                         if len(vv) >= Q_NMIN:
                             qs[:, b] = np.percentile(vv, [5, 50, 95])
@@ -310,7 +336,7 @@ def plot(args):
             n, d = nv.sum(), dv.sum()
             lo, hi = cp(np.array(n), np.array(d))
             curves = {}
-            for var in EFF_EDGES:
+            for var in ALL_EDGES:
                 a, edges = h("%s__%s" % (n_name, var)); b, _ = h("%s__%s" % (d_name, var))
                 a, b = a[1:-1], b[1:-1]
                 with np.errstate(divide="ignore", invalid="ignore"):
@@ -349,6 +375,25 @@ def plot(args):
         fig.suptitle(title, fontsize=12)
         finish(fig, out / fname, bottom=0.1, note=foot_eff)
 
+    EXT_GRID = ("lxyfull", "ptlow", "lead", "sub", "leadlow", "sublow")
+
+    def slide_ext(res, title, ylabel, fname):
+        """Extended x variables of slides 1-3: full-acceptance Lxy, 0-10 GeV dimuon pT, leading/subleading pT (0-50 and 0-10)."""
+        fig, axs = plt.subplots(2, 3, figsize=(18, 9.4))
+        for ax, var in zip(axs.flat, EXT_GRID):
+            for key in res:
+                lab, col, ls, mk = style[key]
+                edges, r, l, u, b = res[key][3][var]
+                x = 0.5 * (edges[1:] + edges[:-1]); ok = b >= 20
+                ax.errorbar(x[ok], r[ok], yerr=[(r - l)[ok], (u - r)[ok]], color=col, ls=ls, marker=mk, ms=3, lw=1,
+                            label=lab, alpha=.9)
+            ax.set_xlabel(ALL_LABELS[var]); ax.set_ylabel(ylabel); ax.grid(alpha=.3); ax.set_ylim(0, 1.05)
+            ax.set_xlim(ALL_EDGES[var][0], ALL_EDGES[var][-1])
+        hd, lb = axs[0, 0].get_legend_handles_labels()
+        fig.legend(hd, lb, loc="lower center", ncol=6, fontsize=7.5, bbox_to_anchor=(0.5, 0.025))
+        fig.suptitle(title, fontsize=12)
+        finish(fig, out / fname, bottom=0.1, note=foot_eff)
+
     A1 = lambda key: {"any": "matched_any"}.get(key, "m_" + key)   # slide 1: matching is priority independent
     A3 = lambda key: "matched_any" if key in ("any", "P1", "P2") else "m_" + key
     V = lambda key: {"any": "valid_any", "P1": "v_P1", "P2": "v_P2"}.get(key, "v_" + key)
@@ -362,6 +407,74 @@ def plot(args):
     # Slide 3: valid / own matched
     slide(series(V, A3), "3. Given the typed legs exist, vertexing efficiency (own denominator per set)",
           "Vertexed / matched in the same set", "slide3_vertexed_over_own_matched.png")
+    # Extended versions of slides 1-3 (Priority 2)
+    slide_ext(series(A1, lambda k: "den", ("any",) + CATS),
+              "1x. Both muons matched / accepted: full-acceptance Lxy, low dimuon pT, leading and subleading gen muon pT",
+              "Fraction of accepted events", "slide1x_matched_over_accepted_extended.png")
+    slide_ext(series(V, lambda k: "matched_any"),
+              "2x. Vertexed with each leg-type set / both matched (any component): full-acceptance Lxy, low dimuon pT, leading/subleading pT",
+              "Fraction of both-matched events", "slide2x_vertexed_over_matched_any_extended.png")
+    slide_ext(series(V, A3), "3x. Vertexed / matched in the same set: full-acceptance Lxy, low dimuon pT, leading/subleading pT",
+              "Vertexed / matched in the same set", "slide3x_vertexed_over_own_matched_extended.png")
+
+    # Slide 6: dimuon-pT dip decomposition by gen opening angle (vertexed / matched in the same set, and class mix)
+    DIP_SETS = ("OO", "GmOp", "OmIp", "GG")
+    dcol = ("#D55E00", "#0072B2", "#009E73")
+    fig, axs = plt.subplots(3, len(DIP_SETS), figsize=(20, 12.5))
+    for c_, key in enumerate(DIP_SETS):
+        for r_, var in enumerate(("pt", "ptlow")):
+            ax = axs[r_, c_]
+            for ci in range(len(DR_CLASSES)):
+                a, edges = h("dr%d__%s__%s" % (ci, V(key), var)); b, _ = h("dr%d__%s__%s" % (ci, "m_" + key, var))
+                a, b = a[1:-1], b[1:-1]
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    r = np.where(b > 0, a / b, np.nan)
+                l, u = cp(a, b); x = 0.5 * (edges[1:] + edges[:-1]); ok = b >= 20
+                ax.errorbar(x[ok], r[ok], yerr=[(r - l)[ok], (u - r)[ok]], color=dcol[ci], marker="o", ms=3, lw=1,
+                            label=DR_LABELS[ci])
+            a, edges = h("%s__%s" % (V(key), var)); b, _ = h("%s__%s" % ("m_" + key, var))
+            a, b = a[1:-1], b[1:-1]
+            with np.errstate(divide="ignore", invalid="ignore"):
+                r = np.where(b > 0, a / b, np.nan)
+            x = 0.5 * (edges[1:] + edges[:-1]); ok = b >= 20
+            ax.plot(x[ok], r[ok], color="k", lw=1.6, ls="--", label="all ΔR (as slide 3)")
+            # Fixed ΔR mix: per-class efficiencies weighted by the set's overall class fractions (all dimuon pT, flow included),
+            # so the gap to the dashed curve is the part due to the changing ΔR mix along the axis (between-class contribution).
+            fr = np.array([h("dr%d__%s__pt" % (ci, "m_" + key))[0].sum() for ci in range(len(DR_CLASSES))])
+            fr = fr / fr.sum()
+            effs, oks = [], []
+            for ci in range(len(DR_CLASSES)):
+                a_, _ = h("dr%d__%s__%s" % (ci, V(key), var)); b_, _ = h("dr%d__%s__%s" % (ci, "m_" + key, var))
+                a_, b_ = a_[1:-1], b_[1:-1]
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    effs.append(np.where(b_ > 0, a_ / b_, np.nan))
+                oks.append(b_ >= 20)
+            fixed = np.sum([f_ * e_ for f_, e_ in zip(fr, effs)], axis=0); okf = np.all(oks, axis=0)
+            ax.plot(x[okf], fixed[okf], color="0.45", lw=1.6, ls=":",
+                    label="fixed ΔR mix (overall class fractions; bins with all classes ≥ 20)")
+            ax.set_ylim(0.4, 1.03); ax.grid(alpha=.3); ax.set_xlabel(ALL_LABELS[var])
+            ax.set_xlim(edges[0], edges[-1])
+            if r_ == 0:
+                ax.set_title(style[key][0], fontsize=11, color=style[key][1], fontweight="bold")
+            if c_ == 0:
+                ax.set_ylabel("Vertexed / matched in the same set")
+        ax = axs[2, c_]
+        tot = h("%s__pt" % ("m_" + key))[0][1:-1]
+        for ci in range(len(DR_CLASSES)):
+            a, edges = h("dr%d__%s__pt" % (ci, "m_" + key)); a = a[1:-1]
+            x = 0.5 * (edges[1:] + edges[:-1]); ok = tot >= 20
+            ax.plot(x[ok], (a / np.where(tot > 0, tot, 1))[ok], color=dcol[ci], marker="o", ms=3, lw=1, label=DR_LABELS[ci])
+        ax.set_ylim(0, 1.03); ax.grid(alpha=.3); ax.set_xlabel(ALL_LABELS["pt"])
+        if c_ == 0:
+            ax.set_ylabel("Fraction of matched events in the class")
+    hd, lb = axs[0, 0].get_legend_handles_labels()
+    fig.legend(hd, lb, loc="lower center", ncol=5, fontsize=10, bbox_to_anchor=(0.5, 0.025))
+    fig.suptitle("6. Dimuon-pT dip of the vertexing efficiency, split by gen opening angle ΔR(μμ) at production: "
+                 "rows 1-2 vertexed / matched per ΔR class (dashed: all ΔR), row 3 ΔR-class mix of the matched events", fontsize=11)
+    finish(fig, out / "slide6_dimuon_pt_dip_by_gen_dR.png", bottom=0.07,
+           note="Signal MC (2022EE), pre-selected displacedMuons; events with two accepted signal muons matched in the set; dimuon pT = "
+                "|vector sum| of the two gen muon pT; charge-ordered sets as slide 3; raw unweighted; 68% Clopper–Pearson; bins with < 20 matched "
+                "events omitted (a missing point is not zero efficiency)")
 
     # Cutflow
     v, _ = h("cutflow"); v = v[1:-1]
@@ -421,9 +534,10 @@ def plot(args):
            "dpt": "dimuon pT residual (absolute)", "dptrel": "dimuon pT residual (relative)"}
     LETTER = {"dvxy": "f", "dvxyrel": "g", "dpt": "h", "dptrel": "i"}
     rows = TRK_SETS + DSA_SETS
-    for metric in QMETRICS:
-        fig, axs = plt.subplots(6, 4, figsize=(18, 15), sharex="col")
-        for c_, xv in enumerate(EFF_EDGES):
+    for metric, xvars, suffix in [(m_, tuple(EFF_EDGES), "") for m_ in QMETRICS] + \
+                                 [(m_, EXT_GRID, "_extended") for m_ in QMETRICS]:
+        fig, axs = plt.subplots(6, len(xvars), figsize=(4.5 * len(xvars), 15), sharex="col")
+        for c_, xv in enumerate(xvars):
             lims = {0: [], 1: []}
             for r_, u in enumerate(rows):
                 ax = axs[r_, c_]
@@ -442,17 +556,19 @@ def plot(args):
                 if c_ == 0:
                     ax.set_ylabel(label(u), fontsize=10, color=SETCOL[u], fontweight="bold")
                 if r_ == 0:
-                    ax.set_title(EFF_LABELS[xv], fontsize=10)
+                    ax.set_title(ALL_LABELS[xv], fontsize=10)
+                if r_ == len(rows) - 1:
+                    ax.set_xlim(edges[0], edges[-1])
             for g_, (r0, r1) in enumerate(((0, 3), (3, 6))):  # robust shared y range per group and column
                 vals_ = np.concatenate(lims[g_])
                 if len(vals_):
                     lo_, hi_ = np.percentile(vals_, [3, 97]); pad_ = 0.15 * (hi_ - lo_)
                     for r_ in range(r0, r1):
                         axs[r_, c_].set_ylim(lo_ - pad_, hi_ + pad_)
-        fig.suptitle("4%s. %s: median (line) and 90%% interval, 5th–95th percentile (band), versus the plotting variables; "
+        fig.suptitle("4%s%s. %s: median (line) and 90%% interval, 5th–95th percentile (band), versus the plotting variables; "
                      "bins with < %d valid fits omitted; y axis shared within the tracker rows and within the DSA rows"
-                     % (LETTER[metric], TTL[metric], Q_NMIN), fontsize=11)
-        finish(fig, out / ("slide4%s_%s_90pc_vs_variables.png" % (LETTER[metric], metric)),
+                     % (LETTER[metric], "x" if suffix else "", TTL[metric], Q_NMIN), fontsize=11)
+        finish(fig, out / ("slide4%s_%s_90pc_vs_variables%s.png" % (LETTER[metric], metric, suffix)),
                note="Signal MC (2022EE); valid typed fits, mixed sets merged (both orderings); raw unweighted; y range clipped to the "
                     "3rd-97th percentile of the plotted band edges (extreme bins can fall outside)")
 
