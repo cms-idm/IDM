@@ -222,7 +222,7 @@ def plot(args):
     cols = ["#0072B2"] + ["#E69F00"] * 4 + ["#009E73"] * 2
     ax.barh(y, vals, color=cols)
     for yi, v in zip(y, vals):
-        ax.text(v, yi, " %d: kept %.1f%%, lost %.1f%%" % (v, 100 * v / nb, 100 * (1 - v / nb)), va="center", fontsize=8)
+        ax.text(nb * 1.03, yi, "%d: kept %.1f%%, lost %.1f%%" % (v, 100 * v / nb, 100 * (1 - v / nb)), va="center", fontsize=8)
     ax.set_yticks(y); ax.set_yticklabels(labs, fontsize=8); ax.set_xlim(0, nb * 1.5)
     ax.axvline(nb, color="k", lw=0.8, ls="--")
     ax.set_xlabel("Events (raw) of the %d baseline events (dashed line)" % nb)
@@ -240,10 +240,12 @@ def plot(args):
             ax.stairs(v[1:-1] / n, e_, color=col, lw=2, ls=ls, label="%s (N=%d)" % (lab, n))
         if tag == "absdphi":
             ax.axvline(DPHI_CUT, color="k", lw=1, ls=":", label="requirement |dphi| < %g" % DPHI_CUT)
-        ax.set_xlabel(xl); ax.set_ylabel("Fraction of events per bin (unit area)"); ax.grid(alpha=.3); ax.legend(fontsize=8)
+        ax.set_xlabel(xl); ax.set_ylabel("Fraction of events per bin (unit area)"); ax.grid(alpha=.3)
+    hd, lb = axs[1].get_legend_handles_labels()
+    fig.legend(hd, lb, loc="lower center", ncol=3, fontsize=9, bbox_to_anchor=(0.5, 0.03))
     fig.suptitle("Shape of the MET / dimuon-pT azimuthal difference, reco vs gen (vertexed events, one vertex per event: first valid combo, "
                  "priority Global>Inner>DSA); same bins and axes", fontsize=10)
-    finish(fig, out / "sel_dphi_shapes.png")
+    finish(fig, out / "sel_dphi_shapes.png", bottom=0.1)
     print("Plots done in", out, flush=True)
 
 
