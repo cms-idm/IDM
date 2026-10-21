@@ -252,8 +252,9 @@ def plot(args):
     out = Path(args.plot_dir)
     out.mkdir(parents=True, exist_ok=True)
     f = uproot.open(args.output)
-    foot = ("Signal MC (2022EE), pre-selected displacedMuons; events with exactly 2 signal muons, both accepted (|η|<2.4, "
-            "Lxy<740 cm, no pT cut); raw unweighted; 68% Clopper–Pearson")
+    foot_eff = ("Signal MC (2022EE), pre-selected displacedMuons; events with exactly 2 signal muons, both accepted (|η|<2.4, "
+                "Lxy<740 cm, no pT cut); raw unweighted; error bars: 68% Clopper–Pearson")
+    foot = "Signal MC (2022EE), pre-selected displacedMuons; events with two accepted signal muons; raw unweighted"
 
     def h(name, group="overall"):
         o = f["groups/%s/%s" % (group, name)]
@@ -326,7 +327,7 @@ def plot(args):
         hd, lb = fig.axes[1].get_legend_handles_labels()
         fig.legend(hd, lb, loc="lower center", ncol=6, fontsize=7.5, bbox_to_anchor=(0.5, 0.025))
         fig.suptitle(title, fontsize=12)
-        finish(fig, out / fname, bottom=0.1)
+        finish(fig, out / fname, bottom=0.1, note=foot_eff)
 
     A = lambda key: {"any": "matched_any", "h": "matched_h"}.get(key, "m_" + key)
     V = lambda key: {"any": "valid_any", "h": "valid_h"}.get(key, "v_" + key)
@@ -365,7 +366,7 @@ def plot(args):
                 if n == 0:
                     continue
                 a.stairs(v[1:-1] / n, e_, label="%s (N=%d, %.1f%% outside)" % (label(u), n, 100 * (v[0] + v[-1]) / n))
-            a.set_xlabel(xl); a.set_ylabel("Unit area (incl. outside range)"); a.legend(fontsize=7, loc="upper left"); a.grid(alpha=.3)
+            a.set_xlabel(xl); a.set_ylabel("Unit area (incl. outside range)"); a.legend(fontsize=7, loc="upper left" if rng == "fine" else "upper right"); a.grid(alpha=.3)
         ax[0].set_title("Tracker-leg sets (no DSA leg): narrow range", fontsize=9)
         ax[1].set_title("DSA-leg sets: wide range", fontsize=9)
         fig.suptitle(title, fontsize=11)

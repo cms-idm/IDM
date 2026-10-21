@@ -274,17 +274,20 @@ def plot(args):
     out.mkdir(parents=True, exist_ok=True)
     f = uproot.open(args.output)
     groups = sorted({k.split("/")[1] for k in f.keys() if k.startswith("groups/") and k.count("/") == 2})
-    foot = ("Pre-selected displacedMuons (ID, |eta|<2.4); accepted = exactly 2 signal muons, both accepted; "
-            "raw unweighted; 68% Clopper-Pearson")
-    cmap = plt.get_cmap("tab20")
+    foot_eff = ("Pre-selected displacedMuons (ID, |eta|<2.4); accepted = exactly 2 signal muons, both accepted; "
+                "raw unweighted; error bars: 68% Clopper-Pearson")
+    foot = "Pre-selected displacedMuons (ID, |eta|<2.4); events with two accepted signal muons; raw unweighted"
+
+    def cmap(i, n):  # >10 groups: sequential colours in the (sorted) legend order; else tab10
+        return plt.get_cmap("turbo")(0.05 + 0.9 * i / max(n - 1, 1)) if n > 10 else plt.get_cmap("tab10")(i)
 
     def h(group, name):
         o = f["groups/%s/%s" % (group, name)]
         return o.values(flow=True), o.axis().edges()
 
-    def finish(fig, path):
-        fig.text(0.01, 0.005, foot, fontsize=6.5, color="0.35")
-        fig.tight_layout(rect=(0, 0.02, 1, 1))
+    def finish(fig, path, note=None, bottom=0.02):
+        fig.text(0.01, 0.005, note or foot, fontsize=6.5, color="0.35")
+        fig.tight_layout(rect=(0, bottom, 1, 1))
         fig.savefig(path, dpi=110)
         if args.log:  # extra log-y copy for distributions only; the linear PNG is never replaced
             if path.name.startswith(("dist_", "overlay_dist")):
@@ -327,7 +330,7 @@ def plot(args):
                 ax[i].set_ylim(0, 1.05); ax[i].grid(alpha=.3)
             ax[2].legend(fontsize=6.5)
             fig.suptitle("overall (typed sets: own matched count in the vertexing-given-matched panel)", fontsize=8)
-            finish(fig, out / ("eff_overall__%s.png" % var))
+            finish(fig, out / ("eff_overall__%s.png" % var), note=foot_eff)
 
     def eff_overlay(prefix, tag):
         gs = [g for g in groups if g.startswith(prefix)]
@@ -335,11 +338,12 @@ def plot(args):
             fig, ax = plt.subplots(1, 3, figsize=(15, 4.4))
             for i, (num, den, typed, title) in enumerate(METRICS):
                 for j, g in enumerate(gs):
-                    curve(ax[i], *ratio(g, num, den, var), g[len(prefix):], cmap(j % 20))
+                    curve(ax[i], *ratio(g, num, den, var), g[len(prefix):], cmap(j, len(gs)))
                 ax[i].set_xlabel(EFF_LABELS[var]); ax[i].set_ylabel("Efficiency"); ax[i].set_ylim(0, 1.05)
                 ax[i].set_title("Best–best: " + title, fontsize=9); ax[i].grid(alpha=.3)
-            ax[2].legend(fontsize=6, ncol=2)
-            finish(fig, out / ("overlay_%s_eff__%s.png" % (tag, var)))
+            hd, lb = ax[2].get_legend_handles_labels()
+            fig.legend(hd, lb, loc="lower center", ncol=6, fontsize=7, bbox_to_anchor=(0.5, 0.02))
+            finish(fig, out / ("overlay_%s_eff__%s.png" % (tag, var)), note=foot_eff, bottom=0.12)
 
     def cutflow_fig(group):
         v, _ = h(group, "cutflow")
@@ -368,18 +372,18 @@ def plot(args):
                 vals = v[1:nb + 1]
                 if tot == 0:
                     continue
-                ax[pi].stairs(vals / (tot if norm else 1), edges, label=lab, color=cmap(gi % 20))
+                ax[pi].stairs(vals / (tot if norm else 1), edges, label=lab, color=cmap(gi, len(groupnames)))
             ax[pi].set_xlabel(DIST_LABELS[var]); ax[pi].set_ylabel("Unit area (incl. overflow)" if norm else "Entries (raw)")
             if var == "chi2":
                 ax[pi].set_title("range 0–10 (uniform bins); larger values in ROOT overflow/tail bins", fontsize=7)
         if len(groupnames) > 1:
-            ax[0].legend(fontsize=6, ncol=2)
+            ax[5].legend(*ax[0].get_legend_handles_labels(), loc="upper center", ncol=2, fontsize=7)
         ax[5].axis("off")
         v, _ = h(groupnames[0], "%s__chi2" % s)
         if len(groupnames) == 1:
             ax[5].text(0, 0.5, "%s\n%s\nvalid fits: %d" % (SET_NAMES[s], title, v.sum()), fontsize=10)
         else:
-            ax[5].text(0, 0.5, "%s\n%s" % (SET_NAMES[s], title), fontsize=10)
+            ax[5].text(0, 0.0, "%s, %s" % (SET_NAMES[s], title), fontsize=9)
         finish(fig, out / fname)
 
     cutflow_fig("overall")
