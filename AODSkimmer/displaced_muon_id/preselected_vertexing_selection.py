@@ -233,7 +233,7 @@ def plot(args):
     fig, axs = plt.subplots(1, 2, figsize=(13, 4.8))
     for ax, tag, xl in ((axs[0], "dphi", r"$\Delta\phi$ = $\phi$(MET) − $\phi$($\mu\mu$ $p_T$) [rad]"),
                         (axs[1], "absdphi", r"$|\Delta\phi|$ [rad]")):
-        for key, col, lab, ls in (("PF", "#0072B2", "PF MET vs reco dimuon pT (P1 vertex)", "-"),
+        for key, col, lab, ls in (("PF", "#0072B2", "PF MET vs reco dimuon pT (first valid combo, G>I>DSA)", "-"),
                                   ("Gen", "#D55E00", "gen MET vs gen dimuon pT (same events)", "--")):
             h_ = f["%s__%s" % (key, tag)]
             v = h_.values(flow=True); e_ = h_.axis().edges(); n = v.sum()
