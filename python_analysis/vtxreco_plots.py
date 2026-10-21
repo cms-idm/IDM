@@ -14,8 +14,8 @@ outdir = 'workarea'
 plotdir = './plots/vtxreco'
 os.makedirs(plotdir, exist_ok=True)
 
-sig_vers = 'Preapp2018'
-selection = 'an'
+sig_vers = 'Jul2026noID'
+selection = 'anabrv'
 hists = 'vtxreco'
 saved_signal_hists = f'{outdir}/hists_sig{sig_vers}_{selection}-sel_{hists}.coffea'
 plottag = f'sig{sig_vers}_{selection}-sel'
@@ -24,7 +24,7 @@ plottag = f'sig{sig_vers}_{selection}-sel'
 # efficiency isn't trivially 1. See configs/cut_configs/an_selection.py.
 CUTS = {
     'cut1': 'inclusive',
-    'cut8': 'preselected',
+    'cut3': 'preselected',
 }
 
 # Gen variables filled in configs/histo_configs/vtxreco.py: name -> (x label, log x)
@@ -44,22 +44,32 @@ PLOTS = {
     'lptvtx': {
         'ylabel': 'lptvtx Reco Efficiency',
         'curves': [
-            ('vtxreco_lptvtx', 'num',          'Good lptvtx',              'C0'),
-            ('vtxreco_lptvtx', 'num_genmatch', 'Good lptvtx (gen-matched)', 'C1'),
+            ('vtxreco_lptvtx', 'num_genmatch_any',  'Any gen-matched lptvtx',  'C0'),
+            ('vtxreco_lptvtx', 'num_genmatch_good', 'Good gen-matched lptvtx', 'C1'),
         ],
     },
     'vtx': {
         'ylabel': 'vtx Reco Efficiency',
         'curves': [
-            ('vtxreco_vtx', 'num',          'Good vtx',              'C4'),
-            ('vtxreco_vtx', 'num_genmatch', 'Good vtx (gen-matched)', 'C5'),
+            ('vtxreco_vtx', 'num_genmatch_any',  'Any gen-matched vtx',  'C4'),
+            ('vtxreco_vtx', 'num_genmatch_good', 'Good gen-matched vtx', 'C5'),
         ],
     },
     'merged': {
         'ylabel': 'Merged Reco Efficiency',
         'curves': [
-            ('vtxreco_merged', 'num',          'Good merged',              'C2'),
-            ('vtxreco_merged', 'num_genmatch', 'Good merged (gen-matched)', 'C3'),
+            ('vtxreco_merged', 'num_genmatch_any',  'Any gen-matched merged',  'C2'),
+            ('vtxreco_merged', 'num_genmatch_good', 'Good gen-matched merged', 'C3'),
+        ],
+    },
+    'eereco': {
+        'ylabel': r'$e^+e^-$ Reco Efficiency',
+        'curves': [
+            ('vtxreco_eereco', 'num_gedged',   '(GED, GED)',     'C0'),
+            ('vtxreco_eereco', 'num_gedlpt',   '(GED, LPT)',     'C1'),
+            ('vtxreco_eereco', 'num_lptlpt',   '(LPT, LPT)',     'C2'),
+            ('vtxreco_eereco', 'num_sum',      'GED/LPT total',  'k'),
+            ('vtxreco_eereco', 'num_alptalpt', '(ALPT, ALPT)',   'C3'),
         ],
     },
 }
@@ -190,12 +200,17 @@ def plot_eff(sig_histo, var, cut, group):
 # (prefix, suffix) -> (plot tag, title)
 VAR_2D = 'gen_lxy_vs_pt'
 PLOTS_2D = {
-    ('vtxreco_lptvtx', 'num')          : ('lptvtx',          'lptvtx Reco Efficiency'),
-    ('vtxreco_lptvtx', 'num_genmatch') : ('lptvtx_genmatch', 'Gen-matched lptvtx Reco Efficiency'),
-    ('vtxreco_vtx',    'num')          : ('vtx',             'vtx Reco Efficiency'),
-    ('vtxreco_vtx',    'num_genmatch') : ('vtx_genmatch',    'Gen-matched vtx Reco Efficiency'),
-    ('vtxreco_merged', 'num')          : ('merged',          'Merged Reco Efficiency'),
-    ('vtxreco_merged', 'num_genmatch') : ('merged_genmatch', 'Gen-matched Merged Reco Efficiency'),
+    ('vtxreco_lptvtx', 'num_genmatch_any')  : ('lptvtx_genmatch_any',  'Any Gen-matched lptvtx Reco Efficiency'),
+    ('vtxreco_lptvtx', 'num_genmatch_good') : ('lptvtx_genmatch_good', 'Good Gen-matched lptvtx Reco Efficiency'),
+    ('vtxreco_vtx',    'num_genmatch_any')  : ('vtx_genmatch_any',     'Any Gen-matched vtx Reco Efficiency'),
+    ('vtxreco_vtx',    'num_genmatch_good') : ('vtx_genmatch_good',    'Good Gen-matched vtx Reco Efficiency'),
+    ('vtxreco_merged', 'num_genmatch_any')  : ('merged_genmatch_any',  'Any Gen-matched Merged Reco Efficiency'),
+    ('vtxreco_merged', 'num_genmatch_good') : ('merged_genmatch_good', 'Good Gen-matched Merged Reco Efficiency'),
+    ('vtxreco_eereco', 'num_gedged')        : ('eereco_gedged',        r'(GED, GED) $e^+e^-$ Reco Efficiency'),
+    ('vtxreco_eereco', 'num_gedlpt')        : ('eereco_gedlpt',        r'(GED, LPT) $e^+e^-$ Reco Efficiency'),
+    ('vtxreco_eereco', 'num_lptlpt')        : ('eereco_lptlpt',        r'(LPT, LPT) $e^+e^-$ Reco Efficiency'),
+    ('vtxreco_eereco', 'num_sum')           : ('eereco_sum',           r'GED/LPT Total $e^+e^-$ Reco Efficiency'),
+    ('vtxreco_eereco', 'num_alptalpt')      : ('eereco_alptalpt',      r'(ALPT, ALPT) $e^+e^-$ Reco Efficiency'),
 }
 
 
@@ -209,9 +224,20 @@ def sample_m1(samp):
     return float(mchi.replace('p', '.')) - float(dmchi.replace('p', '.')) / 2
 
 
-def plot_eff_2d(sig_histo, cut, prefix, suffix, idr, run2range=False):
+def sample_point(samp):
     """
-    Weighted reco efficiency in bins of gen Lxy x gen ee pT, for gen ee dR bin
+    Parse the signal point (m1, delta = dMchi/m1, ctau [mm]) from a signal
+    sample name, independent of year (see sample_m1).
+    """
+    dmchi = float(re.search(r'dMchi-([\d]+p[\d]+)', samp).group(1).replace('p', '.'))
+    ctau = float(re.search(r'ctau-([\dp]+)', samp).group(1).replace('p', '.'))
+    m1 = sample_m1(samp)
+    return m1, dmchi / m1, ctau
+
+
+def plot_eff_2d(sig_histo, cut, prefix, suffix, idr, run2range=False, point=None):
+    """
+    Reco efficiency in bins of gen Lxy x gen ee pT, for gen ee dR bin
     `idr`, all signal samples summed. Bins are drawn evenly sized regardless of
     their edge values (the real edges are printed as tick labels), with the
     efficiency printed in each bin.
@@ -221,11 +247,19 @@ def plot_eff_2d(sig_histo, cut, prefix, suffix, idr, run2range=False):
     If `run2range`, only signal samples with m1 > 5 GeV (the mass range
     covered by the Run 2 analysis) are combined, and the output is tagged
     'run2range'. `run2range` is only meaningful with `idr=None`.
+
+    If `point` = (m1, delta, ctau) is given, only signal samples at that point
+    are used (whatever their year), and the output is tagged with it.
     """
     tag, title = PLOTS_2D[(prefix, suffix)]
     samples = list(sig_histo['cutflow'].keys())
     if run2range:
         samples = [s for s in samples if sample_m1(s) >= 5]
+    if point is not None:
+        samples = [s for s in samples if np.allclose(sample_point(s), point)]
+        m1, delta, ctau = point
+        point_tag = f'm1-{m1:g}_delta-{delta:g}_ctau-{ctau:g}'
+        point_title = rf'$m_1$ = {m1:g} GeV, $\Delta$ = {delta:g}, $c\tau$ = {ctau:g} mm'
     h_num = cut_slice(sig_histo[f'{prefix}_{VAR_2D}_{suffix}'], cut)
     h_den = cut_slice(sig_histo[f'vtxreco_{VAR_2D}_den'], cut)
 
@@ -266,12 +300,12 @@ def plot_eff_2d(sig_histo, cut, prefix, suffix, idr, run2range=False):
     ax.set_yticklabels([f'{e:g}' for e in lxy_axis.edges])
     ax.set_xlabel(r'Gen $p_{T}(e^+e^-)$ [GeV]', fontsize=20)
     ax.set_ylabel(r'Gen $L_{xy}$ [cm]', fontsize=20)
-    sample_tag = 'Run 2 Mass Range' if run2range else 'All Signal Samples'
+    sample_tag = point_title if point is not None else ('Run 2 Mass Range' if run2range else 'All Signal Samples')
     ax.set_title(f'{title} [{CUTS[cut].capitalize()}, {sample_tag}]' + dr_subtitle, fontsize=16)
     ax.tick_params(axis='both', labelsize=14)
 
     plt.tight_layout()
-    outtag = f'{plottag}_run2range' if run2range else plottag
+    outtag = f'{plottag}_{point_tag}' if point is not None else (f'{plottag}_run2range' if run2range else plottag)
     outpath = f'{plotdir}/vtxreco2d_{tag}_{VAR_2D}_{dr_tag}_{CUTS[cut]}_{outtag}.png'
     plt.savefig(outpath)
     print(f'Saved: {outpath}')
@@ -281,6 +315,9 @@ def plot_eff_2d(sig_histo, cut, prefix, suffix, idr, run2range=False):
 # ---- Load histograms and make plots ----------------------------------------
 
 s_hists = util.load(saved_signal_hists)[0]
+
+# single signal point (m1 [GeV], delta, ctau [mm]) for the ee reco efficiency maps
+SINGLE_POINT = (50, 0.2, 100)
 
 for cut in CUTS:
     for var in VARIABLES:
@@ -292,3 +329,6 @@ for cut in CUTS:
             plot_eff_2d(s_hists, cut, prefix, suffix, idr)
         plot_eff_2d(s_hists, cut, prefix, suffix, None)
         plot_eff_2d(s_hists, cut, prefix, suffix, None, run2range=True)
+
+for suffix in ('num_gedged', 'num_gedlpt', 'num_lptlpt', 'num_sum', 'num_alptalpt'):
+    plot_eff_2d(s_hists, 'cut1', 'vtxreco_eereco', suffix, None, point=SINGLE_POINT)

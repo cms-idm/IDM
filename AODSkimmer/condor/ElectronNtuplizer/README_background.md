@@ -1,27 +1,41 @@
 # Background ntuples: slim/full split
 
-Since `Aug2026noIDSep`, every background (`signal=0`) ntuplizer job writes **two** output files instead of one. Signal is unaffected and still writes a single file with every event.
+Every background (`signal=0`) ntuplizer job writes **two** output files instead of one. Signal is unaffected and still writes a single file with every event.
 
 | Stream | File | Events | Content |
 |---|---|---|---|
 | **full** | `ntuples_<job>.root` | only events passing the background preselection | the usual full `ntuples/outT` |
 | **slim** | `ntuples_<job>_slim.root` | **every** event | event-level info only |
 
-Why: most background events fail the MET trigger and could never pass the selection, so running vertexing and writing full branches for them wasted CPU and EOS space. The slim stream keeps the full, unselected event population so we can still normalize correctly and measure the trigger/MET-filter cuts.
+Most background events fail the MET trigger and could never pass the selection, so running vertexing and writing full branches for them wasted CPU and EOS space. The slim stream keeps the full, unselected event population so we can still normalize correctly and measure the trigger/MET-filter cuts. Without the slimming process, background datasets would have used over 17 TB of space; with the slim/full workflow, the current samples take up ~650GB (~500GB for the fulls, ~150GB for the slims).
 
 ## Preselection (gates the full stream)
 
-In `plugins/ElectronSkimmer.cc`, and set via `scripts/ElectronNtuplizer_cfg.py`:
+In `plugins/ElectronSkimmer.cc` (called by `scripts/ElectronNtuplizer_cfg.py`):
 
 - `selectionMode=hlt` (default): OR of `hltSelectionPaths`, which defaults to `HLT_PFMETNoMu120_PFMHTNoMu120_IDTight` and `HLT_PFMETNoMu120_PFMHTNoMu120_IDTight_PFHT60`.
 - `selectionMode=metThreshold`: `PFMET_pt >= metThreshold`, which defaults to 200 GeV.
 - **In both modes**, the event must also pass all MET filters (`METFiltersFailBits == 0`).
 
-Events that fail are skipped before electrons, vertices and the other objects are reconstructed. They show up only in the slim tree. If you pass `selectionMode` with `signal=1`, the config raises an error.
+I recommend using the `hlt` mode as the offline cut doesn't save a ton of space and prevents us from easily changing the threshold later.
 
-Slim branches (`NtupleContainerV2::CreateSlimTreeBranches`) are: run/lumi/event, all `trig_*` bits, `METFiltersFailBits`, PF and Calo MET, `fixedGridRhoFastjetAll`, electron counts (`nElectron`, `nLptElectron`, `nAllLptElectron`), `nPFJet`, `PFHT` and `PFJetPtLeading`, plus `genWgt` and gen PU for MC. The slim tree is also stored as `ntuples/outT`, so generic tools such as `sumGenWgts.py` work on both streams.
+Events that fail are skipped before electrons, vertices and the other objects are reconstructed; those are only added in the slim tree.
 
-The slim file name comes from the main output name with `_slim` inserted before `.root`. You can override it with `slimOutfile=`.
+Slim branches (`NtupleContainerV2::CreateSlimTreeBranches`) are:
+
+- run/lumi/event numbers,
+- all `trig_*` bits
+- `METFiltersFailBits`
+- PF and Calo MET
+- `fixedGridRhoFastjetAll`
+- electron counts (`nElectron`, `nLptElectron`, `nAllLptElectron`)
+- `nPFJet`
+- `PFHT`
+- `PFJetPtLeading`
+- `genWgt`
+- gen PU
+
+Both slim and full trees are stored as `ntuples/outT` in the root file, so generic tools such as `sumGenWgts.py` work on both streams. The slim file name comes from the main output name with `_slim` inserted before `.root`.
 
 ## Producing them
 
@@ -31,6 +45,7 @@ From this directory:
 python3 ntuplize_bkg.py <key> [--subkey SUB] [--vers Aug2026noIDSep] [--nsplit 10] [--dry-run]
 ```
 
+(Andrew uses version identifiers like Aug2026noIDSep, see notes in `python_analysis/configs/sample_configs/versnotes.txt`)
 - `<key>` is a top-level key in `fileLists/background/MINIAOD/bkg_2024.json`, for example `QCD`, `DY`, `TT` or `Multiboson`. Each sub-entry maps a subsample name to a DAS dataset. The year is parsed from the JSON filename.
 - The script queries DAS, writes the file lists to `fileLists/background/MINIAOD/fileLists/<year>/` and calls `submit_ElectronNtuplizer_condor.sh`, which submits one condor cluster per subsample.
 - Output goes to two parallel EOS trees:
@@ -45,16 +60,15 @@ python3 ntuplize_bkg.py <key> [--subkey SUB] [--vers Aug2026noIDSep] [--nsplit 1
 
 Run this chain from `configs/sample_configs/` (see `jsonchain_bkg.sh`):
 
-1. **Merge** the full stream with `haddMergeSamples.py`. Full files hold only a few events each, so this produces `background_<vers>_merged`. The slim stream is normally left unmerged.
-2. Build **two sample configs**, one per stream, with `makeSignalConfigs.py -m bkg`, then `getSignalXsec.py` and `sumGenWgts.py`. For example: `bkg_2024_Aug2026.json` (merged full) and `bkg_2024_Aug2026-slim.json`.
-3. Optionally **skim** the full config with `condor/skimming_cutconf/submit_condor_skim_cutconf.py`, which writes `*_skimmed.json`.
-4. Run `histmaker_background.py`:
-   ```python
+1. Merge the full stream with `haddMergeSamples.py`. Full files hold only a few events each, so this produces `background_<vers>_merged`. The slim stream is normally left unmerged.
+2. Build two sample configs, one per stream, with `makeSignalConfigs.py -m bkg`, then `getSignalXsec.py` and `sumGenWgts.py`. For example: `bkg_2024_Aug2026.json` (merged full) and `bkg_2024_Aug2026-slim.json`.
+3. For histograms, add the slimmed sample config to the Analyzer like so:
+```python
    Analyzer(sample_config, hists_config, cuts_config,
             slimFileList=slimmed_config, processSlim=False)
    ```
 
-**Normalization (important):** `sum_wgt` and `num_events` in the full config cover only the events that passed preselection, so they are **wrong** as normalization. When `slimFileList` is given, the `Analyzer` pairs each background sample with its slim entry by `bkg_<year>_<name>` and **overwrites** `sum_wgt` and `num_events` with the slim values for the whole sample. Always pass `slimFileList` for background, even if you don't process the slim files. Unpaired samples print a warning and keep the wrong values.
+**Normalization** (important): `sum_wgt` and `num_events` in the full config cover only the events that passed preselection, so they are **wrong** as normalization. When `slimFileList` is given, the `Analyzer` pairs each background sample with its slim entry by `bkg_<year>_<name>` and **overwrites** `sum_wgt` and `num_events` with the slim values for the whole sample. Always pass `slimFileList` for background, even if you don't process the slim files. Unpaired samples print a warning and keep the wrong values.
 
 **`processSlim`:**
 - `False`: normalization is still fixed, but the slim ntuples are never opened. Use this when you only need the main histograms.
@@ -63,9 +77,10 @@ Run this chain from `configs/sample_configs/` (see `jsonchain_bkg.sh`):
   - The cut config is also applied to the slim tree and stored in `cutflow_slim`, `cutflow_cts_slim` and related entries. Only cuts that use slim branches make sense here, such as the MET filters and trigger. `utils.get_bkg_slim_cut_overrides` turns these into cutflow columns that replace the full-tree ones.
   - A histo config can define an optional `fillSlimHistos(events, histObj, samp, info, sum_wgt=...)` to fill inclusive histograms, such as MET, HT or trigger turn-ons, from the slim tree.
 
-## Gotchas
+## Notes
 
-- **Keep the two streams in sync.** Normalization comes from the slim files that are present and not blacklisted. If a job's slim file is missing or blacklisted but its full file isn't, that sample is slightly over-weighted. For example, `DY_EE` currently has 1227 full vs. 1217 slim files, plus 10 blacklisted slim files. Compare file counts and blacklists after production.
+- I have only ntuplized TT, QCD, DY, Multiboson, and WtoLNu, and only for 2024. DYLowMass and Zto2Nu have not been ntuplized; Zgamma and SingleT only have MiniAODv6 samples available for 2024 which is not currently compatible with my CMSSW version.
+- Best practice is to keep the two streams in sync. Normalization comes from the slim files that are present and not blacklisted. If a job's slim file is missing or blacklisted but its full file isn't, that sample is slightly over-weighted. 
 - Signal configs have no slim counterpart and need none: signal files contain every event.
 - Skimmed configs keep the `sum_wgt` of their parent full config, so the slim override is still required.
-- Version notes are in `python_analysis/configs/sample_configs/versnotes.txt`.
+

@@ -1,7 +1,7 @@
 from __future__ import with_statement
 import coffea
 from coffea.nanoevents import NanoEventsFactory, NanoAODSchema, BaseSchema
-from mySchema import MySchema
+from mySchema_newCoffea import MySchema
 from coffea import processor
 from coffea.nanoevents.methods import vector
 from coffea.processor import column_accumulator
@@ -25,7 +25,7 @@ from analysisTools import getLumi, deltaPhi
 import plotTools as ptools
 
 class Skimmer:
-    def __init__(self,fileList,cuts,max_samples=-1,max_files_per_samp=-1):
+    def __init__(self,fileList,cuts,max_samples=-1,max_files_per_samp=-1,last_cut=None):
         # load in file config
         if type(fileList) == str and ".json" in fileList:
             with open(fileList) as f:
@@ -35,7 +35,8 @@ class Skimmer:
 
         # load in cuts config (should be a path to a .py file with cut methods)
         self.cuts = cuts
-        
+        self.last_cut = last_cut # apply cuts up to and including this one (e.g. "cut5"), None = all cuts
+
         self.sample_names = [] # list of sample names, readable names are generated from data in the fileList json
         self.sample_locs = {} # dictionary mapping sample name to file/directory location
         self.sample_info = {} # dictionary with sample metadata
@@ -96,7 +97,7 @@ class Skimmer:
 
     def process(self,treename='ntuples/outT',execr="iterative",workers=4):
         fileset = self.sample_locs
-        proc = makeBDTInputs(self.sample_names,self.sample_info,self.sample_locs,self.cuts,mode=self.mode)
+        proc = makeBDTInputs(self.sample_names,self.sample_info,self.sample_locs,self.cuts,mode=self.mode,last_cut=self.last_cut)
         if execr == "iterative":
             executor = processor.IterativeExecutor()
         elif execr == "futures":
@@ -111,7 +112,7 @@ class Skimmer:
         return accumulator
 
 class makeBDTInputs(processor.ProcessorABC):
-    def __init__(self,samples,sampleInfo,fileSet,cutFile,mode='signal'):
+    def __init__(self,samples,sampleInfo,fileSet,cutFile,mode='signal',last_cut=None):
         self.samples = samples
         self.sampleInfo = sampleInfo
         self.sampleLocs = fileSet
@@ -122,16 +123,16 @@ class makeBDTInputs(processor.ProcessorABC):
         if "/" in self.cutFile: # if cut file is in a different directory
             sys.path.append("/".join(self.cutFile.split("/")[:-1]))
             cutFileName = self.cutFile.split("/")[-1].split(".")[0]
-            self.cutLib = importlib.import_module(cutFileName)
-            cutList = [c for c in dir(self.cutLib) if "cut" in c]
-            cutList = sorted(cutList,key=lambda x: int(x[3:])) # make sure cuts are ordered as they are in the file
-            self.cuts = [getattr(self.cutLib,c) for c in cutList]
         else: # cut file is in the same directory (e.g. running on condor)
             cutFileName = self.cutFile.split(".")[0]
-            self.cutLib = importlib.import_module(cutFileName)
-            cutList = [c for c in dir(self.cutLib) if "cut" in c]
-            cutList = sorted(cutList,key=lambda x: int(x[3:])) # make sure cuts are ordered as they are in the file
-            self.cuts = [getattr(self.cutLib,c) for c in cutList]
+        self.cutLib = importlib.import_module(cutFileName)
+        cutList = [c for c in dir(self.cutLib) if re.fullmatch(r"cut\d+",c)]
+        cutList = sorted(cutList,key=lambda x: int(x[3:])) # make sure cuts are ordered as they are in the file
+        if last_cut is not None: # only apply cuts up to and including last_cut
+            if last_cut not in cutList:
+                raise ValueError(f"last_cut '{last_cut}' not found in {self.cutFile} (available: {cutList})")
+            cutList = cutList[:cutList.index(last_cut)+1]
+        self.cuts = [getattr(self.cutLib,c) for c in cutList]
 
     
     def process(self,events):
@@ -176,13 +177,12 @@ class makeBDTInputs(processor.ProcessorABC):
         events["nJets"] = nJets
         events = events[nJets>0]
         # needs a good vertex
-        routines.defineGoodVertices(events,version='v11') # define "good" vertices based on whether associated electrons pass ID cuts
+        routines.defineGoodVertices(events,version='v15acr') # define "good" vertices based on whether associated electrons pass ID cuts
         events = events[events.nGoodVtx > 0]
         # define "selected" vertex based on selection criteria in the routine (nominally: lowest chi2)
         # for signal, only select the events where the good vertex is the true vertex
         if info['type'] == "signal":
             events = routines.selectTrueVertex(events, events.good_vtx)
-            events["sel_vtx","match"] = ak.sum(np.stack((events.sel_vtx.e1_isMatched, events.sel_vtx.e2_isMatched)), axis=0)
         else:
             routines.selectBestVertex(events)
 
@@ -199,9 +199,9 @@ class makeBDTInputs(processor.ProcessorABC):
         deltadxy = np.abs(np.abs(e1.dxy) - np.abs(e2.dxy))
         mindxy = np.minimum(np.abs(e1.dxy),np.abs(e2.dxy))
         maxdxy = np.maximum(np.abs(e1.dxy),np.abs(e2.dxy))
-        meandxy = np.mean(np.abs(e1.dxy),np.abs(e2.dxy))
+        meandxy = (np.abs(e1.dxy) + np.abs(e2.dxy))/2
         abs_deta = np.abs(e1.eta - e2.eta)
-        abs_dphi = np.abs(e1.phi - e2.phi)
+        abs_dphi = np.abs(deltaPhi(e1.phi, e2.phi))
         
         outputs['wgt'] = column_accumulator(events["eventWgt"].to_numpy())
         xsec = info['xsec']
@@ -210,6 +210,10 @@ class makeBDTInputs(processor.ProcessorABC):
         outputs['xsec'] = column_accumulator(xsec*np.ones(len(events)))
         #outputs['samp'] = column_accumulator(np.full(len(events),samp))
         outputs['wgt_norm'] = column_accumulator(events["eventWgtNorm"].to_numpy())
+        # event IDs, used for the k-fold assignment in BDT training (fold = eventNum % k)
+        outputs['eventNum'] = column_accumulator(events.eventNum.to_numpy())
+        outputs['lumiSec'] = column_accumulator(events.lumiSec.to_numpy())
+        outputs['runNum'] = column_accumulator(events.runNum.to_numpy())
         outputs['lead_jet_eta'] = column_accumulator(events.PFJet.eta[:,0].to_numpy())
         outputs['lead_jet_pt'] = column_accumulator(events.PFJet.pt[:,0].to_numpy())
         outputs['jetMETdPhi'] = column_accumulator(np.abs(events.PFJet.METdPhi[:,0]).to_numpy())
@@ -232,7 +236,8 @@ class makeBDTInputs(processor.ProcessorABC):
         outputs["sel_e2_dxySignif"] = column_accumulator((np.abs(e2.dxy)/e2.dxyErr).to_numpy())
         
         if info['type'] == 'signal':
-            outputs['sel_vtx_match'] = column_accumulator(events.sel_vtx.match.to_numpy())
+            # sel_vtx is re-selected (lowest chi2) inside the cuts, so compute the match count here
+            outputs['sel_vtx_match'] = column_accumulator(ak.to_numpy(ak.values_astype(events.sel_vtx.e1_isMatched,int) + ak.values_astype(events.sel_vtx.e2_isMatched,int)))
             outputs['sel_vtx_isMatched'] = column_accumulator(ak.values_astype(events.sel_vtx.isMatched,int).to_numpy())
             outputs['m1'] = column_accumulator(events["m1"].to_numpy())
             outputs['delta'] = column_accumulator(events["delta"].to_numpy())
@@ -253,14 +258,12 @@ class makeBDTInputs(processor.ProcessorABC):
         outputs["log_delta_eta_over_delta_phi"] = column_accumulator(np.log10(abs_deta/abs_dphi).to_numpy())
         outputs["logdxydz"] = column_accumulator(np.minimum(np.log10(np.abs(events.sel_vtx.e1.dxy/events.sel_vtx.e1.dz)),np.log10(np.abs(events.sel_vtx.e2.dxy/events.sel_vtx.e2.dz))).to_numpy())
        
-        outputs["sel_vtx_m_refit"] = column_accumulator(events.sel_vtx.refit_m.to_numpy())
         outputs["sel_vtx_CosThetaColl_fromPV_refit"] = column_accumulator(events.sel_vtx.cos_collinear_fromPV_refit.to_numpy())
         outputs["sel_vtx_ThetaColl_fromPV_refit"] = column_accumulator(np.arccos(events.sel_vtx.cos_collinear_fromPV_refit.to_numpy()))
         outputs["sel_vtx_CosThetaColl_fromPV"] = column_accumulator(events.sel_vtx.cos_collinear_fromPV.to_numpy())
         outputs["vxy_corr"] = column_accumulator(np.sqrt((events.sel_vtx.vx-events.PV.x)**2+(events.sel_vtx.vy-events.PV.y)**2).to_numpy())
         outputs["sel_vtx_minDxy_refit"] = column_accumulator(np.minimum(np.abs(events.sel_vtx.e1.refit_dxy), np.abs(events.sel_vtx.e2.refit_dxy)).to_numpy())
-        outputs["sel_vtx_dR_refit"] = column_accumulator(events.sel_vtx.refit_dR.to_numpy())
-        outputs["sel_vtx_METdPhi_corr"] = column_accumulator(np.abs(events.PFMET.phi-events.sel_vtx.refit_phi).to_numpy())
+        outputs["sel_vtx_METdPhi_corr"] = column_accumulator(np.abs(deltaPhi(events.PFMET.phi, events.sel_vtx.refit_phi)).to_numpy())
 
 
         return outputs
