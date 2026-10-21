@@ -56,6 +56,27 @@ python3 ntuplize_bkg.py <key> [--subkey SUB] [--vers Aug2026noIDSep] [--nsplit 1
 - `resubmit_failed.py <key>` finds full-stream outputs with a missing or broken tree and resubmits those jobs, which redoes both streams. `VERS` and `YEAR` are hardcoded at the top of the script, so update them first.
 - `rename_eos_bkg.sh` merges one slim tree into another without overwriting files (`--dry-run`, `--force`, `--rmdir`). This is useful when combining partial productions. The source and destination paths are hardcoded.
 
+### Code changes (ntuplizer)
+
+- `4503704`: the core split.
+  - **`ElectronSkimmer.cc`, `NtupleContainerV2`, `Helpers`**: add the background preselection and the slim tree.
+  - **`ElectronNtuplizer_cfg.py`**: adds `selectionMode`, `metThreshold`, `hltSelectionPaths` and `slimOutfile`.
+  - **`ntuplize_bkg.py`** and **`fileLists/make_file_list_bkg.py`** are new.
+  - **`submit_ElectronNtuplizer_condor.sh`**: takes the output category (`background`) and output directory as arguments. It creates the `_slim` EOS directory and passes its path to the job as the 9th argument. It submits one cluster per dataset through `ElectronNtuplizer_config_batch.jdl`.
+  - **`exec_ElectronNtuplizer.sh`**: copies the slim file to EOS when one was written.
+- `ae77ec9`:
+  - The full stream now also requires all MET filters to pass.
+  - `resubmit_failed.py` handles background and the slim path.
+  - `rename_eos_bkg.sh` and `xrd_rename_dir.py` are new. The latter renames an EOS directory, e.g. a version tag.
+  - The `--nsplit` default drops from 50 to 10.
+- `60925d5`:
+  - `hlt` becomes the default `selectionMode` in the cfg instead of being hardcoded in `exec_ElectronNtuplizer.sh`.
+  - Passing `selectionMode` with `signal=1` now raises an error.
+  - The slim PFMET branches go back to full `float`; CaloMET stays `Float16_t`.
+- `9774b78`, `d3ea374`:
+  - `ntuplize_bkg.py` skips `_comment*` entries in the JSON and gains `--subkey`.
+  - `resubmit_failed.py` takes `<key>`.
+
 ## Downstream (python_analysis)
 
 Run this chain from `configs/sample_configs/` (see `jsonchain_bkg.sh`):
