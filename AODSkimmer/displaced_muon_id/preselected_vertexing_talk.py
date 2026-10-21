@@ -405,10 +405,10 @@ def plot(args):
                     nn = f["quantiles/overall/n__%s__%s__%s" % (u, metric, xv)]
                     edges = lo.axis().edges(); x = 0.5 * (edges[1:] + edges[:-1])
                     good = nn.values() >= Q_NMIN
-                    col = tab(i)
-                    ax.plot(x[good], md.values()[good], "-", color=col, lw=1.2, label=label(u) + " median")
+                    col = tab(list(UNORD).index(u))
+                    ax.plot(x[good], md.values()[good], "-", color=col, lw=1.2, label=label(u))
                     ax.plot(x[good], lo.values()[good], "--", color=col, lw=0.9)
-                    ax.plot(x[good], hi.values()[good], "--", color=col, lw=0.9, label=label(u) + " 5%/95%")
+                    ax.plot(x[good], hi.values()[good], "--", color=col, lw=0.9)
                 ax.set_xlabel(EFF_LABELS[xv]); ax.set_ylabel(YLAB[metric]); ax.grid(alpha=.3)
                 ax.axhline(0, color="k", lw=0.5)
                 vals_ = np.concatenate([f["quantiles/overall/%s__%s__%s__%s" % (nm, u, metric, xv)].values()[
@@ -419,10 +419,14 @@ def plot(args):
                     ax.set_ylim(lo_ - pad_, hi_ + pad_)
                 if c_ == 0:
                     ax.set_title(("Tracker-leg sets" if r_ == 0 else "DSA-leg sets") + " (solid: median, dashed: 90% interval)", fontsize=8, loc="left")
-            axs[r_, 0].legend(fontsize=6, loc="best")
         fig.suptitle("4%s. 90%% interval (5th–95th percentile) of the %s versus the plotting variables; bins with < %d valid fits omitted"
                      % (LETTER[metric], TTL[metric], Q_NMIN), fontsize=11)
-        finish(fig, out / ("slide4%s_%s_90pc_vs_variables.png" % (LETTER[metric], metric)),
+        hh_ = {}
+        for ax_ in axs.ravel():
+            for h_, l_ in zip(*ax_.get_legend_handles_labels()):
+                hh_.setdefault(l_, h_)
+        fig.legend(list(hh_.values()), list(hh_.keys()), loc="lower center", ncol=6, fontsize=9, bbox_to_anchor=(0.5, 0.025))
+        finish(fig, out / ("slide4%s_%s_90pc_vs_variables.png" % (LETTER[metric], metric)), bottom=0.09,
                note="Signal MC (2022EE); valid typed fits, mixed sets merged (both orderings); raw unweighted; y range clipped to the "
                     "3rd-97th percentile of the plotted band edges (extreme bins can fall outside)")
     print("Plots done in", out, flush=True)
