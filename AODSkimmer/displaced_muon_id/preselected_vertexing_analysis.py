@@ -34,7 +34,7 @@ EFF_LABELS = {"pt": r"Leading gen signal-muon $p_T$ [GeV]", "eta": r"Max gen sig
               "lxy": r"Gen production $L_{xy}$ [cm]", "d0": r"Max gen $|d_0|$ to origin [cm]"}
 DIST_EDGES = {
     "chi2": np.r_[np.arange(0, 10.01, .25), 12, 15, 20, 30, 50, 100, 1000],
-    "drGen": np.arange(0, 5.01, .1), "drReco": np.arange(0, 5.01, .1),
+    "drGen": np.arange(0, 6.01, .1), "drReco": np.arange(0, 6.01, .1),
     "dphiGen": np.linspace(-np.pi, np.pi, 33), "dphiPF": np.linspace(-np.pi, np.pi, 33),
     "absdphiGen": np.linspace(0, np.pi, 33), "absdphiPF": np.linspace(0, np.pi, 33),
 }
@@ -46,7 +46,7 @@ DIST_LABELS = {"chi2": r"Vertex $\chi^2$/ndof", "drGen": r"$\Delta R$(gen signal
                "absdphiGen": r"$|\Delta\phi|$(gen MET, gen $\mu\mu$ $p_T$) [rad]",
                "absdphiPF": r"$|\Delta\phi|$(PF MET, reco $\mu\mu$ $p_T$) [rad]"}
 CUTFLOW = ("initial events", "two signal muons (mu-,mu+)", "both accepted", "both matched (hierarchy)",
-           "best-best vertex valid") + tuple("typed matched " + c for c in CATS) + tuple("typed valid " + c for c in CATS) + (
+           "best-best vertex valid") + tuple("typed matched " + CAT_NAMES[c] for c in CATS) + tuple("typed valid " + CAT_NAMES[c] for c in CATS) + (
           "accepted & >=2 pre-selected objects", "accepted & >=1 valid any-pair", "matched & >=1 valid any-pair")
 
 
@@ -281,6 +281,16 @@ def plot(args):
     def cmap(i, n):  # >10 groups: sequential colours in the (sorted) legend order; else tab10
         return plt.get_cmap("turbo")(0.05 + 0.9 * i / max(n - 1, 1)) if n > 10 else plt.get_cmap("tab10")(i)
 
+    def numkey(g):  # sort overlay groups numerically (mass: Mchi then dMchi; lifetime: ctau)
+        nums = [float(x.replace("p", ".")) for x in re.findall(r"(?:Mchi|ctau)-([\dp]+)", g)]
+        return nums if nums else [float(g.split("_")[-1])]
+
+    def glabel(g):
+        if g.startswith("ctau_"):
+            return "c\u03c4 = %s cm" % g.split("_")[1]
+        a, b = (float(x.replace("p", ".")) for x in re.findall(r"Mchi-([\dp]+)", g))
+        return "M\u03c7=%g, \u0394M=%g GeV" % (a, b)
+
     def h(group, name):
         o = f["groups/%s/%s" % (group, name)]
         return o.values(flow=True), o.axis().edges()
@@ -333,24 +343,31 @@ def plot(args):
             finish(fig, out / ("eff_overall__%s.png" % var), note=foot_eff)
 
     def eff_overlay(prefix, tag):
-        gs = [g for g in groups if g.startswith(prefix)]
+        gs = sorted([g for g in groups if g.startswith(prefix)], key=numkey)
         for var in EFF_EDGES:
             fig, ax = plt.subplots(1, 3, figsize=(15, 4.4))
             for i, (num, den, typed, title) in enumerate(METRICS):
                 for j, g in enumerate(gs):
-                    curve(ax[i], *ratio(g, num, den, var), g[len(prefix):], cmap(j, len(gs)))
+                    if len(gs) > 10:  # many groups: lines without error bars, otherwise the points are unreadable
+                        edges, r_, l_, u_, b_ = ratio(g, num, den, var)
+                        xc = 0.5 * (edges[1:] + edges[:-1]); ok_ = b_ > 0
+                        ax[i].plot(xc[ok_], r_[ok_], "-o", ms=2.5, lw=1, color=cmap(j, len(gs)), label=glabel(g))
+                    else:
+                        curve(ax[i], *ratio(g, num, den, var), glabel(g), cmap(j, len(gs)))
                 ax[i].set_xlabel(EFF_LABELS[var]); ax[i].set_ylabel("Efficiency"); ax[i].set_ylim(0, 1.05)
                 ax[i].set_title("Best–best: " + title, fontsize=9); ax[i].grid(alpha=.3)
             hd, lb = ax[2].get_legend_handles_labels()
             fig.legend(hd, lb, loc="lower center", ncol=6, fontsize=7, bbox_to_anchor=(0.5, 0.02))
-            finish(fig, out / ("overlay_%s_eff__%s.png" % (tag, var)), note=foot_eff, bottom=0.12)
+            finish(fig, out / ("overlay_%s_eff__%s.png" % (tag, var)), note=foot_eff if len(gs) <= 10 else foot + "; lines connect bins (no error bars)",
+                   bottom=0.12)
 
     def cutflow_fig(group):
         v, _ = h(group, "cutflow")
         v = v[1:-1]
         fig, ax = plt.subplots(figsize=(9, 6.5))
         y = np.arange(len(CUTFLOW))[::-1]
-        ax.barh(y, v)
+        fam = ["0.6", "0.6", "C0", "C1", "C1"] + ["C2"] * 6 + ["C3"] * 6 + ["C4"] * 3
+        ax.barh(y, v, color=fam)
         for yi, c in zip(y, v):
             ax.text(c, yi, " %d  (%.2f%% of initial, %.2f%% of accepted)" % (c, 100 * c / max(v[0], 1), 100 * c / max(v[2], 1)),
                     va="center", fontsize=7)
@@ -393,13 +410,13 @@ def plot(args):
     eff_overall("overall")
     eff_overlay("mass_", "mass")
     eff_overlay("ctau_", "lifetime")
-    mg = [g for g in groups if g.startswith("mass_")]
-    lg = [g for g in groups if g.startswith("ctau_")]
+    mg = sorted([g for g in groups if g.startswith("mass_")], key=numkey)
+    lg = sorted([g for g in groups if g.startswith("ctau_")], key=numkey)
     for s in SETS:
         panels(["overall"], ["overall"], s, False, "dist_overall__%s.png" % s, "overall")
         for tag, gs, pre in (("mass", mg, "mass_"), ("lifetime", lg, "ctau_")):
             for norm in (False, True):
-                panels(gs, [g[len(pre):] for g in gs], s, norm,
+                panels(gs, [glabel(g) for g in gs], s, norm,
                        "overlay_dist_%s__%s%s.png" % (tag, s, "_norm" if norm else ""), tag + " overlay")
     print("Plots done in", out, flush=True)
 
