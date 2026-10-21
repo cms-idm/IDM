@@ -378,81 +378,84 @@ def plot(args):
     finish(fig, out / "slide0_cutflow.png")
 
     # Slide 4: quality
-    def qpanels(var_fine, var_wide, xlabel_f, xlabel_w, fname, title, extra=None):
-        fig, ax = plt.subplots(1, 2, figsize=(13, 4.8))
-        for a, sets, var, xl, rng in ((ax[0], TRK_SETS, var_fine, xlabel_f, "fine"), (ax[1], DSA_SETS, var_wide, xlabel_w, "wide")):
-            for i, u in enumerate(sets):
-                v, e_ = h("%s__%s_%s" % (u, var, rng))
-                n = v.sum()
-                if n == 0:
-                    continue
-                a.stairs(v[1:-1] / n, e_, color=SETCOL[u], lw=SETLW[u],
-                         label="%s (N=%d, %.1f%% outside)" % (label(u), n, 100 * (v[0] + v[-1]) / n))
-            a.set_xlabel(xl); a.set_ylabel("Unit area (incl. outside range)"); a.legend(fontsize=7, loc="upper left" if rng == "fine" else "upper right"); a.grid(alpha=.3)
-        ax[0].set_title("Tracker-leg sets (no DSA leg): narrow range; the three curves nearly coincide", fontsize=9)
-        ax[1].set_title("DSA-leg sets: wide range", fontsize=9)
+    # Slide 4a-4e: one panel per set (tracker-leg sets on the top row, DSA-leg sets on the bottom row), all unit-area
+    # (fraction of fits per bin, incl. the fraction outside the plotted range, quoted in each panel), shared y per row,
+    # dashed black outline = first set of the row as reference, so differences between sets are visible directly.
+    def qpanels(var, xlabel, fname, title):
+        fig, axs = plt.subplots(2, 3, figsize=(15, 7.6), sharey="row")
+        for r_, (sets, rng) in enumerate(((TRK_SETS, "fine"), (DSA_SETS, "wide"))):
+            ref = None
+            for c_, u in enumerate(sets):
+                a = axs[r_, c_]
+                nm = "%s__chi2" % u if var == "chi2" else "%s__%s_%s" % (u, var, rng)
+                v, e_ = h(nm); n = v.sum()
+                if c_ == 0:
+                    ref = (v[1:-1] / n, e_)
+                a.stairs(v[1:-1] / n, e_, fill=True, color=SETCOL[u], alpha=0.5)
+                a.stairs(v[1:-1] / n, e_, color=SETCOL[u], lw=1.6)
+                if c_ > 0:
+                    a.stairs(ref[0], ref[1], color="k", lw=1.0, ls="--", label=label(sets[0]) + " (reference)")
+                    a.legend(fontsize=7, loc="upper right")
+                a.set_title("%s   N=%d, %.1f%% outside range" % (label(u), n, 100 * (v[0] + v[-1]) / n), fontsize=9)
+                a.set_xlabel(xlabel); a.grid(alpha=.3)
+                if c_ == 0:
+                    a.set_ylabel(("Tracker-leg sets" if r_ == 0 else "DSA-leg sets") + "\nfraction of fits per bin (unit area)")
         fig.suptitle(title, fontsize=11)
         finish(fig, out / fname)
 
-    fig, ax = plt.subplots(figsize=(7, 4.8))
-    for i, u in enumerate(UNORD):
-        v, e_ = h("%s__chi2" % u); n = v.sum()
-        ax.stairs(v[1:-1] / n, e_, label="%s (N=%d)" % (label(u), n), color=SETCOL[u], lw=SETLW[u])
-    ax.set_xlabel(r"Vertex $\chi^2$/ndof (ndof = 1)"); ax.set_ylabel("Unit area (incl. > 10)"); ax.legend(fontsize=8); ax.grid(alpha=.3)
-    ax.set_title("4a. Vertex quality: χ²/dof of valid typed fits", fontsize=10)
-    finish(fig, out / "slide4a_chi2.png")
-    qpanels("dvxy", "dvxy", r"$v_{xy}^{reco} - v_{xy}^{gen}$ [cm]", r"$v_{xy}^{reco} - v_{xy}^{gen}$ [cm]",
-            "slide4b_vxy_absolute.png", "4b. Vertex vxy resolution, absolute (reco fit radius − gen production radius, from the origin)")
-    qpanels("dvxyrel", "dvxyrel", r"$(v_{xy}^{reco} - v_{xy}^{gen})/v_{xy}^{gen}$  (gen $v_{xy}$ > 1 cm)",
-            r"$(v_{xy}^{reco} - v_{xy}^{gen})/v_{xy}^{gen}$  (gen $v_{xy}$ > 1 cm)", "slide4c_vxy_relative.png",
-            "4c. Vertex vxy resolution, relative (gen vxy > 1 cm)")
-    qpanels("dpt", "dpt", r"$p_T^{\mu\mu,reco} - p_T^{\mu\mu,gen}$ [GeV]", r"$p_T^{\mu\mu,reco} - p_T^{\mu\mu,gen}$ [GeV]",
-            "slide4d_dimuon_pt_absolute.png", "4d. Dimuon pT resolution, absolute (sum of the two legs' track pT at their reference points)")
-    qpanels("dptrel", "dptrel", r"$(p_T^{reco} - p_T^{gen})/p_T^{gen}$", r"$(p_T^{reco} - p_T^{gen})/p_T^{gen}$",
-            "slide4e_dimuon_pt_relative.png", "4e. Dimuon pT resolution, relative")
-    # 90% interval resolutions versus the plotting variables (5th-95th percentile band and median), valid typed fits
+    qpanels("chi2", r"Vertex $\chi^2$/ndof (ndof = 1; plotted 0–10)", "slide4a_chi2.png", "4a. Vertex quality: χ²/dof of valid typed fits")
+    qpanels("dvxy", r"$v_{xy}^{reco} - v_{xy}^{gen}$ [cm]", "slide4b_vxy_absolute.png",
+            "4b. Vertex vxy resolution, absolute (reco fit radius − gen production radius, from the origin); top row narrow range, bottom row wide range")
+    qpanels("dvxyrel", r"$(v_{xy}^{reco} - v_{xy}^{gen})/v_{xy}^{gen}$  (gen $v_{xy}$ > 1 cm)", "slide4c_vxy_relative.png",
+            "4c. Vertex vxy resolution, relative (gen vxy > 1 cm); top row narrow range, bottom row wide range")
+    qpanels("dpt", r"$p_T^{\mu\mu,reco} - p_T^{\mu\mu,gen}$ [GeV]", "slide4d_dimuon_pt_absolute.png",
+            "4d. Dimuon pT resolution, absolute (sum of the two legs' track pT at their reference points); top row narrow, bottom row wide")
+    qpanels("dptrel", r"$(p_T^{reco} - p_T^{gen})/p_T^{gen}$", "slide4e_dimuon_pt_relative.png",
+            "4e. Dimuon pT resolution, relative; top row narrow range, bottom row wide range")
+
+    # Slide 4f-4i: 90% interval (5th-95th percentile band, median line) versus the plotting variables, one panel per set
+    # (rows) and variable (columns); y shared within the tracker rows and within the DSA rows of each column.
     YLAB = {"dvxy": r"$v_{xy}^{reco}-v_{xy}^{gen}$ [cm]", "dvxyrel": r"$(v_{xy}^{reco}-v_{xy}^{gen})/v_{xy}^{gen}$",
             "dpt": r"$p_T^{\mu\mu,reco}-p_T^{\mu\mu,gen}$ [GeV]", "dptrel": r"$(p_T^{reco}-p_T^{gen})/p_T^{gen}$"}
     TTL = {"dvxy": "vxy residual (absolute)", "dvxyrel": "vxy residual (relative, gen vxy > 1 cm)",
            "dpt": "dimuon pT residual (absolute)", "dptrel": "dimuon pT residual (relative)"}
     LETTER = {"dvxy": "f", "dvxyrel": "g", "dpt": "h", "dptrel": "i"}
+    rows = TRK_SETS + DSA_SETS
     for metric in QMETRICS:
-        fig, axs = plt.subplots(2, 4, figsize=(18, 8))
-        for r_, sets in enumerate((TRK_SETS, DSA_SETS)):
-            for c_, xv in enumerate(EFF_EDGES):
+        fig, axs = plt.subplots(6, 4, figsize=(18, 15), sharex="col")
+        for c_, xv in enumerate(EFF_EDGES):
+            lims = {0: [], 1: []}
+            for r_, u in enumerate(rows):
                 ax = axs[r_, c_]
-                for i, u in enumerate(sets):
-                    lo = f["quantiles/overall/q05__%s__%s__%s" % (u, metric, xv)]
-                    md = f["quantiles/overall/q50__%s__%s__%s" % (u, metric, xv)]
-                    hi = f["quantiles/overall/q95__%s__%s__%s" % (u, metric, xv)]
-                    nn = f["quantiles/overall/n__%s__%s__%s" % (u, metric, xv)]
-                    edges = lo.axis().edges(); x = 0.5 * (edges[1:] + edges[:-1])
-                    good = nn.values() >= Q_NMIN
-                    col = SETCOL[u]; lw_ = SETLW[u]
-                    ax.plot(x[good], md.values()[good], "-", color=col, lw=lw_, marker=SETMK[u], ms=4 + lw_, markevery=3,
-                            label=label(u))
-                    ax.plot(x[good], lo.values()[good], ls=(0, (4, 2)), color=col, lw=0.9 * lw_)
-                    ax.plot(x[good], hi.values()[good], ls=(0, (4, 2)), color=col, lw=0.9 * lw_)
-                ax.set_xlabel(EFF_LABELS[xv]); ax.set_ylabel(YLAB[metric]); ax.grid(alpha=.3)
-                ax.axhline(0, color="k", lw=0.5)
-                vals_ = np.concatenate([f["quantiles/overall/%s__%s__%s__%s" % (nm, u, metric, xv)].values()[
-                    f["quantiles/overall/n__%s__%s__%s" % (u, metric, xv)].values() >= Q_NMIN]
-                    for u in sets for nm in ("q05", "q95")])
-                if len(vals_):  # robust y range: a few extreme bins (e.g. the lowest pT) must not hide the trend
-                    lo_, hi_ = np.percentile(vals_, [3, 97]); pad_ = 0.15 * (hi_ - lo_)
-                    ax.set_ylim(lo_ - pad_, hi_ + pad_)
+                lo = f["quantiles/overall/q05__%s__%s__%s" % (u, metric, xv)]
+                md = f["quantiles/overall/q50__%s__%s__%s" % (u, metric, xv)]
+                hi = f["quantiles/overall/q95__%s__%s__%s" % (u, metric, xv)]
+                nn = f["quantiles/overall/n__%s__%s__%s" % (u, metric, xv)]
+                edges = lo.axis().edges(); x = 0.5 * (edges[1:] + edges[:-1])
+                good = nn.values() >= Q_NMIN
+                ax.fill_between(x[good], lo.values()[good], hi.values()[good], color=SETCOL[u], alpha=0.4, lw=0)
+                ax.plot(x[good], md.values()[good], color=SETCOL[u], lw=1.8)
+                ax.plot(x[good], lo.values()[good], color=SETCOL[u], lw=0.8)
+                ax.plot(x[good], hi.values()[good], color=SETCOL[u], lw=0.8)
+                ax.axhline(0, color="k", lw=0.5); ax.grid(alpha=.3)
+                lims[0 if r_ < 3 else 1] += [lo.values()[good], hi.values()[good]]
                 if c_ == 0:
-                    ax.set_title(("Tracker-leg sets" if r_ == 0 else "DSA-leg sets") + " (solid: median, dashed: 90% interval)", fontsize=8, loc="left")
-        fig.suptitle("4%s. 90%% interval (5th–95th percentile) of the %s versus the plotting variables; bins with < %d valid fits omitted"
+                    ax.set_ylabel(label(u), fontsize=10, color=SETCOL[u], fontweight="bold")
+                if r_ == 0:
+                    ax.set_title(EFF_LABELS[xv], fontsize=10)
+            for g_, (r0, r1) in enumerate(((0, 3), (3, 6))):  # robust shared y range per group and column
+                vals_ = np.concatenate(lims[g_])
+                if len(vals_):
+                    lo_, hi_ = np.percentile(vals_, [3, 97]); pad_ = 0.15 * (hi_ - lo_)
+                    for r_ in range(r0, r1):
+                        axs[r_, c_].set_ylim(lo_ - pad_, hi_ + pad_)
+        fig.suptitle("4%s. %s: median (line) and 90%% interval, 5th–95th percentile (band), versus the plotting variables; "
+                     "bins with < %d valid fits omitted; y axis shared within the tracker rows and within the DSA rows"
                      % (LETTER[metric], TTL[metric], Q_NMIN), fontsize=11)
-        hh_ = {}
-        for ax_ in axs.ravel():
-            for h_, l_ in zip(*ax_.get_legend_handles_labels()):
-                hh_.setdefault(l_, h_)
-        fig.legend(list(hh_.values()), list(hh_.keys()), loc="lower center", ncol=6, fontsize=9, bbox_to_anchor=(0.5, 0.025))
-        finish(fig, out / ("slide4%s_%s_90pc_vs_variables.png" % (LETTER[metric], metric)), bottom=0.09,
+        finish(fig, out / ("slide4%s_%s_90pc_vs_variables.png" % (LETTER[metric], metric)),
                note="Signal MC (2022EE); valid typed fits, mixed sets merged (both orderings); raw unweighted; y range clipped to the "
                     "3rd-97th percentile of the plotted band edges (extreme bins can fall outside)")
+
     # Slide 5: vertex quality by leg priority (one entry per vertexed event; scales mix tracker and DSA legs, so log y)
     fig, ax = plt.subplots(1, 5, figsize=(20, 4.2))
     for a, (var, xl) in zip(ax, (("chi2", r"Vertex $\chi^2$/ndof"), ("dvxy_wide", r"$v_{xy}^{reco}-v_{xy}^{gen}$ [cm]"),
@@ -464,7 +467,7 @@ def plot(args):
             v, e_ = h(nm); n = v.sum()
             a.stairs(v[1:-1] / n, e_, color=style[pk][1], ls="-" if pk == "P1" else "--",
                      label="%s (N=%d, %.1f%% outside)" % (style[pk][0], n, 100 * (v[0] + v[-1]) / n))
-        a.set_xlabel(xl); a.set_ylabel("Unit area (incl. outside range)"); a.set_yscale("log"); a.grid(alpha=.3)
+        a.set_xlabel(xl); a.set_ylabel("Fraction of fits per bin (unit area)"); a.set_yscale("log"); a.grid(alpha=.3)
     hd, lb = ax[0].get_legend_handles_labels()
     fig.legend(hd, lb, loc="lower center", ncol=2, fontsize=9, bbox_to_anchor=(0.5, 0.03))
     fig.suptitle("5. Vertex quality for the two vertex-level leg priorities (valid fits, one per event; log y); the two curves nearly coincide",
