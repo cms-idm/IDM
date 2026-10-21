@@ -460,9 +460,11 @@ def plot(args):
             a.stairs(v[1:-1] / n, e_, color=style[pk][1], ls="-" if pk == "P1" else "--",
                      label="%s (N=%d, %.1f%% outside)" % (style[pk][0], n, 100 * (v[0] + v[-1]) / n))
         a.set_xlabel(xl); a.set_ylabel("Unit area (incl. outside range)"); a.set_yscale("log"); a.grid(alpha=.3)
-    ax[0].legend(fontsize=7, loc="upper right")
-    fig.suptitle("5. Vertex quality for the two vertex-level leg priorities (valid fits, one per event; log y)", fontsize=11)
-    finish(fig, out / "slide5_priority_quality.png")
+    hd, lb = ax[0].get_legend_handles_labels()
+    fig.legend(hd, lb, loc="lower center", ncol=2, fontsize=9, bbox_to_anchor=(0.5, 0.03))
+    fig.suptitle("5. Vertex quality for the two vertex-level leg priorities (valid fits, one per event; log y); the two curves nearly coincide",
+                 fontsize=11)
+    finish(fig, out / "slide5_priority_quality.png", bottom=0.1)
     print("Plots done in", out, flush=True)
 
 
