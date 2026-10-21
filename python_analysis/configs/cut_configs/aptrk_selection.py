@@ -1,6 +1,6 @@
 import numpy as np
 import awkward as ak
-from analysisTools.analysisSubroutines import getBtagWPs, hasGoodVertex, selectMergedElectronCandidates
+from analysisTools.analysisSubroutines import getBtagWPs, hasGoodVertex
 
 def _dphi(a, b):
     d = np.abs(a - b)
@@ -116,7 +116,7 @@ def cut9(events, info):
     desc = r'has merged candidate'
     plots = True
 
-    cand = selectMergedElectronCandidates(events)
+    cand = events.merged
     cut = ~ak.is_none(cand)
     return events[cut], name, desc, plots
 
@@ -125,7 +125,7 @@ def cut10(events,info):
     desc = r"min$\Delta \phi(e, j) > 1.0$"
     plots = False
 
-    cand = selectMergedElectronCandidates(events)
+    cand = events.merged
     min_dphi_e_j = ak.fill_none(ak.min(cand.dPhiJets, axis=-1), 999)
     cut = min_dphi_e_j > 1.0
     return events[cut], name, desc, plots
@@ -136,7 +136,7 @@ def cut11(events,info):
     plots = False
     
     # all events have one now
-    cand = selectMergedElectronCandidates(events)
+    cand = events.merged
     dphi_e_met = _dphi(cand.phi, events.PFMET.phi)
     cut = np.cos(dphi_e_met) > 0.4
     return events[cut], name, desc, plots
@@ -145,7 +145,7 @@ def cut12(events,info):
     name = "cut12"
     desc = r"Candidate $d_{xy} > 0.001$cm"
     plots = False
-    cand = selectMergedElectronCandidates(events)
+    cand = events.merged
     cut = cand.dxy > 0.001
     return events[cut], name, desc, plots
 
@@ -153,7 +153,7 @@ def cut13(events,info):
     name = "cut13"
     desc = r"Candidate $L_{xy}^{est} > 0.1cm$"
     plots = True
-    cand = selectMergedElectronCandidates(events)
+    cand = events.merged
     dphi_e_met = _dphi(cand.phi, events.PFMET.phi)
     lxyEst     = np.abs(cand.dxy) / np.sin(dphi_e_met)
     cut = lxyEst > 0.1
@@ -163,7 +163,7 @@ def cut14(events, info):
     name = "cut14"
     desc = r"Log$(|d_{xy}/d_z|) > -1.25$"
     plots = False
-    cand = selectMergedElectronCandidates(events)
+    cand = events.merged
     cut = np.log10(np.abs(cand.dxy / cand.dz)) > -1.25
     return events[cut], name, desc, plots
 
@@ -171,7 +171,7 @@ def cut15(events, info):
     name = "cut15"
     desc = r"Electron Track $\chi^2/$df < 5"
     plots = False
-    cand = selectMergedElectronCandidates(events)
+    cand = events.merged
     cut = cand.trkChi2 < 5.
     return events[cut], name, desc, plots
 
@@ -179,6 +179,6 @@ def cut16(events, info):
     name = 'cut16'
     desc = 'Mini Rel Iso < 0.9'
     plots = True
-    cand = selectMergedElectronCandidates(events)
+    cand = events.merged
     cut = cand.miniRelIsoEleCorr < 0.9
     return events[cut], name, desc, plots

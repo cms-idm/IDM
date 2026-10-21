@@ -34,19 +34,20 @@ import mplhep as hep
 outdir = os.path.join(REPO_ROOT, 'workarea')
 plotdir = os.path.join(REPO_ROOT, 'plots', 'elerecoeff')
 os.makedirs(plotdir, exist_ok=True)
-saved_signal_hists = f"{outdir}/hists_sigJul2026noID_anmatchvtx-sel_elerecoeff.coffea"
+saved_signal_hists = f"{outdir}/hists_sigJul2026noID_anabrv-sel_elerecoeff.coffea"
 
 title = 'Electron Reco'
-plottag = 'hlt2eles_ele-reco_pt-lxy'
+plottag = 'nocuts_ele-reco_pt-lxy'
 plot_dict = {
     'year': 2024,
-    'cut': 'cut3',
+    'cut': 'cut1',
 }
 _pt_edges  = [0, 1, 2, 5, 10, 20, 50]
 _lxy_edges = [0, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 40]
 
 histvars        = ['ele_reco_lpt_pt_lxy', 'ele_reco_ged_pt_lxy', 'ele_reco_none_pt_lxy']
 alllpt_histvars = ['ele_reco_alllpt_pt_lxy', 'ele_reco_noalllpt_pt_lxy']
+xlpt_histvar    = 'ele_reco_xlpt_pt_lxy'
 
 # Signal
 s_hists = util.load(saved_signal_hists)[0]
@@ -143,9 +144,11 @@ alllpt_hists = [
     s_hists[v][{"cut": plot_dict['cut'], "samp": sum}]
     for v in alllpt_histvars
 ]
+xlpt_hist = s_hists[xlpt_histvar][{"cut": plot_dict['cut'], "samp": sum}]
 
 sumhists_rb     = [rebin_variable_2D(h, _pt_edges, _lxy_edges) for h in sumhists]
 alllpt_hists_rb = [rebin_variable_2D(h, _pt_edges, _lxy_edges) for h in alllpt_hists]
+xlpt_hist_rb    = rebin_variable_2D(xlpt_hist, _pt_edges, _lxy_edges)
 
 den_all      = sumhists_rb[0] + sumhists_rb[1] + sumhists_rb[2]
 den_alllpt   = alllpt_hists_rb[0] + alllpt_hists_rb[1]
@@ -155,9 +158,10 @@ eff_all = {
     'ged':    ratio_hist_2D(sumhists_rb[1],                  den_all),
     'both':   ratio_hist_2D(sumhists_rb[0] + sumhists_rb[1], den_all),
     'alllpt': ratio_hist_2D(alllpt_hists_rb[0],              den_alllpt),
+    'xlpt':   ratio_hist_2D(xlpt_hist_rb,                    den_alllpt),
 }
 labels_all = {
-    'lpt': 'Lpt', 'ged': 'GED', 'both': 'Both', 'alllpt': 'AllLowPt',
+    'lpt': 'Lpt', 'ged': 'GED', 'both': 'Both', 'alllpt': 'AllLowPt', 'xlpt': 'xLowPt',
 }
 
 for tag, h_eff in eff_all.items():
@@ -168,7 +172,7 @@ for tag, h_eff in eff_all.items():
     plt.savefig(f"{plotdir}/hist_{plottag}_{tag}_allsamps.png")
     plt.close(fig)
 
-# ── Per-sample efficiency plots (2×2 grid per sample) ─────────────────────────
+# ── Per-sample efficiency plots (2×3 grid per sample) ─────────────────────────
 
 for sname in selected_samples:
     ps_hists = [
@@ -179,8 +183,10 @@ for sname in selected_samples:
         s_hists[v][{"cut": plot_dict['cut'], "samp": sname}]
         for v in alllpt_histvars
     ]
+    ps_xlpt_hist = s_hists[xlpt_histvar][{"cut": plot_dict['cut'], "samp": sname}]
     ps_rb     = [rebin_variable_2D(h, _pt_edges, _lxy_edges) for h in ps_hists]
     ps_alllpt_rb = [rebin_variable_2D(h, _pt_edges, _lxy_edges) for h in ps_alllpt_hists]
+    ps_xlpt_rb   = rebin_variable_2D(ps_xlpt_hist, _pt_edges, _lxy_edges)
 
     den_ps       = ps_rb[0] + ps_rb[1] + ps_rb[2]
     den_alllpt_ps = ps_alllpt_rb[0] + ps_alllpt_rb[1]
@@ -190,17 +196,20 @@ for sname in selected_samples:
         'ged':    ratio_hist_2D(ps_rb[1],            den_ps),
         'both':   ratio_hist_2D(ps_rb[0] + ps_rb[1], den_ps),
         'alllpt': ratio_hist_2D(ps_alllpt_rb[0],     den_alllpt_ps),
+        'xlpt':   ratio_hist_2D(ps_xlpt_rb,          den_alllpt_ps),
     }
 
     row = s_pts.loc[sname]
     slabel = sample_label(row)
 
-    fig, axes = plt.subplots(2, 2, figsize=(size[0] * 2, size[1] * 2))
+    fig, axes = plt.subplots(2, 3, figsize=(size[0] * 3, size[1] * 2))
     hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6', ax=axes[0, 0])
     plot_2D_eff(eff_ps['lpt'],    axes[0, 0], rf'Lpt — {slabel}')
     plot_2D_eff(eff_ps['ged'],    axes[0, 1], rf'GED — {slabel}')
-    plot_2D_eff(eff_ps['both'],   axes[1, 0], rf'Both — {slabel}')
-    plot_2D_eff(eff_ps['alllpt'], axes[1, 1], rf'AllLowPt — {slabel}')
+    plot_2D_eff(eff_ps['both'],   axes[0, 2], rf'Both — {slabel}')
+    plot_2D_eff(eff_ps['alllpt'], axes[1, 0], rf'AllLowPt — {slabel}')
+    plot_2D_eff(eff_ps['xlpt'],   axes[1, 1], rf'xLowPt — {slabel}')
+    axes[1, 2].axis('off')
     fig.suptitle(rf'{title} Efficiency ($p_T$ vs $L_{{xy}}$)', fontsize=14)
     plt.tight_layout()
     plt.savefig(f"{plotdir}/hist_{plottag}_persamp_{sname}.png")

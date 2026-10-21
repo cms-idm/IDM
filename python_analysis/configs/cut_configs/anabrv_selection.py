@@ -1,6 +1,9 @@
 import numpy as np
 import awkward as ak
-from analysisTools.analysisSubroutines import getBtagWPs, hasGoodVertex
+try:
+    from analysisTools.analysisSubroutines import getBtagWPs, hasGoodVertex
+except ModuleNotFoundError:  # run with ../analysisTools/ on sys.path (e.g. trainBDT/skimmerTools)
+    from analysisSubroutines import getBtagWPs, hasGoodVertex
 
 def _dphi(a, b):
     d = np.abs(a - b)
@@ -22,8 +25,14 @@ def cut2(events,info):
         cut = (events.trigFired16 & (1<<9)) == (1<<9)
     if info["year"] == 2017:
         cut = (events.trigFired17 & (1<<9)) == (1<<9)
-    if info["year"] == 2022:
-        cut = (events.trigFired18 & (1<<13)) == (1<<13)
+    if info["year"] in (2018, 2022):
+        if "trigFired18" in events.fields:
+            cut = (events.trigFired18 & (1<<13)) == (1<<13)
+        else:
+            # newer ntuples (NtupleContainerV2) don't fill trigFired18,
+            # so fall back to the named HLT branch (bit 13 of trigFired18
+            # corresponds to HLT_PFMET120_PFMHT120_IDTight)
+            cut = events.trig.HLT_PFMET120_PFMHT120_IDTight
     if info["year"] == 2024:
         #for f in events.trig.fields:
         #    if 'HLT' in f and 'PFMET' in f:

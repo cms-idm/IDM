@@ -113,7 +113,7 @@ plt.legend()
 plt.savefig(f"{plotdir}/hist_{sel_label}_{plot_label}_ctau-{utils.stringfy_friendly(ctaus[0])}_m1-narrow.png")
 
 # signal points
-m1s = [0.05, 0.5, 5]
+m1s = [0.05, 0.5, 5, 50]
 deltas = [0.1, 0.2]
 ctaus = [10]
 
@@ -182,7 +182,7 @@ log_style_dict['doLogy'] = True
 
 log_scans = [
     (dict(m1s=[1, 2, 5],       deltas=[0.1, 0.2],        ctaus=[10]),         lambda m1s, deltas, ctaus: f"ctau-{utils.stringfy_friendly(ctaus[0])}_m1-narrow"),
-    (dict(m1s=[0.05, 0.5, 5],  deltas=[0.1, 0.2],        ctaus=[10]),         lambda m1s, deltas, ctaus: f"ctau-{utils.stringfy_friendly(ctaus[0])}_m1-wide"),
+    (dict(m1s=[0.05, 0.5, 5, 50], deltas=[0.1, 0.2],     ctaus=[10]),       lambda m1s, deltas, ctaus: f"ctau-{utils.stringfy_friendly(ctaus[0])}_m1-wide"),
     (dict(m1s=[1, 2, 5],       deltas=[0.1],             ctaus=[1, 10, 100]), lambda m1s, deltas, ctaus: f"delta-{utils.stringfy_friendly(deltas[0])}"),
     (dict(m1s=[5],             deltas=[0.05, 0.1, 0.2],  ctaus=[1, 10, 100]), lambda m1s, deltas, ctaus: f"m1-{utils.stringfy_friendly(m1s[0])}"),
 ]

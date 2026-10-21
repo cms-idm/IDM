@@ -95,7 +95,7 @@ plt.legend()
 plt.savefig(f"{plotdir}/hist_{sel_label}_{plot_label}_delta-{utils.stringfy_friendly(deltas[0])}_ctau-{utils.stringfy_friendly(ctaus[0])}_m1-narrow.png")
 
 # signal points
-m1s = [0.05, 0.5, 5]
+m1s = [0.05, 0.5, 5, 50]
 deltas = [0.1]
 ctaus = [10]
 

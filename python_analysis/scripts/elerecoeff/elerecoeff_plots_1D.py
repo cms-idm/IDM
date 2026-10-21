@@ -36,7 +36,7 @@ import mplhep as hep
 outdir = os.path.join(REPO_ROOT, 'workarea')
 plotdir = os.path.join(REPO_ROOT, 'plots', 'elerecoeff')
 os.makedirs(plotdir, exist_ok=True)
-saved_signal_hists = f"{outdir}/hists_sigJul2026noID_anmatchvtx-sel_elerecoeff.coffea"
+saved_signal_hists = f"{outdir}/hists_sigJul2026noID_anabrv-sel_elerecoeff.coffea"
 
 title = 'Electron Reco'
 seltag = 'nocuts'
@@ -50,31 +50,44 @@ _pt_edges  = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 6, 7, 8, 9, 10, 12.5, 1
 _lxy_edges = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 7.5, 10, 12.5, 15, 20, 25, 30, 40]
 _eta_edges = list(np.linspace(-3, 3, 61))
 _vz_edges  = [0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.5, 2, 3, 4, 5, 7.5, 10, 12.5, 15, 20, 25, 30, 40, 50]
+# every other edge of the ee_dr_1d axis in configs/histo_configs/elerecoeff.py (rebin edges must be a subset of the hist edges)
+_dr_edges  = [0] + list(np.logspace(-3, np.log10(6), 41)[::2])
 
 proj_configs = [
     {
         'variables':        ['ele_reco_lpt_pt_lxy',   'ele_reco_ged_pt_lxy',   'ele_reco_none_pt_lxy'],
         'alllpt_variables': ['ele_reco_alllpt_pt_lxy','ele_reco_noalllpt_pt_lxy'],
+        'xlpt_variable':    'ele_reco_xlpt_pt_lxy',
         'project': {"samp": sum, "lxy": sum}, 'rebin_edges': _pt_edges,
         'plottag': f'{seltag}_ele-reco_only-pt',  'var': r'$p_T$ [GeV]',
     },
     {
         'variables':        ['ele_reco_lpt_pt_lxy',   'ele_reco_ged_pt_lxy',   'ele_reco_none_pt_lxy'],
         'alllpt_variables': ['ele_reco_alllpt_pt_lxy','ele_reco_noalllpt_pt_lxy'],
+        'xlpt_variable':    'ele_reco_xlpt_pt_lxy',
         'project': {"samp": sum, "pt":  sum}, 'rebin_edges': _lxy_edges,
         'plottag': f'{seltag}_ele-reco_only-xy', 'var': r'$L_{xy}$ [cm]', 'doLogx': True,
     },
     {
         'variables':        ['ele_reco_lpt_eta',   'ele_reco_ged_eta',   'ele_reco_none_eta'],
         'alllpt_variables': ['ele_reco_alllpt_eta','ele_reco_noalllpt_eta'],
+        'xlpt_variable':    'ele_reco_xlpt_eta',
         'project': {"samp": sum}, 'rebin_edges': _eta_edges,
         'plottag': f'{seltag}_ele-reco_only-eta', 'var': r'$\eta$',
     },
     {
         'variables':        ['ele_reco_lpt_lz',   'ele_reco_ged_lz',   'ele_reco_none_lz'],
         'alllpt_variables': ['ele_reco_alllpt_lz','ele_reco_noalllpt_lz'],
+        'xlpt_variable':    'ele_reco_xlpt_lz',
         'project': {"samp": sum}, 'rebin_edges': _vz_edges,
         'plottag': f'{seltag}_ele-reco_only-vz',  'var': r'$L_z$ [cm]', 'doLogx': True,
+    },
+    {
+        'variables':        ['ele_reco_lpt_dr',   'ele_reco_ged_dr',   'ele_reco_none_dr'],
+        'alllpt_variables': ['ele_reco_alllpt_dr','ele_reco_noalllpt_dr'],
+        'xlpt_variable':    'ele_reco_xlpt_dr',
+        'project': {"samp": sum}, 'rebin_edges': _dr_edges,
+        'plottag': f'{seltag}_ele-reco_only-dr',  'var': r'Gen $\Delta R(e^+e^-)$', 'doLogx': True,
     },
 ]
 
@@ -210,19 +223,23 @@ for cfg in proj_configs:
         for v in cfg['alllpt_variables']
     ]
 
+    xlpt_hist = s_hists[cfg['xlpt_variable']][{"cut": plot_dict['cut'], **cfg['project']}]
+
     sumhists_rb    = [rebin_variable(h, cfg['rebin_edges']) for h in sumhists]
     alllpt_hists_rb = [rebin_variable(h, cfg['rebin_edges']) for h in alllpt_hists]
+    xlpt_hist_rb   = rebin_variable(xlpt_hist, cfg['rebin_edges'])
 
     h_lpt_eff    = ratio_hist(sumhists_rb[0], sumhists_rb[0] + sumhists_rb[1] + sumhists_rb[2])
     h_ged_eff    = ratio_hist(sumhists_rb[1], sumhists_rb[0] + sumhists_rb[1] + sumhists_rb[2])
     h_both_eff   = ratio_hist(sumhists_rb[0] + sumhists_rb[1], sumhists_rb[0] + sumhists_rb[1] + sumhists_rb[2])
     h_alllpt_eff = ratio_hist(alllpt_hists_rb[0], alllpt_hists_rb[0] + alllpt_hists_rb[1])
-    effhists = [h_lpt_eff, h_ged_eff, h_both_eff, h_alllpt_eff]
+    h_xlpt_eff   = ratio_hist(xlpt_hist_rb,       alllpt_hists_rb[0] + alllpt_hists_rb[1])
+    effhists = [h_lpt_eff, h_ged_eff, h_both_eff, h_alllpt_eff, h_xlpt_eff]
 
     fig, ax = plt.subplots(figsize=size)
     hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6')
     hep.histplot(effhists, yerr=[np.sqrt(h.variances()) for h in effhists], density=style_dict['doDensity'], ax=ax,
-                 histtype='step', flow=style_dict['flow'], label=['Lpt', 'GED', 'Both', 'AllLowPt'])
+                 histtype='step', flow=style_dict['flow'], label=['Lpt', 'GED', 'Both', 'AllLowPt', 'xLowPt'])
     binwidth = sumhists[0].axes.widths[0][0]
     if style_dict['doDensity']:
         ax.set_ylabel(f'A.U./{binwidth:.3f}')
@@ -252,13 +269,16 @@ for cfg in proj_configs:
                 s_hists[v][{"cut": plot_dict['cut'], **samp_slice}]
                 for v in cfg['alllpt_variables']
             ]
+            ps_xlpt_hist = s_hists[cfg['xlpt_variable']][{"cut": plot_dict['cut'], **samp_slice}]
             ps_hists        = [rebin_variable(h, cfg['rebin_edges']) for h in ps_hists]
             ps_alllpt_hists = [rebin_variable(h, cfg['rebin_edges']) for h in ps_alllpt_hists]
+            ps_xlpt_hist    = rebin_variable(ps_xlpt_hist, cfg['rebin_edges'])
             h_lpt, h_ged, h_none = ps_hists
             den          = h_lpt + h_ged + h_none
             h_lpt_eff    = ratio_hist(h_lpt, den)
             h_ged_eff    = ratio_hist(h_ged, den)
             h_alllpt_eff = ratio_hist(ps_alllpt_hists[0], ps_alllpt_hists[0] + ps_alllpt_hists[1])
+            h_xlpt_eff   = ratio_hist(ps_xlpt_hist,       ps_alllpt_hists[0] + ps_alllpt_hists[1])
             row = s_pts.loc[sname]
             slabel = sample_label(row)
             hep.histplot(h_lpt_eff,    yerr=np.sqrt(h_lpt_eff.variances()),    ax=ax,
@@ -267,6 +287,8 @@ for cfg in proj_configs:
                          histtype='step', linestyle='--', color=color, label=f"{slabel} — GED")
             hep.histplot(h_alllpt_eff, yerr=np.sqrt(h_alllpt_eff.variances()), ax=ax,
                          histtype='step', linestyle=':',  color=color, label=f"{slabel} — AllLowPt")
+            hep.histplot(h_xlpt_eff,   yerr=np.sqrt(h_xlpt_eff.variances()),   ax=ax,
+                         histtype='step', linestyle='-.', color=color, label=f"{slabel} — xLowPt")
         ax.set_ylim(-0.05, 1.05)
         ax.set_ylabel('Reco Efficiency')
         ax.set_xlabel(cfg['var'])
@@ -283,6 +305,7 @@ for cfg in proj_configs:
         {'tag': 'ged',    'label': 'GED'},
         {'tag': 'both',   'label': 'Both'},
         {'tag': 'alllpt', 'label': 'AllLowPt'},
+        {'tag': 'xlpt',   'label': 'xLowPt'},
     ]
     rep_colors = plt.cm.tab10(np.linspace(0, 0.9, len(representative_samples)))
     for et in eff_types:
@@ -298,8 +321,10 @@ for cfg in proj_configs:
                 s_hists[v][{"cut": plot_dict['cut'], **samp_slice}]
                 for v in cfg['alllpt_variables']
             ]
+            ps_xlpt_hist = s_hists[cfg['xlpt_variable']][{"cut": plot_dict['cut'], **samp_slice}]
             ps_hists        = [rebin_variable(h, cfg['rebin_edges']) for h in ps_hists]
             ps_alllpt_hists = [rebin_variable(h, cfg['rebin_edges']) for h in ps_alllpt_hists]
+            ps_xlpt_hist    = rebin_variable(ps_xlpt_hist, cfg['rebin_edges'])
             h_lpt, h_ged, h_none = ps_hists
             den = h_lpt + h_ged + h_none
             if et['tag'] == 'lpt':
@@ -308,8 +333,10 @@ for cfg in proj_configs:
                 h_eff = ratio_hist(h_ged, den)
             elif et['tag'] == 'both':
                 h_eff = ratio_hist(h_lpt + h_ged, den)
-            else:
+            elif et['tag'] == 'alllpt':
                 h_eff = ratio_hist(ps_alllpt_hists[0], ps_alllpt_hists[0] + ps_alllpt_hists[1])
+            else:
+                h_eff = ratio_hist(ps_xlpt_hist, ps_alllpt_hists[0] + ps_alllpt_hists[1])
             row = s_pts.loc[sname]
             hep.histplot(h_eff, yerr=np.sqrt(h_eff.variances()), ax=ax,
                          histtype='step', linestyle='-', color=color, label=sample_label(row))
@@ -328,19 +355,21 @@ cmap = ["#3f90da", "#ffa90e", "#bd1f01", "#94a4a2", "#832db6", "#a96b59", "#e763
 _comp_pt_edges  = list(range(0, 31))   # 30 × 1-GeV bins
 _comp_lxy_edges = list(range(0, 21))   # 20 × 1-cm bins
 _comp_pt_vars     = ['ele_reco_lpt_pt_lxy', 'ele_reco_ged_pt_lxy', 'ele_reco_none_pt_lxy']
-_comp_alllpt_vars = ['ele_reco_alllpt_pt_lxy', 'ele_reco_noalllpt_pt_lxy']
-_comp_eff_labels  = ['LowPt', 'GED', 'Both', 'AllLowPt']
-_comp_colors      = cmap[0:4] #['C0', 'C1', 'C2', 'C3']
+_comp_alllpt_vars = ['ele_reco_alllpt_pt_lxy', 'ele_reco_noalllpt_pt_lxy', 'ele_reco_xlpt_pt_lxy']
+_comp_eff_labels  = ['LowPt', 'GED', 'Both', 'AllLowPt', 'xLowPt']
+_comp_colors      = cmap[0:5] #['C0', 'C1', 'C2', 'C3', 'C4']
 _cut = plot_dict['cut']
 
 def _comp_effhists(hists_rb, alllpt_rb):
     h_lpt, h_ged, h_none = hists_rb
+    h_alllpt, h_noalllpt, h_xlpt = alllpt_rb
     den = h_lpt + h_ged + h_none
     return [
         ratio_hist(h_lpt,         den),
         ratio_hist(h_ged,         den),
         ratio_hist(h_lpt + h_ged, den),
-        ratio_hist(alllpt_rb[0],  alllpt_rb[0] + alllpt_rb[1]),
+        ratio_hist(h_alllpt,      h_alllpt + h_noalllpt),
+        ratio_hist(h_xlpt,        h_alllpt + h_noalllpt),
     ]
 
 def _comp_plot(effhists, xlabel, title_str, savepath):
@@ -363,14 +392,14 @@ _ha = [s_hists[v][{"cut": _cut, "samp": sum, "lxy": sum}] for v in _comp_alllpt_
 _comp_plot(_comp_effhists([rebin_variable(h, _comp_pt_edges) for h in _h],
                           [rebin_variable(h, _comp_pt_edges) for h in _ha]),
            r'$p_T$ [GeV]', rf'{title} Efficiency vs $p_T$',
-           f'plots/hist_{seltag}_comp_eff_pt.png')
+           f'{plotdir}/hist_{seltag}_comp_eff_pt.png')
 
 # Plot 1b: efficiency vs pT, all Lxy, no rebinning
 _h  = [s_hists[v][{"cut": _cut, "samp": sum, "lxy": sum}] for v in _comp_pt_vars]
 _ha = [s_hists[v][{"cut": _cut, "samp": sum, "lxy": sum}] for v in _comp_alllpt_vars]
 _comp_plot(_comp_effhists(_h, _ha),
            r'$p_T$ [GeV]', rf'{title} Efficiency vs $p_T$ (no rebin)',
-           f'plots/hist_{seltag}_comp_eff_pt_norebin.png')
+           f'{plotdir}/hist_{seltag}_comp_eff_pt_norebin.png')
 
 # Plot 2: efficiency vs Lxy, all pT
 _h  = [s_hists[v][{"cut": _cut, "samp": sum, "pt": sum}] for v in _comp_pt_vars]
@@ -378,7 +407,7 @@ _ha = [s_hists[v][{"cut": _cut, "samp": sum, "pt": sum}] for v in _comp_alllpt_v
 _comp_plot(_comp_effhists([rebin_variable(h, _comp_lxy_edges) for h in _h],
                           [rebin_variable(h, _comp_lxy_edges) for h in _ha]),
            r'$L_{xy}$ [cm]', rf'{title} Efficiency vs $L_{{xy}}$',
-           f'plots/hist_{seltag}_comp_eff_lxy.png')
+           f'{plotdir}/hist_{seltag}_comp_eff_lxy.png')
 
 # Plots 3-7: efficiency vs pT in Lxy slices
 _lxy_slices = [
@@ -402,7 +431,7 @@ for slc in _lxy_slices:
                               [rebin_variable(h, _comp_pt_edges) for h in _ha]),
                r'$p_T$ [GeV]',
                rf'{title} Efficiency vs $p_T$, {slc["label"]}',
-               f'plots/hist_{seltag}_comp_eff_pt_{slc["tag"]}.png')
+               f'{plotdir}/hist_{seltag}_comp_eff_pt_{slc["tag"]}.png')
 
 # Plots 8-11: efficiency vs Lxy in pT slices
 _pt_slices = [
@@ -426,4 +455,4 @@ for slc in _pt_slices:
                               [rebin_variable(h, _comp_lxy_edges) for h in _ha]),
                r'$L_{xy}$ [cm]',
                rf'{title} Efficiency vs {axlab}, {slc["label"]}',
-               f'plots/hist_{seltag}_comp_eff_lxy_{slc["tag"]}.png')
+               f'{plotdir}/hist_{seltag}_comp_eff_lxy_{slc["tag"]}.png')

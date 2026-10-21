@@ -11,21 +11,31 @@ from analysisTools.analysisSubroutines import defineGoodVertices, defineGoodLptV
 # Vertex reco efficiency vs gen-level ee quantities. For each variable these hists
 # are filled at every plotted cut stage:
 #   vtxreco_<name>_den : all events
-#   vtxreco_lptvtx_<name>_num : events with >= 1 good lptvtx vertex (defineGoodLptVertices,
-#                v15acr -- same cuts as hasGoodVertex / cut9 in an_selection.py, applied
-#                to the all-low-pT lptvtx pool)
-#   vtxreco_lptvtx_<name>_num_genmatch : events with >= 1 good lptvtx vertex that is also
-#                gen-matched (lptvtx.isMatched, i.e. both vertex electrons matched to
+#   vtxreco_lptvtx_<name>_num_genmatch_any : events with >= 1 gen-matched lptvtx vertex,
+#                good or not (lptvtx.isMatched, i.e. both vertex electrons matched to
 #                the gen e+e-)
-#   vtxreco_vtx_<name>_num : events with >= 1 good vtx vertex (defineGoodVertices,
-#                v15acr -- the mixed vtx collection used by hasGoodVertex / cut9)
-#   vtxreco_vtx_<name>_num_genmatch : events with >= 1 good vtx vertex that is also
-#                gen-matched (vtx.isMatched)
-#   vtxreco_merged_<name>_num : events with >= 1 good merged candidate
-#                (merged_vtx from defineGoodMergedCandidates)
-#   vtxreco_merged_<name>_num_genmatch : events with >= 1 good merged candidate that is
-#                also gen-matched (merged_vtx.isGenMerged: matched to both gen electrons,
-#                event in cat_merged)
+#   vtxreco_lptvtx_<name>_num_genmatch_good : events with >= 1 gen-matched good lptvtx
+#                vertex (defineGoodLptVertices, v15acr -- same cuts as hasGoodVertex /
+#                cut9 in an_selection.py, applied to the all-low-pT lptvtx pool)
+#   vtxreco_vtx_<name>_num_genmatch_any : events with >= 1 gen-matched vtx vertex, good
+#                or not (vtx.isMatched)
+#   vtxreco_vtx_<name>_num_genmatch_good : events with >= 1 gen-matched good vtx vertex
+#                (defineGoodVertices, v15acr -- the mixed vtx collection used by
+#                hasGoodVertex / cut9)
+#   vtxreco_merged_<name>_num_genmatch_any : events with >= 1 gen-matched AllLptElectron
+#                merged candidate, good or not (AllLptElectron.isGenMerged: matched to
+#                both gen electrons, event in cat_merged)
+#   vtxreco_merged_<name>_num_genmatch_good : events with >= 1 gen-matched good merged
+#                candidate (merged_vtx from defineGoodMergedCandidates)
+#   vtxreco_eereco_<name>_num_<pair> : di-electron reco efficiency -- events where both
+#                gen electrons are gen-matched to reco electrons (no vertex requirement),
+#                split by the matched collections (GenEle/GenPos.matchType, R = GED,
+#                L = LPT):
+#                  gedged   : (GED, GED)
+#                  gedlpt   : (GED, LPT), either ordering
+#                  lptlpt   : (LPT, LPT)
+#                  sum      : any of the three above
+#                  alptalpt : both matched to AllLptElectron (matchedAllLowPt)
 # so that eff = <num hist> / vtxreco_<name>_den per bin (the denominator is shared).
 # Evaluate at a cut stage *before* the good-vertex cut -- afterwards every event has
 # a good vertex and eff is trivially 1.
@@ -50,12 +60,17 @@ VARIABLES = {
 
 # numerator hist prefix/suffix -> key into the event masks built in fillHistos
 NUMERATORS = {
-    ("vtxreco_lptvtx", "num")          : "lptvtx",
-    ("vtxreco_lptvtx", "num_genmatch") : "lptvtx_genmatch",
-    ("vtxreco_vtx",    "num")          : "regvtx",
-    ("vtxreco_vtx",    "num_genmatch") : "regvtx_genmatch",
-    ("vtxreco_merged", "num")          : "merged",
-    ("vtxreco_merged", "num_genmatch") : "merged_genmatch",
+    ("vtxreco_lptvtx", "num_genmatch_any")  : "lptvtx_genmatch_any",
+    ("vtxreco_lptvtx", "num_genmatch_good") : "lptvtx_genmatch_good",
+    ("vtxreco_vtx",    "num_genmatch_any")  : "regvtx_genmatch_any",
+    ("vtxreco_vtx",    "num_genmatch_good") : "regvtx_genmatch_good",
+    ("vtxreco_merged", "num_genmatch_any")  : "merged_genmatch_any",
+    ("vtxreco_merged", "num_genmatch_good") : "merged_genmatch_good",
+    ("vtxreco_eereco", "num_gedged")   : "eereco_gedged",
+    ("vtxreco_eereco", "num_gedlpt")   : "eereco_gedlpt",
+    ("vtxreco_eereco", "num_lptlpt")   : "eereco_lptlpt",
+    ("vtxreco_eereco", "num_sum")      : "eereco_sum",
+    ("vtxreco_eereco", "num_alptalpt") : "eereco_alptalpt",
 }
 
 # 2D gen Lxy vs gen ee pT (coarse variable bins), split into coarse gen ee dR bins
@@ -83,7 +98,9 @@ def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
     if info['type'] != "signal":
         return
 
-    wgt = events.eventWgt/sum_wgt
+    # All hists are filled with raw (unweighted) event counts, so eff = num/den is the
+    # plain fraction of signal events; eventWgt and sum_wgt are unused.
+    wgt = np.ones(len(events))
 
     # Lxy is measured from the chi2 production vertex (true PV) rather than the
     # reco PV -- see genstudy.py / elerecoeff.py.
@@ -108,13 +125,30 @@ def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
         defineGoodLptVertices(events, version='v15acr')
         defineGoodMergedCandidates(events)
     no_lpt = np.zeros(len(events), dtype=bool)
+
+    # di-electron reco: both gen electrons matched to a reco electron (R = GED, L = LPT)
+    ele_ged = events.GenEle.matchType == 'R'
+    ele_lpt = events.GenEle.matchType == 'L'
+    pos_ged = events.GenPos.matchType == 'R'
+    pos_lpt = events.GenPos.matchType == 'L'
+    gedged = ele_ged & pos_ged
+    gedlpt = (ele_ged & pos_lpt) | (ele_lpt & pos_ged)
+    lptlpt = ele_lpt & pos_lpt
+    has_alpt_match = 'matchedAllLowPt' in events.GenEle.fields
+    alptalpt = (events.GenEle.matchedAllLowPt & events.GenPos.matchedAllLowPt) if has_alpt_match else no_lpt
+
     masks = {
-        "lptvtx"          : events.nGoodLptVtx > 0 if has_lpt else no_lpt,
-        "lptvtx_genmatch" : ak.any(events.good_lptvtx.isMatched, axis=1) if has_lpt else no_lpt,
-        "regvtx"          : events.nGoodVtx > 0,
-        "regvtx_genmatch" : ak.any(events.good_vtx.isMatched, axis=1),
-        "merged"          : events.nMergedVtx > 0 if has_lpt else no_lpt,
-        "merged_genmatch" : ak.any(events.merged_vtx.isGenMerged, axis=1) if has_lpt else no_lpt,
+        "lptvtx_genmatch_any"  : ak.any(events.lptvtx.isMatched, axis=1) if has_lpt else no_lpt,
+        "lptvtx_genmatch_good" : ak.any(events.good_lptvtx.isMatched, axis=1) if has_lpt else no_lpt,
+        "regvtx_genmatch_any"  : ak.any(events.vtx.isMatched, axis=1),
+        "regvtx_genmatch_good" : ak.any(events.good_vtx.isMatched, axis=1),
+        "merged_genmatch_any"  : ak.any(events.AllLptElectron.isGenMerged, axis=1) if has_lpt else no_lpt,
+        "merged_genmatch_good" : ak.any(events.merged_vtx.isGenMerged, axis=1) if has_lpt else no_lpt,
+        "eereco_gedged"        : gedged,
+        "eereco_gedlpt"        : gedlpt,
+        "eereco_lptlpt"        : lptlpt,
+        "eereco_sum"           : gedged | gedlpt | lptlpt,
+        "eereco_alptalpt"      : alptalpt,
     }
 
     for name, (_, key) in VARIABLES.items():

@@ -6,6 +6,18 @@ from hist import Hist
 import hist
 import numpy as np
 import awkward as ak
+from hist.axis import Variable
+
+# coarse binning for the 4D per-electron reco efficiency hists (no flow bins; overflow is clipped into the top bin at fill time):
+# single-electron gen pt and |eta|, gen ee pair lxy and dR
+ee_pt_4d     = Variable([0, 5, 10, 20, 100],          name="pt",     label=r"Gen $p_T(e)$ [GeV]",        flow=False)
+ee_lxy_4d    = Variable([0, 1, 5, 10, 15, 100],       name="lxy",    label=r"Gen $L_{xy}(e^+e^-)$ [cm]", flow=False)
+ee_dr_4d     = Variable([0, 0.01, 0.1, 1, 5],         name="dr",     label=r"Gen $\Delta R(e^+e^-)$",    flow=False)
+ee_abseta_4d = Variable([0, 1, 1.5, 2, 2.5, 3],       name="abseta", label=r"Gen $|\eta(e)|$",           flow=False)
+ee4d_cats    = ['lpt', 'ged', 'alpt', 'xlpt', 'none', 'sumnoalpt', 'alptnosum']
+
+# log-spaced gen ee dR binning for the 1D per-electron hists (first bin [0, 1e-3] catches the near-collinear pairs)
+ee_dr_1d     = Variable(np.concatenate([[0], np.logspace(-3, np.log10(6), 41)]), name="dr", label=r"Gen $\Delta R(e^+e^-)$")
 
 def make_histograms():
     histograms = {
@@ -24,7 +36,18 @@ def make_histograms():
         "ele_reco_noalllpt_eta":    Hist(samp, cut, ele_eta_fine,  storage=hist.storage.Weight()),
         "ele_reco_alllpt_lz":       Hist(samp, cut, Lz_fine,       storage=hist.storage.Weight()),
         "ele_reco_noalllpt_lz":     Hist(samp, cut, Lz_fine,       storage=hist.storage.Weight()),
+        "ele_reco_xlpt_pt_lxy":     Hist(samp, cut, ele_pt_special, ele_lxy_special, storage=hist.storage.Weight()),
+        "ele_reco_xlpt_eta":        Hist(samp, cut, ele_eta_fine,  storage=hist.storage.Weight()),
+        "ele_reco_xlpt_lz":         Hist(samp, cut, Lz_fine,       storage=hist.storage.Weight()),
+        "ele_reco_lpt_dr":          Hist(samp, cut, ee_dr_1d,      storage=hist.storage.Weight()),
+        "ele_reco_ged_dr":          Hist(samp, cut, ee_dr_1d,      storage=hist.storage.Weight()),
+        "ele_reco_none_dr":         Hist(samp, cut, ee_dr_1d,      storage=hist.storage.Weight()),
+        "ele_reco_alllpt_dr":       Hist(samp, cut, ee_dr_1d,      storage=hist.storage.Weight()),
+        "ele_reco_noalllpt_dr":     Hist(samp, cut, ee_dr_1d,      storage=hist.storage.Weight()),
+        "ele_reco_xlpt_dr":         Hist(samp, cut, ee_dr_1d,      storage=hist.storage.Weight()),
     }
+    for c in ee4d_cats:
+        histograms[f"ele_reco_{c}_ee4d"] = Hist(samp, cut, ee_pt_4d, ee_lxy_4d, ee_dr_4d, ee_abseta_4d, storage=hist.storage.Weight())
     return histograms
 
 subroutines = []
@@ -55,6 +78,14 @@ def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
     all_lz            = ak.concatenate([lz_ele,                           lz_pos],                          axis=0)
     all_wgt           = ak.concatenate([wgt,                              wgt],                             axis=0)
     all_matchedalllpt = ak.concatenate([events.GenEle.matchedAllLowPt,    events.GenPos.matchedAllLowPt],   axis=0)
+    all_ee            = ak.concatenate([events.genEE,                     events.genEE],                    axis=0)
+
+    # xlpt: gen electron matched to an AllLptElectron that was cross-cleaned against a GED electron.
+    # matchIdxAllLowPt is a per-event local index into AllLptElectron (-1/-999 when unmatched).
+    all_alpt_xc = ak.concatenate([events.AllLptElectron.xCleaned, events.AllLptElectron.xCleaned], axis=0)
+    all_idxalllpt = ak.concatenate([events.GenEle.matchIdxAllLowPt, events.GenPos.matchIdxAllLowPt], axis=0)
+    match_xc = ak.fill_none(ak.firsts(all_alpt_xc[ak.local_index(all_alpt_xc, axis=1) == all_idxalllpt]), False)
+    all_matchedxlpt = all_matchedalllpt & match_xc
 
     for mtype, prefix in [('L', 'ele_reco_lpt'), ('R', 'ele_reco_ged'), ('None', 'ele_reco_none')]:
         mask = all_gen.matchType == mtype
@@ -65,6 +96,7 @@ def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
         hists[f"{prefix}_pt_lxy"].fill(samp=samp, cut=cut, pt=ele.pt, lxy=lxy, weight=w)
         hists[f"{prefix}_eta"].fill(   samp=samp, cut=cut, eta=ele.eta,        weight=w)
         hists[f"{prefix}_lz" ].fill(   samp=samp, cut=cut, lz=lz,              weight=w)
+        hists[f"{prefix}_dr" ].fill(   samp=samp, cut=cut, dr=all_ee.dr[mask], weight=w)
 
     for matched, prefix in [(True, 'ele_reco_alllpt'), (False, 'ele_reco_noalllpt')]:
         mask = all_matchedalllpt == matched
@@ -75,7 +107,37 @@ def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
         hists[f"{prefix}_pt_lxy"].fill(samp=samp, cut=cut, pt=ele.pt, lxy=lxy, weight=w)
         hists[f"{prefix}_eta"].fill(   samp=samp, cut=cut, eta=ele.eta,        weight=w)
         hists[f"{prefix}_lz" ].fill(   samp=samp, cut=cut, lz=lz,              weight=w)
-   
+        hists[f"{prefix}_dr" ].fill(   samp=samp, cut=cut, dr=all_ee.dr[mask], weight=w)
+
+    mask = all_matchedxlpt
+    ele  = all_gen[mask]
+    w    = all_wgt[mask]
+    hists["ele_reco_xlpt_pt_lxy"].fill(samp=samp, cut=cut, pt=ele.pt, lxy=all_lxy[mask], weight=w)
+    hists["ele_reco_xlpt_eta"   ].fill(samp=samp, cut=cut, eta=ele.eta,                 weight=w)
+    hists["ele_reco_xlpt_lz"    ].fill(samp=samp, cut=cut, lz=all_lz[mask],             weight=w)
+    hists["ele_reco_xlpt_dr"    ].fill(samp=samp, cut=cut, dr=all_ee.dr[mask],          weight=w)
+
+    # 4D hists: one entry per gen electron, binned in its own gen pt and |eta| and its pair's gen ee dR and lxy.
+    # e and e+ share the decay vertex, so all_lxy is the ee lxy (from the chi2 production vertex).
+    # sum = reconstructed as GED or Lpt (matchType R or L)
+    all_matchedsum = (all_gen.matchType == 'L') | (all_gen.matchType == 'R')
+    ee4d_masks = {
+        'lpt':  all_gen.matchType == 'L',
+        'ged':  all_gen.matchType == 'R',
+        'alpt': all_matchedalllpt,
+        'xlpt': all_matchedxlpt,
+        'none': all_gen.matchType == 'None',
+        'sumnoalpt': all_matchedsum & ~all_matchedalllpt,
+        'alptnosum': all_matchedalllpt & ~all_matchedsum,
+    }
+    # values above the last edge are clipped into the top bin (e.g. the top pt bin is pt > 20)
+    top = lambda x, ax: np.minimum(x, ax.edges[-2])
+    for c, mask in ee4d_masks.items():
+        hists[f"ele_reco_{c}_ee4d"].fill(samp=samp, cut=cut,
+                                         pt=top(all_gen.pt[mask], ee_pt_4d), lxy=top(all_lxy[mask], ee_lxy_4d),
+                                         dr=top(all_ee.dr[mask], ee_dr_4d), abseta=top(np.abs(all_gen.eta[mask]), ee_abseta_4d),
+                                         weight=all_wgt[mask])
+
 
         
         
