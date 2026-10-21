@@ -298,7 +298,7 @@ def plot(args):
     out.mkdir(parents=True, exist_ok=True)
     f = uproot.open(args.output)
     foot_eff = ("Signal MC (2022EE), pre-selected displacedMuons; events with exactly 2 signal muons, both accepted (|η|<2.4, "
-                "Lxy<740 cm, no pT cut); raw unweighted; error bars: 68% Clopper–Pearson; bins with < 20 denominator events omitted")
+                "Lxy<740 cm, |vz|<960 cm, no pT cut); raw unweighted; error bars: 68% Clopper–Pearson; bins with < 20 denominator events omitted")
     foot = "Signal MC (2022EE), pre-selected displacedMuons; events with two accepted signal muons; raw unweighted"
 
     def h(name, group="overall"):
@@ -450,7 +450,7 @@ def plot(args):
                     effs.append(np.where(b_ > 0, a_ / b_, np.nan))
                 oks.append(b_ >= 20)
             fixed = np.sum([f_ * e_ for f_, e_ in zip(fr, effs)], axis=0); okf = np.all(oks, axis=0)
-            ax.plot(x[okf], fixed[okf], color="0.45", lw=1.6, ls=":",
+            ax.plot(x, np.where(okf, fixed, np.nan), color="0.45", lw=1.6, ls=":", marker=".", ms=4,
                     label="fixed ΔR mix (overall class fractions; bins with all classes ≥ 20)")
             ax.set_ylim(0.4, 1.03); ax.grid(alpha=.3); ax.set_xlabel(ALL_LABELS[var])
             ax.set_xlim(edges[0], edges[-1])
