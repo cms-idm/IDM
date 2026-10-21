@@ -365,9 +365,10 @@ def plot(args):
                 n = v.sum()
                 if n == 0:
                     continue
-                a.stairs(v[1:-1] / n, e_, label="%s (N=%d, %.1f%% outside)" % (label(u), n, 100 * (v[0] + v[-1]) / n))
+                a.stairs(v[1:-1] / n, e_, color=tab(list(UNORD).index(u)),
+                         label="%s (N=%d, %.1f%% outside)" % (label(u), n, 100 * (v[0] + v[-1]) / n))
             a.set_xlabel(xl); a.set_ylabel("Unit area (incl. outside range)"); a.legend(fontsize=7, loc="upper left" if rng == "fine" else "upper right"); a.grid(alpha=.3)
-        ax[0].set_title("Tracker-leg sets (no DSA leg): narrow range", fontsize=9)
+        ax[0].set_title("Tracker-leg sets (no DSA leg): narrow range; the three curves nearly coincide", fontsize=9)
         ax[1].set_title("DSA-leg sets: wide range", fontsize=9)
         fig.suptitle(title, fontsize=11)
         finish(fig, out / fname)
