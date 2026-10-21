@@ -491,7 +491,10 @@ class iDMeProcessor(processor.ProcessorABC):
         #    routines.projectGenLxy(events)
         #    vtx_matched_events = events[events.sel_vtx.isMatched]
         #    cutflow_vtx_matched['hasVtx'] += ak.sum(vtx_matched_events.genWgt)/ak.sum(events.genWgt)
-        
+
+        # merged-electron categories/candidates (cat_merged, merged_vtx, merged, ...)
+        routines.computeMergedVars(events)
+
         # computing any extra quantities specified in the histogram config file
         for subroutine in self.subroutines:
             getattr(routines,subroutine)(events)
@@ -709,7 +712,10 @@ class genProcessor(iDMeProcessor):
         #cutflow['hasVtx'] += ak.sum(events.genWgt)/sum_wgt
         #cutflow_nevts['hasVtx'] += len(events)
         #cutDesc['hasVtx'] = 'Baseline Selection'
-        
+
+        # merged-electron categories/candidates (cat_merged, merged_vtx, merged, ...)
+        routines.computeMergedVars(events)
+
         # computing any extra quantities specified in the histogram config file
         for subroutine in self.subroutines:
             getattr(routines,subroutine)(events)

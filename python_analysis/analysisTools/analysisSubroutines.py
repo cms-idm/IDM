@@ -135,7 +135,7 @@ def electronID(events,info):
     events["Electron","passID"] = ele_kinematic_cut & ele_id_cut & (eles.mindRj > 0.4)
     events["Electron","passIDBasic"] = ele_kinematic_cut & ele_id_cut
     
-def selectMergedElectronCandidates(events,jet_pt_cut=10,dr_cut=0.4):
+def selectMergedElectronCandidates(events,jet_pt_cut=10,dr_cut=0.4,self_jet_dr=0.1,self_jet_frac=0.3):
     """
     Select merged low-pT electron candidates. An AllLptElectron is a
     candidate iff it is separated by dR >= dr_cut from every other
@@ -143,8 +143,15 @@ def selectMergedElectronCandidates(events,jet_pt_cut=10,dr_cut=0.4):
     event. If multiple candidates pass in the same event, the one closest
     in phi to the event's ptmiss (PFMET) is kept.
 
-    Returns an awkward array with one entry per event: the selected
-    AllLptElectron record, or None if the event has no candidates.
+    A merged ee pair is often clustered into a PFJet of its own, which would
+    otherwise veto the electron against itself. So for the jet isolation, a
+    jet is ignored for the electron being tested if the electron is within
+    dR < self_jet_dr of it and carries pT(e)/pT(jet) > self_jet_frac. This is
+    local to the candidate selection -- events.PFJet is left untouched.
+
+    Stores the result as events.merged and also returns it: an awkward
+    array with one entry per event, the selected AllLptElectron record
+    (all fields intact), or None if the event has no candidates.
     """
     eles = events.AllLptElectron
     idx = ak.local_index(eles,axis=1)
@@ -155,17 +162,23 @@ def selectMergedElectronCandidates(events,jet_pt_cut=10,dr_cut=0.4):
     min_dr_ee = ak.fill_none(ak.min(dr_ee,axis=-1),np.inf)
     ele_iso = min_dr_ee >= dr_cut
 
-    # dR to every PFJet with pt > jet_pt_cut in the same event
+    # dR to every PFJet with pt > jet_pt_cut in the same event, ignoring any
+    # jet that is the electron itself (electron at the jet core carrying a
+    # large fraction of the jet pt)
     jets = events.PFJet
     jets = jets[jets.pt > jet_pt_cut]
     dr_ej = deltaR(eles.eta[:,:,None],eles.phi[:,:,None],jets.eta[:,None,:],jets.phi[:,None,:])
+    pt_frac = eles.pt[:,:,None]/jets.pt[:,None,:]
+    dr_ej = ak.where((dr_ej < self_jet_dr) & (pt_frac > self_jet_frac),np.inf,dr_ej)
     min_dr_ej = ak.fill_none(ak.min(dr_ej,axis=-1),np.inf)
     jet_iso = min_dr_ej >= dr_cut
 
     cand = eles[ele_iso & jet_iso]
     dphi_met = np.abs(deltaPhi(cand.phi,events.PFMET.phi))
     order = ak.argsort(dphi_met,axis=1,ascending=True)
-    return ak.firsts(cand[order])
+    merged = ak.firsts(cand[order])
+    events.__setitem__("merged",merged)
+    return merged
 
 def checkMergedElectronGenMatch(events,cand):
     """
@@ -314,14 +327,9 @@ def computeMergedCatVars(events):
     # fields survive the good_lptvtx/sel_lptvtx subsetting below.
     #
     # lptvtx.e1/e2 were already set by lptvtxElectronConnection, called
-    # earlier in computeExtraVariables -- but that snapshot predates
-    # AllLptElectron's own mindRj/mindPhiJ (set below, under "Derived
-    # per-object fields", since this subroutine runs after
-    # computeExtraVariables entirely). Hoist that AllLptElectron assignment
-    # up here and re-run the connection so lptvtx.e1/e2 (and hence
-    # _VTXELE_HISTS' vtx_ele_lead/sublead mindRj/mindPhiJ fills) pick it up.
-    events['AllLptElectron', 'mindRj']   = ak.fill_none(ak.min(events.AllLptElectron.dRJets,   axis=-1), 999)
-    events['AllLptElectron', 'mindPhiJ'] = ak.fill_none(ak.min(events.AllLptElectron.dPhiJets, axis=-1), 999)
+    # earlier in computeExtraVariables (which also sets AllLptElectron's
+    # mindRj/mindPhiJ/dRj0/dPhij0) -- but that snapshot predates the
+    # 'IDscore' alias below, so re-run the connection to pick it up.
     # AllLptElectron never gets an 'IDscore' field the way Electron/LptElectron
     # do (electronID, above) -- vtx.e1/e2 (drawn from Electron/LptElectron)
     # read that field name via _VTXELE_HISTS, so lptvtx.e1/e2 (drawn from
@@ -385,10 +393,6 @@ def computeMergedCatVars(events):
     events['cat_vertexed'] = _cat_vertexed
 
     # ── Derived per-object fields ────────────────────────────────────────────
-    # AllLptElectron's own mindRj/mindPhiJ are set earlier in this function
-    # (see the "cat_vertexed" section above) so lptvtxElectronConnection's
-    # snapshot of them onto lptvtx.e1/e2 stays in sync.
-
     # Photon has no precomputed dRJets/dPhiJets branch (unlike AllLptElectron),
     # so compute min dR/dPhi to the nearest PFJet directly.
     _pho_dphi_j = np.abs(deltaPhi(events.Photon.phi[:, :, None], events.PFJet.phi[:, None, :]))
@@ -407,14 +411,27 @@ def computeMergedCatVars(events):
     # ── Photon / OOT-photon / track / conversion matching to gen ─────────────
     # (Needed to determine whether gens have non-electron alternatives and for
     # the exclusivity condition that defines the merged-photon category.)
+    # Not all ntuple eras have a Conversion branch -- treat it as empty there,
+    # so the conversion veto never fires.
+    if 'Conversion' in events.fields:
+        convs = events.Conversion
+    else:
+        _empty = ak.unflatten(np.zeros(0), np.zeros(len(events), dtype=np.int64))
+        convs = ak.zip({'eta': _empty, 'phi': _empty, 'pt': _empty})
+    # Likewise IsoTrack_charge -- fall back to charge 0 so the charged-track
+    # veto in _ge_any/_gp_any never fires (tracks still enter _photrk_excl).
+    if 'charge' in events.IsoTrack.fields:
+        _trk_charge = events.IsoTrack.charge
+    else:
+        _trk_charge = ak.zeros_like(events.IsoTrack.pt, dtype=np.int64)
     _pho_dr_ge  = deltaR(events.Photon.eta,     events.Photon.phi,     events.GenEle.eta, events.GenEle.phi)
     _pho_dr_gp  = deltaR(events.Photon.eta,     events.Photon.phi,     events.GenPos.eta, events.GenPos.phi)
     _oot_dr_ge  = deltaR(events.ootPhoton.eta,  events.ootPhoton.phi,  events.GenEle.eta, events.GenEle.phi)
     _oot_dr_gp  = deltaR(events.ootPhoton.eta,  events.ootPhoton.phi,  events.GenPos.eta, events.GenPos.phi)
     _trk_dr_ge  = deltaR(events.IsoTrack.eta,   events.IsoTrack.phi,   events.GenEle.eta, events.GenEle.phi)
     _trk_dr_gp  = deltaR(events.IsoTrack.eta,   events.IsoTrack.phi,   events.GenPos.eta, events.GenPos.phi)
-    _conv_dr_ge = deltaR(events.Conversion.eta, events.Conversion.phi, events.GenEle.eta, events.GenEle.phi)
-    _conv_dr_gp = deltaR(events.Conversion.eta, events.Conversion.phi, events.GenPos.eta, events.GenPos.phi)
+    _conv_dr_ge = deltaR(convs.eta,             convs.phi,             events.GenEle.eta, events.GenEle.phi)
+    _conv_dr_gp = deltaR(convs.eta,             convs.phi,             events.GenPos.eta, events.GenPos.phi)
 
     _pho_pt_ge   = _pt_rel(events.Photon.pt,     events.GenEle.pt)
     _pho_pt_gp   = _pt_rel(events.Photon.pt,     events.GenPos.pt)
@@ -425,20 +442,20 @@ def computeMergedCatVars(events):
     _trk_pt_ge   = _pt_rel(events.IsoTrack.pt,   events.GenEle.pt)
     _trk_pt_gp   = _pt_rel(events.IsoTrack.pt,   events.GenPos.pt)
     _trk_pt_sum  = _pt_rel(events.IsoTrack.pt,   gen_sum_pt)
-    _conv_pt_ge  = _pt_rel(events.Conversion.pt, events.GenEle.pt)
-    _conv_pt_gp  = _pt_rel(events.Conversion.pt, events.GenPos.pt)
-    _conv_pt_sum = _pt_rel(events.Conversion.pt, gen_sum_pt)
+    _conv_pt_ge  = _pt_rel(convs.pt,             events.GenEle.pt)
+    _conv_pt_gp  = _pt_rel(convs.pt,             events.GenPos.pt)
+    _conv_pt_sum = _pt_rel(convs.pt,             gen_sum_pt)
 
     _ge_any = (
         ak.any((_pho_dr_ge  < 0.1) & _pho_pt_ge,                                  axis=1) |
         ak.any((_oot_dr_ge  < 0.1) & _oot_pt_ge,                                  axis=1) |
-        ak.any((_trk_dr_ge  < 0.1) & (events.IsoTrack.charge == -1) & _trk_pt_ge, axis=1) |
+        ak.any((_trk_dr_ge  < 0.1) & (_trk_charge == -1)          & _trk_pt_ge, axis=1) |
         ak.any((_conv_dr_ge < 0.1) & _conv_pt_ge,                                 axis=1)
     )
     _gp_any = (
         ak.any((_pho_dr_gp  < 0.1) & _pho_pt_gp,                                  axis=1) |
         ak.any((_oot_dr_gp  < 0.1) & _oot_pt_gp,                                  axis=1) |
-        ak.any((_trk_dr_gp  < 0.1) & (events.IsoTrack.charge == +1) & _trk_pt_gp, axis=1) |
+        ak.any((_trk_dr_gp  < 0.1) & (_trk_charge == +1)          & _trk_pt_gp, axis=1) |
         ak.any((_conv_dr_gp < 0.1) & _conv_pt_gp,                                 axis=1)
     )
 
@@ -578,6 +595,20 @@ def defineGoodMergedCandidates(events):
 
     events.__setitem__("merged_vtx",events.AllLptElectron[events.AllLptElectron.isGoodMerged])
     events.__setitem__("nMergedVtx",ak.count(events.merged_vtx.pt,axis=1))
+
+def computeMergedVars(events):
+    """
+    Run all merged-electron routines so their outputs are always present in
+    the event arrays: computeMergedCatVars (signal-only categorization),
+    defineGoodMergedCandidates (merged_vtx/nMergedVtx), and
+    selectMergedElectronCandidates (merged). No-op if AllLptElectron isn't
+    present (not in all ntuple eras).
+    """
+    if 'AllLptElectron' not in events.fields:
+        return
+    computeMergedCatVars(events)
+    defineGoodMergedCandidates(events)
+    selectMergedElectronCandidates(events)
 
 def jetBtag(events,year):
     year = str(year)
@@ -847,6 +878,16 @@ def computeExtraVariables(events,info):
     events['Electron','mindPhiJ'] = ak.fill_none(ak.min(np.abs(events.Electron.dPhiJets),axis=-1),999)
     events['LptElectron','mindRj'] = ak.fill_none(ak.min(events.LptElectron.dRJets,axis=-1),999)
     events['LptElectron','mindPhiJ'] = ak.fill_none(ak.min(np.abs(events.LptElectron.dPhiJets),axis=-1),999)
+    # dR/dPhi to the leading jet -- sort PFJets by pT explicitly rather than relying on the ntuple's jet order
+    sorted_jets = events.PFJet[ak.argsort(events.PFJet.pt,axis=1,ascending=False)]
+    # keep the leading jet as a 0/1-length list and broadcast ele x jet, so jetless events give per-electron None -> 999
+    # (an event-level None from ak.firsts would instead wipe out the event's whole electron list)
+    lead_jet = sorted_jets[:,:1]
+    lj_eta, lj_phi = lead_jet.eta[:,None,:], lead_jet.phi[:,None,:]
+    events['Electron','dRj0'] = ak.fill_none(ak.firsts(deltaR(events.Electron.eta[:,:,None],events.Electron.phi[:,:,None],lj_eta,lj_phi),axis=-1),999)
+    events['Electron','dPhij0'] = ak.fill_none(ak.firsts(np.abs(deltaPhi(events.Electron.phi[:,:,None],lj_phi)),axis=-1),999)
+    events['LptElectron','dRj0'] = ak.fill_none(ak.firsts(deltaR(events.LptElectron.eta[:,:,None],events.LptElectron.phi[:,:,None],lj_eta,lj_phi),axis=-1),999)
+    events['LptElectron','dPhij0'] = ak.fill_none(ak.firsts(np.abs(deltaPhi(events.LptElectron.phi[:,:,None],lj_phi)),axis=-1),999)
     events['vtx','mindRj'] = ak.fill_none(ak.min(events.vtx.dRJets,axis=-1),999)
     events['vtx','mindPhiJ'] = ak.fill_none(ak.min(np.abs(events.vtx.dPhiJets),axis=-1),999)
     events['vtx','corrMinDxy'] = ak.fill_none(np.minimum(np.abs(events.vtx.e1_refit_dxy),np.abs(events.vtx.e2_refit_dxy)),999)
@@ -864,6 +905,10 @@ def computeExtraVariables(events,info):
     # associate electrons to vertices after all electron-related stuff has been computed
     vtxElectronConnection(events) # associate electrons to vertices
     if 'AllLptElectron' in events.fields:
+        events['AllLptElectron','mindRj'] = ak.fill_none(ak.min(events.AllLptElectron.dRJets,axis=-1),999)
+        events['AllLptElectron','mindPhiJ'] = ak.fill_none(ak.min(np.abs(events.AllLptElectron.dPhiJets),axis=-1),999)
+        events['AllLptElectron','dRj0'] = ak.fill_none(ak.firsts(deltaR(events.AllLptElectron.eta[:,:,None],events.AllLptElectron.phi[:,:,None],lj_eta,lj_phi),axis=-1),999)
+        events['AllLptElectron','dPhij0'] = ak.fill_none(ak.firsts(np.abs(deltaPhi(events.AllLptElectron.phi[:,:,None],lj_phi)),axis=-1),999)
         lptvtxElectronConnection(events) # same, for the all-low-pT-only lptvtx pool (not present in all ntuple eras)
     events['vtx','min_dxy'] = np.minimum(np.abs(events.vtx.e1.dxy),np.abs(events.vtx.e2.dxy))
     events['vtx','eleDphi'] = np.abs(deltaPhi(events.vtx.e1.phi,events.vtx.e2.phi))
