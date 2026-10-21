@@ -28,6 +28,8 @@ EFF_EDGES = {"d0": np.arange(0, 16, 1.0), "pt": np.arange(0, 51, 1.0), "lxy": np
              "eta": np.linspace(0, 2.4, 13)}
 EFF_LABELS = {"d0": r"Max gen $|d_0|$ to origin [cm]", "pt": r"Gen dimuon $p_T$ [GeV]",
               "lxy": r"Gen production $L_{xy}$ [cm]", "eta": r"Max gen $|\eta|$"}
+QMETRICS = ("dvxy", "dvxyrel", "dpt", "dptrel")
+Q_NMIN = 30  # minimum fits per bin for a quantile
 Q_EDGES = {"chi2": np.arange(0, 10.01, .25),
            "dvxy_fine": np.linspace(-0.2, 0.2, 41), "dvxy_wide": np.linspace(-100, 300, 81),
            "dvxyrel_fine": np.linspace(-0.1, 0.1, 41), "dvxyrel_wide": np.linspace(-1, 10, 45),
@@ -174,6 +176,33 @@ def analyze(args):
                     ed = Q_EDGES[var + "_" + rng]
                     write_hist("%s__%s_%s" % (u, var, rng), var, ed, flowcounts(q[var][ok], ed))
     root.Close()
+    # 90% interval (5th, 50th, 95th percentiles) of each quality metric versus each plotting variable, per set and group
+    qroot = ROOT.TFile.Open(str(args.output), "UPDATE")
+    qtop = qroot.mkdir("quantiles")
+    qgroups = {g: ids for g, ids in groups.items() if g == "overall" or g.startswith("ctau_")}
+    for gname, ids in qgroups.items():
+        d = qtop.mkdir(gname); d.cd()
+        ks = np.ones(len(ke), bool) if ids is None else np.isin(e["sample"][ke], list(ids))
+        for u in UNORD:
+            sel0 = uk[u] & ks
+            for var in QMETRICS:
+                ok = sel0 & np.isfinite(q[var])
+                for xv, edges in EFF_EDGES.items():
+                    xs = e[xv][ke]
+                    bins = np.searchsorted(edges, xs, side="right") - 1
+                    nb = len(edges) - 1
+                    qs = np.zeros((3, nb)); ns = np.zeros(nb)
+                    for b in range(nb):
+                        vv = q[var][ok & (bins == b)]
+                        ns[b] = len(vv)
+                        if len(vv) >= Q_NMIN:
+                            qs[:, b] = np.percentile(vv, [5, 50, 95])
+                    for name, vals in (("q05", qs[0]), ("q50", qs[1]), ("q95", qs[2]), ("n", ns)):
+                        hq = ROOT.TH1D("%s__%s__%s__%s" % (name, u, var, xv), name, nb, array("d", edges))
+                        for b in range(nb):
+                            hq.SetBinContent(b + 1, float(vals[b]))
+                        hq.Write()
+    qroot.Close()
     chk = ROOT.TFile.Open(str(args.output))
     for mname, m in masks.items():
         hh = chk.Get("groups/overall/%s__d0" % mname)
@@ -358,6 +387,36 @@ def plot(args):
             "slide4d_dimuon_pt_absolute.png", "4d. Dimuon pT resolution, absolute (sum of the two legs' track pT at their reference points)")
     qpanels("dptrel", "dptrel", r"$(p_T^{reco} - p_T^{gen})/p_T^{gen}$", r"$(p_T^{reco} - p_T^{gen})/p_T^{gen}$",
             "slide4e_dimuon_pt_relative.png", "4e. Dimuon pT resolution, relative")
+    # 90% interval resolutions versus the plotting variables (5th-95th percentile band and median), valid typed fits
+    YLAB = {"dvxy": r"$v_{xy}^{reco}-v_{xy}^{gen}$ [cm]", "dvxyrel": r"$(v_{xy}^{reco}-v_{xy}^{gen})/v_{xy}^{gen}$",
+            "dpt": r"$p_T^{\mu\mu,reco}-p_T^{\mu\mu,gen}$ [GeV]", "dptrel": r"$(p_T^{reco}-p_T^{gen})/p_T^{gen}$"}
+    TTL = {"dvxy": "vxy residual (absolute)", "dvxyrel": "vxy residual (relative, gen vxy > 1 cm)",
+           "dpt": "dimuon pT residual (absolute)", "dptrel": "dimuon pT residual (relative)"}
+    LETTER = {"dvxy": "f", "dvxyrel": "g", "dpt": "h", "dptrel": "i"}
+    for metric in QMETRICS:
+        fig, axs = plt.subplots(2, 4, figsize=(18, 8))
+        for r_, sets in enumerate((TRK_SETS, DSA_SETS)):
+            for c_, xv in enumerate(EFF_EDGES):
+                ax = axs[r_, c_]
+                for i, u in enumerate(sets):
+                    lo = f["quantiles/overall/q05__%s__%s__%s" % (u, metric, xv)]
+                    md = f["quantiles/overall/q50__%s__%s__%s" % (u, metric, xv)]
+                    hi = f["quantiles/overall/q95__%s__%s__%s" % (u, metric, xv)]
+                    nn = f["quantiles/overall/n__%s__%s__%s" % (u, metric, xv)]
+                    edges = lo.axis().edges(); x = 0.5 * (edges[1:] + edges[:-1])
+                    good = nn.values() >= Q_NMIN
+                    col = tab(i)
+                    ax.plot(x[good], md.values()[good], "-", color=col, lw=1.2, label=label(u) + " median")
+                    ax.plot(x[good], lo.values()[good], "--", color=col, lw=0.9)
+                    ax.plot(x[good], hi.values()[good], "--", color=col, lw=0.9, label=label(u) + " 5%/95%")
+                ax.set_xlabel(EFF_LABELS[xv]); ax.set_ylabel(YLAB[metric]); ax.grid(alpha=.3)
+                ax.axhline(0, color="k", lw=0.5)
+                if c_ == 0:
+                    ax.set_title(("Tracker-leg sets" if r_ == 0 else "DSA-leg sets") + " (solid: median, dashed: 90% interval)", fontsize=8, loc="left")
+            axs[r_, 0].legend(fontsize=6, loc="best")
+        fig.suptitle("4%s. 90%% interval (5th–95th percentile) of the %s versus the plotting variables; bins with < %d fits omitted"
+                     % (LETTER[metric], TTL[metric], Q_NMIN), fontsize=11)
+        finish(fig, out / ("slide4%s_%s_90pc_vs_variables.png" % (LETTER[metric], metric)))
     print("Plots done in", out, flush=True)
 
 
