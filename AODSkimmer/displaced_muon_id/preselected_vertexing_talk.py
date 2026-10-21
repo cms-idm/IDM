@@ -253,7 +253,7 @@ def plot(args):
     out.mkdir(parents=True, exist_ok=True)
     f = uproot.open(args.output)
     foot_eff = ("Signal MC (2022EE), pre-selected displacedMuons; events with exactly 2 signal muons, both accepted (|η|<2.4, "
-                "Lxy<740 cm, no pT cut); raw unweighted; error bars: 68% Clopper–Pearson")
+                "Lxy<740 cm, no pT cut); raw unweighted; error bars: 68% Clopper–Pearson; bins with < 20 denominator events omitted")
     foot = "Signal MC (2022EE), pre-selected displacedMuons; events with two accepted signal muons; raw unweighted"
 
     def h(name, group="overall"):
@@ -320,7 +320,7 @@ def plot(args):
             for key in keys:
                 lab, col, ls, mk = style[key]
                 edges, r, l, u, b = res[key][3][var]
-                x = 0.5 * (edges[1:] + edges[:-1]); ok = b > 0
+                x = 0.5 * (edges[1:] + edges[:-1]); ok = b >= 20
                 ax.errorbar(x[ok], r[ok], yerr=[(r - l)[ok], (u - r)[ok]], color=col, ls=ls, marker=mk, ms=3, lw=1,
                             label=lab, alpha=.9)
             ax.set_xlabel(EFF_LABELS[var]); ax.set_ylabel(ylabel); ax.grid(alpha=.3); ax.set_ylim(0, 1.05)

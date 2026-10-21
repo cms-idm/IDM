@@ -275,7 +275,7 @@ def plot(args):
     f = uproot.open(args.output)
     groups = sorted({k.split("/")[1] for k in f.keys() if k.startswith("groups/") and k.count("/") == 2})
     foot_eff = ("Pre-selected displacedMuons (ID, |eta|<2.4); accepted = exactly 2 signal muons, both accepted; "
-                "raw unweighted; error bars: 68% Clopper-Pearson")
+                "raw unweighted; error bars: 68% Clopper-Pearson; bins with < 20 denominator events omitted")
     foot = "Pre-selected displacedMuons (ID, |eta|<2.4); events with two accepted signal muons; raw unweighted"
 
     def cmap(i, n):  # >10 groups: sequential colours in the (sorted) legend order; else tab10
@@ -317,7 +317,7 @@ def plot(args):
 
     def curve(ax, edges, r, lo, hi, d, label, color=None):
         x = 0.5 * (edges[1:] + edges[:-1])
-        ok = d > 0
+        ok = d >= 20
         ax.errorbar(x[ok], r[ok], yerr=[(r - lo)[ok], (hi - r)[ok]], fmt="o", ms=3, lw=1, label=label, color=color)
 
     METRICS = (("matched", "den", "tmatched_", "Both matched / accepted"),
@@ -350,7 +350,7 @@ def plot(args):
                 for j, g in enumerate(gs):
                     if len(gs) > 10:  # many groups: lines without error bars, otherwise the points are unreadable
                         edges, r_, l_, u_, b_ = ratio(g, num, den, var)
-                        xc = 0.5 * (edges[1:] + edges[:-1]); ok_ = b_ > 0
+                        xc = 0.5 * (edges[1:] + edges[:-1]); ok_ = b_ >= 20
                         ax[i].plot(xc[ok_], r_[ok_], "-o", ms=2.5, lw=1, color=cmap(j, len(gs)), label=glabel(g))
                     else:
                         curve(ax[i], *ratio(g, num, den, var), glabel(g), cmap(j, len(gs)))
