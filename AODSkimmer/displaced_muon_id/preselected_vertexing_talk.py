@@ -230,9 +230,9 @@ def plot(args):
         o = f["groups/%s/%s" % (group, name)]
         return o.values(flow=True), o.axis().edges()
 
-    def finish(fig, path):
+    def finish(fig, path, bottom=0.02):
         fig.text(0.01, 0.005, foot, fontsize=7, color="0.35")
-        fig.tight_layout(rect=(0, 0.02, 1, 0.97))
+        fig.tight_layout(rect=(0, bottom, 1, 0.97))
         fig.savefig(path, dpi=120)
         if args.log and path.name.startswith("slide4"):  # extra log-y copy of the distributions only
             for a_ in fig.axes:
@@ -294,9 +294,10 @@ def plot(args):
                 ax.errorbar(x[ok], r[ok], yerr=[(r - l)[ok], (u - r)[ok]], color=col, ls=ls, marker=mk, ms=3, lw=1,
                             label=lab, alpha=.9)
             ax.set_xlabel(EFF_LABELS[var]); ax.set_ylabel(ylabel); ax.grid(alpha=.3); ax.set_ylim(0, 1.05)
-        fig.axes[1].legend(fontsize=6.5, ncol=2, loc="best")
+        hd, lb = fig.axes[1].get_legend_handles_labels()
+        fig.legend(hd, lb, loc="lower center", ncol=6, fontsize=7.5, bbox_to_anchor=(0.5, 0.025))
         fig.suptitle(title, fontsize=12)
-        finish(fig, out / fname)
+        finish(fig, out / fname, bottom=0.1)
 
     A = lambda key: {"any": "matched_any", "h": "matched_h"}.get(key, "m_" + key)
     V = lambda key: {"any": "valid_any", "h": "valid_h"}.get(key, "v_" + key)
@@ -335,7 +336,7 @@ def plot(args):
                 if n == 0:
                     continue
                 a.stairs(v[1:-1] / n, e_, label="%s (N=%d, %.1f%% outside)" % (label(u), n, 100 * (v[0] + v[-1]) / n))
-            a.set_xlabel(xl); a.set_ylabel("Unit area (incl. outside range)"); a.legend(fontsize=8); a.grid(alpha=.3)
+            a.set_xlabel(xl); a.set_ylabel("Unit area (incl. outside range)"); a.legend(fontsize=7, loc="upper left"); a.grid(alpha=.3)
         ax[0].set_title("Tracker-leg sets (no DSA leg): narrow range", fontsize=9)
         ax[1].set_title("DSA-leg sets: wide range", fontsize=9)
         fig.suptitle(title, fontsize=11)
