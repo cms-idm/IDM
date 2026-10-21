@@ -7,7 +7,8 @@ Narrative: accepted events -> both muons matched (typed) -> vertexed -> vertex q
 kb/studies/preselected-vertexing-efficiency.md. Reads the per-sample trees written by PreselectedVertexing.
 Event level, raw, unweighted. den = events with two accepted gen. Ordered categories use the muon CHARGE:
 GmOp = global leg for mu-, DSA (outer) leg for mu+. "any" = union of all typed combos (any component).
-"h" = staged hierarchy best-best (comparison). Quality: valid typed fits, six unordered sets, one entry per valid
+"P1"/"P2" = vertex-level leg priority per muon among its matched component types: P1 Global>Inner>DSA, P2 Global>DSA>Inner
+(matching itself is priority independent: a muon is matched if ANY component matches). "h" (staged hierarchy) is stored in ROOT only. Quality: valid typed fits, six unordered sets, one entry per valid
 ordered fit; reco vxy = hypot(fit vx, vy) from the origin, truth = gen production Lxy from the origin.
 """
 import argparse
@@ -141,6 +142,20 @@ def analyze(args):
         for a, b in orders:
             sel |= (k["kTypeA"] == a) & (k["kTypeB"] == b)
         uk[u] = sel & valid
+    # vertex-level leg priority per muon: choose, for each gen muon, its best matched component type; fit that typed combo
+    RANKS = {"P1": {2: 0, 0: 1, 1: 2}, "P2": {2: 0, 1: 1, 0: 2}}
+    for pname, rk in RANKS.items():
+        lut = np.array([rk[t] for t in (0, 1, 2)])
+        ra, rb = lut[k["kTypeA"]], lut[k["kTypeB"]]
+        mina = np.full(total, 9); minb = np.full(total, 9)
+        np.minimum.at(mina, ke, ra); np.minimum.at(minb, ke, rb)
+        chosen = (ra == mina[ke]) & (rb == minb[ke])
+        if not np.array_equal(np.bincount(ke[chosen], minlength=total) > 0, masks["matched_any"]) or \
+           np.bincount(ke[chosen], minlength=total).max() != 1:
+            raise RuntimeError("priority selection is not one combo per matched event: " + pname)
+        uk[pname] = chosen & valid
+        v_ev = np.zeros(total, bool); v_ev[ke[chosen & valid]] = True
+        masks["v_" + pname] = v_ev
     groups = {"overall": None}
     for si, s in enumerate(names):
         mass, tau = s.rsplit("_ctau-", 1)
@@ -148,7 +163,7 @@ def analyze(args):
         groups.setdefault("ctau_" + tau, set()).add(si)
     root = ROOT.TFile.Open(str(args.output), "CREATE")
     ROOT.TNamed("definitions", "Typed ordered categories by muon charge (GmOp = global for mu-, DSA for mu+); any = union of "
-                "typed combos; h = hierarchy; den = events with two accepted gen; quality = valid typed fits, six unordered "
+                "typed combos; P1/P2 = per-muon vertex leg priority Global>Inner>DSA / Global>DSA>Inner; den = events with two accepted gen; quality = valid typed fits, six unordered "
                 "sets, one entry per valid ordered fit; vxy from origin vs gen production Lxy; relative vxy for truth vxy>1cm. "
                 "Raw unweighted; flow kept.").Write()
     ROOT.TNamed("analysisRevision", args.revision).Write()
@@ -159,15 +174,15 @@ def analyze(args):
     for gname, ids in groups.items():
         d = top.mkdir(gname); d.cd()
         gs = np.ones(total, bool) if ids is None else np.isin(e["sample"], list(ids))
-        stages = [ev_pass["initial"], ev_pass["sig2"], masks["den"], masks["matched_any"], masks["valid_any"],
-                  masks["matched_h"], masks["valid_h"]]
+        stages = [ev_pass["initial"], ev_pass["sig2"], masks["den"], masks["matched_any"], masks["v_P1"], masks["v_P2"],
+                  masks["valid_any"]]
         write_hist("cutflow", "cutflow", np.arange(len(stages) + 1, dtype=float),
                    np.r_[0, [int((m & gs).sum()) for m in stages], 0])
         for var, edges in EFF_EDGES.items():
             for mname, m in masks.items():
                 write_hist("%s__%s" % (mname, var), EFF_LABELS[var], edges, flowcounts(e[var][m & gs], edges))
         ks = np.ones(len(ke), bool) if ids is None else np.isin(e["sample"][ke], list(ids))
-        for u in UNORD:
+        for u in uk:
             sel = uk[u] & ks
             write_hist("%s__chi2" % u, "chi2", Q_EDGES["chi2"], flowcounts(q["chi2"][sel], Q_EDGES["chi2"]))
             for var in ("dvxy", "dvxyrel", "dpt", "dptrel"):
@@ -183,7 +198,7 @@ def analyze(args):
     for gname, ids in qgroups.items():
         d = qtop.mkdir(gname); d.cd()
         ks = np.ones(len(ke), bool) if ids is None else np.isin(e["sample"][ke], list(ids))
-        for u in UNORD:
+        for u in uk:
             sel0 = uk[u] & ks
             for var in QMETRICS:
                 ok = sel0 & np.isfinite(q[var])
@@ -208,7 +223,7 @@ def analyze(args):
         hh = chk.Get("groups/overall/%s__d0" % mname)
         if int(hh.Integral(0, hh.GetNbinsX() + 1)) != int(m.sum()):
             raise RuntimeError("Histogram total differs: " + mname)
-    for u in UNORD:
+    for u in uk:
         hh = chk.Get("groups/overall/%s__chi2" % u)
         if int(hh.Integral(0, hh.GetNbinsX() + 1)) != int(uk[u].sum()):
             raise RuntimeError("Quality histogram total differs: " + u)
@@ -216,16 +231,16 @@ def analyze(args):
     c = lambda m: int(m.sum())
     print("VALIDATED: events=%d" % total)
     print("initial %d, two signal %d, accepted %d" % (total, c(e["sig2"]), c(masks["den"])))
-    print("matched any(union) %d  hierarchy %d | valid any %d  hierarchy %d | hier-matched not in union %d | hier-valid not in any-valid %d | any-valid not hier-valid %d" % (
-        c(masks["matched_any"]), c(masks["matched_h"]), c(masks["valid_any"]), c(masks["valid_h"]),
-        c(masks["matched_h"] & ~masks["matched_any"]), c(masks["valid_h"] & ~masks["valid_any"]),
-        c(masks["valid_any"] & ~masks["valid_h"])))
+    print("matched any(union) %d | vertexed: any valid combo %d, priority G>I>DSA %d, priority G>DSA>I %d | valid/matched: %.4f, %.4f, %.4f" % (
+        c(masks["matched_any"]), c(masks["valid_any"]), c(masks["v_P1"]), c(masks["v_P2"]), c(masks["valid_any"]) / c(masks["matched_any"]),
+        c(masks["v_P1"]) / c(masks["matched_any"]), c(masks["v_P2"]) / c(masks["matched_any"])))
+    print("staged hierarchy (not plotted): matched %d valid %d" % (c(masks["matched_h"]), c(masks["valid_h"])))
     print("category matched valid valid/matched matched/accepted valid/anymatched")
     for cat in CATS:
         m, v = c(masks["m_" + cat]), c(masks["v_" + cat])
         print("  %-5s %7d %7d %.4f %.4f %.4f" % (cat, m, v, v / max(m, 1), m / c(masks["den"]), v / c(masks["matched_any"])))
     print("quality (valid fits): set N | dvxy[cm] median, 16-84 | dvxyrel median, 16-84 | dpt[GeV] median, 16-84 | dptrel median, 16-84")
-    for u in UNORD:
+    for u in uk:
         sel = uk[u]
         row = []
         for var in ("dvxy", "dvxyrel", "dpt", "dptrel"):
@@ -271,18 +286,19 @@ def plot(args):
         plt.close(fig)
 
     tab = plt.get_cmap("tab10")
-    style = {"any": ("any component (union of typed)", "k", "-", "o"), "h": ("hierarchy best–best (one-to-one)", "0.5", ":", "s")}
+    style = {"any": ("any component (union of typed)", "k", "-", "o"), "P1": ("vertex priority Global>Inner>DSA", "tab:olive", ":", "s"),
+             "P2": ("vertex priority Global>DSA>Inner", "tab:cyan", "-.", "D")}
     for i, c in enumerate(PURE):
         style[c] = (label(c), tab(i), "-", "o")
     for i, pair in enumerate(("GO", "GI", "OI")):
         for c, ls in zip(MIXED[2 * i:2 * i + 2], ("-", "--")):
             style[c] = (label(c), tab(3 + i), ls, "^" if ls == "-" else "v")
-    order = ("any", "h") + CATS
+    order = ("any", "P1", "P2") + CATS
 
-    def series(num, den):
+    def series(num, den, keys=order):
         """num, den: functions key -> hist name; returns key -> (total ratio, lo, hi, var curves)."""
         res = {}
-        for key in order:
+        for key in keys:
             n_name, d_name = num(key), den(key)
             if n_name is None:
                 continue
@@ -329,26 +345,27 @@ def plot(args):
         fig.suptitle(title, fontsize=12)
         finish(fig, out / fname, bottom=0.1, note=foot_eff)
 
-    A = lambda key: {"any": "matched_any", "h": "matched_h"}.get(key, "m_" + key)
-    V = lambda key: {"any": "valid_any", "h": "valid_h"}.get(key, "v_" + key)
+    A1 = lambda key: {"any": "matched_any"}.get(key, "m_" + key)   # slide 1: matching is priority independent
+    A3 = lambda key: "matched_any" if key in ("any", "P1", "P2") else "m_" + key
+    V = lambda key: {"any": "valid_any", "P1": "v_P1", "P2": "v_P2"}.get(key, "v_" + key)
     # Slide 1: matched / accepted
-    slide(series(A, lambda k: "den"), "1. Both muons reconstructed (matched) per leg-type set, of events with two accepted gen",
+    slide(series(A1, lambda k: "den", ("any",) + CATS), "1. Both muons reconstructed (matched) per leg-type set, of events with two accepted gen",
           "Fraction of accepted events", "slide1_matched_over_accepted.png")
     # Slide 2: valid / any-matched (hierarchy uses its own matched count)
-    slide(series(V, lambda k: "matched_h" if k == "h" else "matched_any"),
+    slide(series(V, lambda k: "matched_any"),
           "2. Of events with both muons matched (any component), fraction vertexed with each leg-type set "
           "(includes the probability of having those legs)", "Fraction of both-matched events", "slide2_vertexed_over_matched_any.png")
     # Slide 3: valid / own matched
-    slide(series(V, lambda k: A(k)), "3. Given the typed legs exist, vertexing efficiency (own denominator per set)",
+    slide(series(V, A3), "3. Given the typed legs exist, vertexing efficiency (own denominator per set)",
           "Vertexed / matched in the same set", "slide3_vertexed_over_own_matched.png")
 
     # Cutflow
     v, _ = h("cutflow"); v = v[1:-1]
     labels = ("initial events", "two signal muons (μ⁻μ⁺)", "both accepted", "both matched, any component (union)",
-              "vertexed, any component (union)", "both matched, hierarchy", "vertexed, hierarchy")
+              "vertexed, priority Global>Inner>DSA", "vertexed, priority Global>DSA>Inner", "vertexed, any valid combo (fallback)")
     fig, ax = plt.subplots(figsize=(10, 4.5))
     y = np.arange(len(labels))[::-1]
-    for yi, c, col, al in zip(y, v, ["0.6", "0.6", "C0", "C1", "C2", "C1", "C2"], [1, 1, 1, 1, 1, .45, .45]):
+    for yi, c, col, al in zip(y, v, ["0.6", "0.6", "C0", "C1", "tab:olive", "tab:cyan", "C2"], [1, 1, 1, 1, 1, 1, 1]):
         ax.barh(yi, c, color=col, alpha=al)
     for yi, c in zip(y, v):
         ax.text(c, yi, "  %d  (%.2f%% of initial, %.2f%% of accepted)" % (c, 100 * c / v[0], 100 * c / v[2]), va="center", fontsize=8)
@@ -431,6 +448,21 @@ def plot(args):
         finish(fig, out / ("slide4%s_%s_90pc_vs_variables.png" % (LETTER[metric], metric)), bottom=0.09,
                note="Signal MC (2022EE); valid typed fits, mixed sets merged (both orderings); raw unweighted; y range clipped to the "
                     "3rd-97th percentile of the plotted band edges (extreme bins can fall outside)")
+    # Slide 5: vertex quality by leg priority (one entry per vertexed event; scales mix tracker and DSA legs, so log y)
+    fig, ax = plt.subplots(1, 5, figsize=(20, 4.2))
+    for a, (var, xl) in zip(ax, (("chi2", r"Vertex $\chi^2$/ndof"), ("dvxy_wide", r"$v_{xy}^{reco}-v_{xy}^{gen}$ [cm]"),
+                                 ("dvxyrel_wide", r"$(v_{xy}^{reco}-v_{xy}^{gen})/v_{xy}^{gen}$ (gen $v_{xy}$>1 cm)"),
+                                 ("dpt_wide", r"$p_T^{\mu\mu,reco}-p_T^{\mu\mu,gen}$ [GeV]"),
+                                 ("dptrel_wide", r"$(p_T^{reco}-p_T^{gen})/p_T^{gen}$"))):
+        for pk in ("P1", "P2"):
+            nm = "%s__%s" % (pk, var) if var != "chi2" else "%s__chi2" % pk
+            v, e_ = h(nm); n = v.sum()
+            a.stairs(v[1:-1] / n, e_, color=style[pk][1], ls="-" if pk == "P1" else "--",
+                     label="%s (N=%d, %.1f%% outside)" % (style[pk][0], n, 100 * (v[0] + v[-1]) / n))
+        a.set_xlabel(xl); a.set_ylabel("Unit area (incl. outside range)"); a.set_yscale("log"); a.grid(alpha=.3)
+    ax[0].legend(fontsize=7, loc="upper right")
+    fig.suptitle("5. Vertex quality for the two vertex-level leg priorities (valid fits, one per event; log y)", fontsize=11)
+    finish(fig, out / "slide5_priority_quality.png")
     print("Plots done in", out, flush=True)
 
 
