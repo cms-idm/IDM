@@ -431,8 +431,8 @@ def plot(args):
                     col = SETCOL[u]; lw_ = SETLW[u]
                     ax.plot(x[good], md.values()[good], "-", color=col, lw=lw_, marker=SETMK[u], ms=4 + lw_, markevery=3,
                             label=label(u))
-                    ax.plot(x[good], lo.values()[good], "--", color=col, lw=max(0.8, 0.45 * lw_))
-                    ax.plot(x[good], hi.values()[good], "--", color=col, lw=max(0.8, 0.45 * lw_))
+                    ax.plot(x[good], lo.values()[good], ls=(0, (4, 2)), color=col, lw=0.9 * lw_)
+                    ax.plot(x[good], hi.values()[good], ls=(0, (4, 2)), color=col, lw=0.9 * lw_)
                 ax.set_xlabel(EFF_LABELS[xv]); ax.set_ylabel(YLAB[metric]); ax.grid(alpha=.3)
                 ax.axhline(0, color="k", lw=0.5)
                 vals_ = np.concatenate([f["quantiles/overall/%s__%s__%s__%s" % (nm, u, metric, xv)].values()[
