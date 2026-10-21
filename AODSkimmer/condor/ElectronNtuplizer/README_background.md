@@ -74,12 +74,31 @@ Run this chain from `configs/sample_configs/` (see `jsonchain_bkg.sh`):
 - `False`: normalization is still fixed, but the slim ntuples are never opened. Use this when you only need the main histograms.
 - `True`: each slim sample is also run as a `<name>__slim` dataset, and the following changes:
   - The true `all` cutflow bin comes from the slim tree. The full tree's first bin is renamed `passHLT` ("Pass background HLT/MET preselection").
-  - The cut config is also applied to the slim tree and stored in `cutflow_slim`, `cutflow_cts_slim` and related entries. Only cuts that use slim branches make sense here, such as the MET filters and trigger. `utils.get_bkg_slim_cut_overrides` turns these into cutflow columns that replace the full-tree ones.
+  - The **first two** cuts of the cut config are also applied to the slim tree and stored in `cutflow_slim`, `cutflow_cts_slim` and related entries. Those two cuts must use only slim branches, e.g. the MET filters and trigger. `utils.get_bkg_slim_cut_overrides` turns these into cutflow columns that replace the full-tree ones.
   - A histo config can define an optional `fillSlimHistos(events, histObj, samp, info, sum_wgt=...)` to fill inclusive histograms, such as MET, HT or trigger turn-ons, from the slim tree.
+
+### Code changes (python_analysis)
+
+**`configs/sample_configs/`**, commit `28f58ed`:
+- `haddMergeSamples.py` (new): hadds a config's small files into files of about `--target-events` events each (default 300k), mirroring `<year>/<key>/<sub>/` under `-o`. Use `--dry-run` to see the plan. Restrict samples with `--samples` or `-g`. It sources cmsenv in a subshell to get `hadd`, so run it from the coffea env (optional, not critical, but useful for avoiding needing to process tons of tiny files)
+- `jsonchain_bkg.sh` (new): runs the make, xsec and sumGenWgts chain for both the merged full stream and the slim stream.
+- `getSignalXsec.py`: for bkg it now reads xsec and `filter_eff` from `bkg_<year>_xsec_filtereff_table.csv` (from `AODSkimmer/calcAuxilliaryData.py`), matching `<sample>_<subsample>`. It converts pb to fb. It falls back to `bkg_xsecs.json`.
+- `makeSignalConfigs.py`: bkg and data output names now use the `-n` version name, e.g. `bkg_2024_Aug2026-slim.json`.
+
+**`analysisTools/`**, commits `39e3daa` and `455fd47`:
+- `analysisTools.py`:
+  - `Analyzer` gains `slimFileList` and `processSlim`. The default is `processSlim=True`, so set it to `False` explicitly if you don't want the slim files read.
+  - Pairing and the normalization override happen in `loadFiles()`. The original values are kept as `full_sum_wgt` and `full_num_events`.
+  - File resolution moved into `_resolveSampleFiles()`, which both configs share.
+  - `iDMeProcessor._processSlim()` handles the `__slim` datasets.
+  - `genProcessor`, `bareProcessor` and `trigProcessor` skip `__slim` datasets.
+  - The Runner now uses `skipbadfiles=True` and `xrootdtimeout=180`.
+- `utils.py`: adds `get_bkg_slim_cut_overrides()`, described above.
+- `analysisSubroutines.py`: fixes a crash in `vtxElectronConnection` for a single event with 0 vertices, which is now common in small files.
 
 ## Notes
 
-- I have only ntuplized TT, QCD, DY, Multiboson, and WtoLNu, and only for 2024. DYLowMass and Zto2Nu have not been ntuplized; Zgamma and SingleT only have MiniAODv6 samples available for 2024 which is not currently compatible with my CMSSW version.
+- Andrew has only ntuplized TT, QCD, DY, Multiboson, and WtoLNu, and only for 2024. DYLowMass and Zto2Nu have not been ntuplized; Zgamma and SingleT only have MiniAODv6 samples available for 2024 which is not currently compatible with my CMSSW version.
 - Best practice is to keep the two streams in sync. Normalization comes from the slim files that are present and not blacklisted. If a job's slim file is missing or blacklisted but its full file isn't, that sample is slightly over-weighted. 
 - Signal configs have no slim counterpart and need none: signal files contain every event.
 - Skimmed configs keep the `sum_wgt` of their parent full config, so the slim override is still required.
