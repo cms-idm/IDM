@@ -29,7 +29,7 @@ EFF_EDGES = {"d0": np.arange(0, 16, 1.0), "pt": np.arange(0, 51, 1.0), "lxy": np
 EFF_LABELS = {"d0": r"Max gen $|d_0|$ to origin [cm]", "pt": r"Gen dimuon $p_T$ [GeV]",
               "lxy": r"Gen production $L_{xy}$ [cm]", "eta": r"Max gen $|\eta|$"}
 QMETRICS = ("dvxy", "dvxyrel", "dpt", "dptrel")
-Q_NMIN = 30  # minimum fits per bin for a quantile
+Q_NMIN = 100  # minimum fits per bin for a quantile
 Q_EDGES = {"chi2": np.arange(0, 10.01, .25),
            "dvxy_fine": np.linspace(-0.2, 0.2, 41), "dvxy_wide": np.linspace(-100, 300, 81),
            "dvxyrel_fine": np.linspace(-0.1, 0.1, 41), "dvxyrel_wide": np.linspace(-1, 10, 45),
@@ -259,8 +259,8 @@ def plot(args):
         o = f["groups/%s/%s" % (group, name)]
         return o.values(flow=True), o.axis().edges()
 
-    def finish(fig, path, bottom=0.02):
-        fig.text(0.01, 0.005, foot, fontsize=7, color="0.35")
+    def finish(fig, path, bottom=0.02, note=None):
+        fig.text(0.01, 0.005, note or foot, fontsize=7, color="0.35")
         fig.tight_layout(rect=(0, bottom, 1, 0.97))
         fig.savefig(path, dpi=120)
         if args.log and path.name.startswith("slide4"):  # extra log-y copy of the distributions only
@@ -411,12 +411,20 @@ def plot(args):
                     ax.plot(x[good], hi.values()[good], "--", color=col, lw=0.9, label=label(u) + " 5%/95%")
                 ax.set_xlabel(EFF_LABELS[xv]); ax.set_ylabel(YLAB[metric]); ax.grid(alpha=.3)
                 ax.axhline(0, color="k", lw=0.5)
+                vals_ = np.concatenate([f["quantiles/overall/%s__%s__%s__%s" % (nm, u, metric, xv)].values()[
+                    f["quantiles/overall/n__%s__%s__%s" % (u, metric, xv)].values() >= Q_NMIN]
+                    for u in sets for nm in ("q05", "q95")])
+                if len(vals_):  # robust y range: a few extreme bins (e.g. the lowest pT) must not hide the trend
+                    lo_, hi_ = np.percentile(vals_, [3, 97]); pad_ = 0.15 * (hi_ - lo_)
+                    ax.set_ylim(lo_ - pad_, hi_ + pad_)
                 if c_ == 0:
                     ax.set_title(("Tracker-leg sets" if r_ == 0 else "DSA-leg sets") + " (solid: median, dashed: 90% interval)", fontsize=8, loc="left")
             axs[r_, 0].legend(fontsize=6, loc="best")
-        fig.suptitle("4%s. 90%% interval (5th–95th percentile) of the %s versus the plotting variables; bins with < %d fits omitted"
+        fig.suptitle("4%s. 90%% interval (5th–95th percentile) of the %s versus the plotting variables; bins with < %d valid fits omitted"
                      % (LETTER[metric], TTL[metric], Q_NMIN), fontsize=11)
-        finish(fig, out / ("slide4%s_%s_90pc_vs_variables.png" % (LETTER[metric], metric)))
+        finish(fig, out / ("slide4%s_%s_90pc_vs_variables.png" % (LETTER[metric], metric)),
+               note="Signal MC (2022EE); valid typed fits, mixed sets merged (both orderings); raw unweighted; y range clipped to the "
+                    "3rd-97th percentile of the plotted band edges (extreme bins can fall outside)")
     print("Plots done in", out, flush=True)
 
 
