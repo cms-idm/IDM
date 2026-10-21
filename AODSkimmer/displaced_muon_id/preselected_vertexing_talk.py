@@ -29,6 +29,10 @@ EFF_EDGES = {"d0": np.arange(0, 16, 1.0), "pt": np.arange(0, 51, 1.0), "lxy": np
              "eta": np.linspace(0, 2.4, 13)}
 EFF_LABELS = {"d0": r"Max gen $|d_0|$ to origin [cm]", "pt": r"Gen dimuon $p_T$ [GeV]",
               "lxy": r"Gen production $L_{xy}$ [cm]", "eta": r"Max gen $|\eta|$"}
+# Colour-blind-safe palette (Okabe-Ito based). Sets whose curves nearly coincide also differ in line width and marker.
+SETCOL = {"GG": "#0072B2", "II": "#E69F00", "OO": "#009E73", "GO": "#D55E00", "GI": "#CC79A7", "OI": "#6A3D9A"}
+SETLW = {"GG": 3.4, "II": 2.2, "GI": 1.1, "OO": 3.4, "GO": 2.2, "OI": 1.1}
+SETMK = {"GG": "o", "II": "s", "GI": "^", "OO": "o", "GO": "s", "OI": "^"}
 QMETRICS = ("dvxy", "dvxyrel", "dpt", "dptrel")
 Q_NMIN = 100  # minimum fits per bin for a quantile
 Q_EDGES = {"chi2": np.arange(0, 10.01, .25),
@@ -286,13 +290,13 @@ def plot(args):
         plt.close(fig)
 
     tab = plt.get_cmap("tab10")
-    style = {"any": ("any component (union of typed)", "k", "-", "o"), "P1": ("vertex priority Global>Inner>DSA", "tab:olive", ":", "s"),
-             "P2": ("vertex priority Global>DSA>Inner", "tab:cyan", "-.", "D")}
+    style = {"any": ("any component (union of typed)", "k", "-", "o"), "P1": ("vertex priority Global>Inner>DSA", "#444444", ":", "s"),
+             "P2": ("vertex priority Global>DSA>Inner", "#9a9a9a", "-.", "D")}
     for i, c in enumerate(PURE):
-        style[c] = (label(c), tab(i), "-", "o")
+        style[c] = (label(c), SETCOL[c], "-", "o")
     for i, pair in enumerate(("GO", "GI", "OI")):
         for c, ls in zip(MIXED[2 * i:2 * i + 2], ("-", "--")):
-            style[c] = (label(c), tab(3 + i), ls, "^" if ls == "-" else "v")
+            style[c] = (label(c), SETCOL[pair], ls, "^" if ls == "-" else "v")
     order = ("any", "P1", "P2") + CATS
 
     def series(num, den, keys=order):
@@ -382,7 +386,7 @@ def plot(args):
                 n = v.sum()
                 if n == 0:
                     continue
-                a.stairs(v[1:-1] / n, e_, color=tab(list(UNORD).index(u)),
+                a.stairs(v[1:-1] / n, e_, color=SETCOL[u], lw=SETLW[u],
                          label="%s (N=%d, %.1f%% outside)" % (label(u), n, 100 * (v[0] + v[-1]) / n))
             a.set_xlabel(xl); a.set_ylabel("Unit area (incl. outside range)"); a.legend(fontsize=7, loc="upper left" if rng == "fine" else "upper right"); a.grid(alpha=.3)
         ax[0].set_title("Tracker-leg sets (no DSA leg): narrow range; the three curves nearly coincide", fontsize=9)
@@ -393,7 +397,7 @@ def plot(args):
     fig, ax = plt.subplots(figsize=(7, 4.8))
     for i, u in enumerate(UNORD):
         v, e_ = h("%s__chi2" % u); n = v.sum()
-        ax.stairs(v[1:-1] / n, e_, label="%s (N=%d)" % (label(u), n), color=tab(i))
+        ax.stairs(v[1:-1] / n, e_, label="%s (N=%d)" % (label(u), n), color=SETCOL[u], lw=SETLW[u])
     ax.set_xlabel(r"Vertex $\chi^2$/ndof (ndof = 1)"); ax.set_ylabel("Unit area (incl. > 10)"); ax.legend(fontsize=8); ax.grid(alpha=.3)
     ax.set_title("4a. Vertex quality: χ²/dof of valid typed fits", fontsize=10)
     finish(fig, out / "slide4a_chi2.png")
@@ -424,10 +428,11 @@ def plot(args):
                     nn = f["quantiles/overall/n__%s__%s__%s" % (u, metric, xv)]
                     edges = lo.axis().edges(); x = 0.5 * (edges[1:] + edges[:-1])
                     good = nn.values() >= Q_NMIN
-                    col = tab(list(UNORD).index(u))
-                    ax.plot(x[good], md.values()[good], "-", color=col, lw=1.2, label=label(u))
-                    ax.plot(x[good], lo.values()[good], "--", color=col, lw=0.9)
-                    ax.plot(x[good], hi.values()[good], "--", color=col, lw=0.9)
+                    col = SETCOL[u]; lw_ = SETLW[u]
+                    ax.plot(x[good], md.values()[good], "-", color=col, lw=lw_, marker=SETMK[u], ms=4 + lw_, markevery=3,
+                            label=label(u))
+                    ax.plot(x[good], lo.values()[good], "--", color=col, lw=max(0.8, 0.45 * lw_))
+                    ax.plot(x[good], hi.values()[good], "--", color=col, lw=max(0.8, 0.45 * lw_))
                 ax.set_xlabel(EFF_LABELS[xv]); ax.set_ylabel(YLAB[metric]); ax.grid(alpha=.3)
                 ax.axhline(0, color="k", lw=0.5)
                 vals_ = np.concatenate([f["quantiles/overall/%s__%s__%s__%s" % (nm, u, metric, xv)].values()[
