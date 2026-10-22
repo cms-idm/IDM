@@ -7,13 +7,14 @@ python3 preselected_vertexing_selection.py plot --output RUN/selection.root --pl
 Baseline: events with two accepted gen and >= 1 valid typed combo (any of the 9 ordered leg-type combos, one vertex fit each).
 An event passes a requirement if AT LEAST ONE valid combo passes it; for a chain of requirements the SAME combo must pass
 all of them. Requirements: chi2/ndof < 4 (ndof = 1); dR(mu, mu) < 0.9 in four versions; |dphi(pTmiss, pT_mumu)| < 0.5 in
-two versions (dphi = phi(MET) - phi(mumu), wrapped; missing MET or an unavailable position fails the requirement).
+three versions (dphi = phi(MET) - phi(mumu), wrapped; missing MET or an unavailable position fails the requirement).
   dR versions: reco at the track reference point (point of closest approach; momentum direction of the two legs),
   reco at station 2 (propagated position of the two legs' components), gen at production (momentum directions),
   gen at station 2 (propagated final-state gen muons; propagation failure fails the requirement).
   dphi versions: Type-1 PF MET with the vector sum of the two legs' reference-point pT; genMetTrue with the vector sum
-  of the two gen signal-muon pT.
-Chains: A reco(PCA)+PF, B reco(station 2)+PF, C gen(production)+genMET, D gen(station 2)+genMET.
+  of the two gen signal-muon pT; genMetTrue with the vector sum of the two legs' reference-point pT (as PF, MET swapped).
+Chains: A reco(PCA)+PF, B reco(station 2)+PF, C gen(production)+genMET, D gen(station 2)+genMET,
+  E reco(PCA)+genMET vs reco dimuon pT (differs from A only in the MET).
 Shape plots: dphi of the P1 vertex (first valid combo under priority Global>Inner>DSA, one per event) vs the gen version.
 """
 import argparse
@@ -26,11 +27,14 @@ CHI2_CUT, DR_CUT, DPHI_CUT = 4.0, 0.9, 0.5
 DRV = ("drPCA", "drST2", "drGenVtx", "drGenST2")
 DRV_LABEL = {"drPCA": "reco, track reference point (closest approach)", "drST2": "reco, station 2",
              "drGenVtx": "gen, production vertex", "drGenST2": "gen, station 2"}
-DPV = ("dphiPF", "dphiGen")
-DPV_LABEL = {"dphiPF": "PF MET vs reco dimuon pT", "dphiGen": "gen MET vs gen dimuon pT"}
-CHAINS = {"A": ("drPCA", "dphiPF"), "B": ("drST2", "dphiPF"), "C": ("drGenVtx", "dphiGen"), "D": ("drGenST2", "dphiGen")}
+DPV = ("dphiPF", "dphiGen", "dphiGenMetReco")
+DPV_LABEL = {"dphiPF": "PF MET vs reco dimuon pT", "dphiGen": "gen MET vs gen dimuon pT",
+             "dphiGenMetReco": "gen MET vs reco dimuon pT"}
+CHAINS = {"A": ("drPCA", "dphiPF"), "B": ("drST2", "dphiPF"), "C": ("drGenVtx", "dphiGen"), "D": ("drGenST2", "dphiGen"),
+          "E": ("drPCA", "dphiGenMetReco")}
 CHAIN_LABEL = {"A": "A: reco dR at closest approach + PF MET", "B": "B: reco dR at station 2 + PF MET",
-               "C": "C: gen dR at production + gen MET", "D": "D: gen dR at station 2 + gen MET"}
+               "C": "C: gen dR at production + gen MET", "D": "D: gen dR at station 2 + gen MET",
+               "E": "E: reco dR at closest approach + gen MET (vs reco dimuon pT)"}
 RANK_P1 = {2: 0, 0: 1, 1: 2}  # Global > Inner > DSA (types: 0 inner, 1 outer/DSA, 2 global)
 DPHI_EDGES = {"dphi": np.linspace(-np.pi, np.pi, 33), "absdphi": np.linspace(0, np.pi, 33)}
 
@@ -110,6 +114,7 @@ def analyze(args):
     ev = c["ev"]
     c["dphiPF"] = np.abs(wrap(e["pfmetphi"][ev] - c["recophi"]))
     sdphiPF = wrap(e["pfmetphi"][ev] - c["recophi"])
+    c["dphiGenMetReco"] = np.abs(wrap(e["genmetphi"][ev] - c["recophi"]))
     e["dphiGen"] = np.abs(wrap(e["genmetphi"] - e["genphi"]))
     sdphiGen = wrap(e["genmetphi"] - e["genphi"])
     c["drGenVtx"] = e["drGenVtx"][ev]; c["drGenST2"] = e["drGenST2"][ev]; c["dphiGen"] = e["dphiGen"][ev]
@@ -198,9 +203,9 @@ def plot(args):
         plt.close(fig)
 
     # sequential cutflow per chain
-    fig, axs = plt.subplots(2, 2, figsize=(15, 8))
     stage_lab = ["baseline\n(>=1 valid combo)", "+ chi2/ndof < %g" % CHI2_CUT, "+ dR < %g" % DR_CUT, "+ |dphi| < %g" % DPHI_CUT]
-    for ax, name in zip(axs.ravel(), CHAINS):
+
+    def chain_panel(ax, name):
         v = f["chain_" + name].values()
         y = np.arange(4)[::-1]
         ax.barh(y, v, color=["0.6", "#0072B2", "#E69F00", "#009E73"])
@@ -209,9 +214,22 @@ def plot(args):
             ax.text(v[i], yi, " %d (%.1f%% of baseline)%s" % (v[i], 100 * v[i] / v[0], cost), va="center", fontsize=8)
         ax.set_yticks(y); ax.set_yticklabels(stage_lab, fontsize=9); ax.set_xlim(0, v[0] * 1.9)
         ax.set_xlabel("Events (raw)"); ax.set_title(CHAIN_LABEL[name], fontsize=10)
-    fig.suptitle("Cost of the requirements, sequential (an event passes if one valid combo satisfies all requirements so far); "
-                 "baseline = %d events (%.1f%% of the %d initial)" % (v[0], 100 * v[0] / initial, initial), fontsize=11)
+        return v
+
+    title = ("Cost of the requirements, sequential (an event passes if one valid combo satisfies all requirements so far); "
+             "baseline = %d events (%.1f%% of the %d initial)")
+    fig, axs = plt.subplots(2, 2, figsize=(15, 8))
+    for ax, name in zip(axs.ravel(), "ABCD"):
+        v = chain_panel(ax, name)
+    fig.suptitle(title % (v[0], 100 * v[0] / initial, initial), fontsize=11)
     finish(fig, out / "sel_cutflow_chains.png")
+
+    # reco dR at closest approach with PF MET vs gen MET (same reco dimuon pT): A vs E
+    fig, axs = plt.subplots(1, 2, figsize=(15, 4.2))
+    for ax, name in zip(axs, "AE"):
+        v = chain_panel(ax, name)
+    fig.suptitle(title % (v[0], 100 * v[0] / initial, initial), fontsize=11)
+    finish(fig, out / "sel_cutflow_chains_A_vs_E.png", bottom=0.04)
 
     # individual cost of each requirement
     labs = str(f["indiv_labels"].member("fTitle")).split("\n")
@@ -219,7 +237,7 @@ def plot(args):
     nb = vals[0]; vals = vals[1:]
     fig, ax = plt.subplots(figsize=(11, 4.8))
     y = np.arange(len(labs))[::-1]
-    cols = ["#0072B2"] + ["#E69F00"] * 4 + ["#009E73"] * 2
+    cols = ["#0072B2"] + ["#E69F00"] * len(DRV) + ["#009E73"] * len(DPV)
     ax.barh(y, vals, color=cols)
     for yi, v in zip(y, vals):
         ax.text(nb * 1.03, yi, "%d: kept %.1f%%, lost %.1f%%" % (v, 100 * v / nb, 100 * (1 - v / nb)), va="center", fontsize=8)
