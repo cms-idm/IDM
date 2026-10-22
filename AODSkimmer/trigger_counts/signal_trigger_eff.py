@@ -502,7 +502,7 @@ def plot(args):
             save(fig, out / "triggers" / pop / ("compare_%s.png" % v), [ax])
     # 3. overlays: masses (pooled over lifetimes), lifetimes (pooled over masses), AN four points (Fig 12)
     sets = {"mass": ["mass/" + m for m in masses], "lifetime": ["lifetime/" + l for l in lifes],
-            "anpoints": ["mass/" + m for m in AN_POINTS]}
+            "anpoints": ["mass/" + m for m in AN_POINTS if m in masses]}
     for pop in ("AN", "chainA"):
         for kind, gs in sets.items():
             cmap = plt.get_cmap("viridis", len(gs))
