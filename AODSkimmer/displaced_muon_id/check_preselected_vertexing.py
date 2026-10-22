@@ -9,7 +9,8 @@ NoEta hierarchy equals the component study's saved per-gen rows (object index an
 categories partition best-best, status/cat consistency, pair tree rows = sum(anyNPairs), valid <= pairs;
 (d) when hf* branches exist: the fallback candidate list recomputed from the primitives (same objects, components that
 pass ID, eta and the same-charge station-2 dR match, ordered by hierarchy rank) gives hfN, its first pair is best-best,
-and the reported leg types are those of pair hfTried-1 (valid) or pair 0 (none valid); chiOK implies nChi == 2.
+the reported leg types are those of pair hfTried-1 (valid) or pair 0 (none valid), the loop stops at a valid or shared
+pair and otherwise exhausts the list, and a valid best-best is reused field by field; chiOK implies nChi == 2.
 The hierarchy order is read from the file (TNamed hierarchyOrder; absent = Global > DSA > Inner, the earlier fixed order).
 """
 import argparse
@@ -100,6 +101,18 @@ def check_file(path, old, oracle_events):
             if (len(cand) != a["hfN"][ei] or not a["hfFirstIsBB"][ei] or (cand[0][3], cand[0][4]) != tuple(comp)
                     or not 1 <= n_t <= len(cand) or (ct[pick[3]], ct[pick[4]]) != (a["hfTypeA"][ei], a["hfTypeB"][ei])
                     or a["hfFirstStatus"][ei] != a["bbStatus"][ei]):
+                mism_hf += 1
+                continue
+            bb, hs = int(a["bbStatus"][ei]), int(a["hfStatus"][ei])
+            # termination: valid best-best or shared objects stop at pair one; no valid pair exhausts the list;
+            # a valid fallback follows a failed best-best
+            term_ok = ((bb == 3 and n_t == 1 and hs == 3) or (bb == 1 and n_t == 1 and hs == 1)
+                       or (bb == 2 and hs == 2 and n_t == len(cand)) or (bb == 2 and hs == 3 and n_t >= 2))
+            if bb == 3:  # reused best-best fit
+                term_ok &= all(a["hf" + v][ei] == a["bb" + v][ei] for v in ("Chi2", "Ndof", "Prob", "Vx", "Vy", "Vz",
+                                                                             "LxyBS", "Mass", "RecoDR", "RecoMuMuPt",
+                                                                             "RecoMuMuPhi"))
+            if not term_ok:
                 mism_hf += 1
         assert np.all(a["nChi"][a["chiOK"].astype(bool)] == 2), "chiOK without two chi1"
         out.update(hf_mismatch=mism_hf, hf_valid=int((a["hfStatus"] == 3).sum()), chiOK=int(a["chiOK"].sum()),

@@ -82,7 +82,8 @@ def oracle(gq, gp, ge, gf, ct, co, cq, cp, ce, cf, order=(2, 1, 0)):
         for k in range(len(ct)):
             if cp[k] != 1 or gq[g] != cq[k] or not math.isfinite(ce[k]) or not math.isfinite(cf[k]):
                 continue
-            d = math.hypot(ge[g] - ce[k], math.remainder(gf[g] - cf[k], 2 * math.pi))
+            # double subtraction of the stored floats, as the C++ (static_cast<double>)
+            d = math.hypot(float(ge[g]) - float(ce[k]), math.remainder(float(gf[g]) - float(cf[k]), 2 * math.pi))
             if d < (.10 if ct[k] == 1 else .06):
                 pairs[int(ct[k])].append((d, g, int(co[k]), k))
     def assign(candidates, assignments, used, category=None):
