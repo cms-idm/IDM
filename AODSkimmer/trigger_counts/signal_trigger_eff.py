@@ -445,9 +445,14 @@ def plot(args):
         path.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(path, dpi=110)
         if args.log and axes:
-            for ax in axes:
-                ax.set_yscale("log")
-            fig.savefig(path.with_name(path.stem + "_log.png"), dpi=110)
+            try:
+                for ax in axes:
+                    lo, hi = ax.get_ylim()
+                    ax.set_yscale("log")
+                    ax.set_ylim(1e-3 if hi <= 1.1 else 0.5, hi)  # efficiency axes start at 1e-3, counts at 0.5
+                fig.savefig(path.with_name(path.stem + "_log.png"), dpi=110)
+            except ValueError as err:
+                print("no log copy for %s: %s" % (path, err))
         plt.close(fig)
 
     def eff(d, t, v):
