@@ -110,15 +110,14 @@ def scan_sample(job):
                     if not handle.isValid():
                         raise RuntimeError("Missing TriggerResults::%s: %s" % (proc, filename))
                     res = handle.product()
-                    key = (proc, str(res.parameterSetID().compactForm()))
-                    if key not in menus:
+                    if proc not in menus or menus[proc][0] != res.parameterSetID():
                         tn = event.object().triggerNames(res)
                         menu = [str(tn.triggerName(i)) for i in range(tn.size())]
                         missing = [n for n in names if n not in menu]
                         if missing:
                             raise RuntimeError("Missing %s entries in %s: %r" % (proc, filename, missing))
-                        menus[key] = [menu.index(n) for n in names]
-                    ids.append([bool(res.accept(i)) for i in menus[key]])
+                        menus[proc] = (ROOT.edm.ParameterSetID(res.parameterSetID()), [menu.index(n) for n in names])
+                    ids.append([bool(res.accept(i)) for i in menus[proc][1]])
                 event.getByLabel("slimmedMETs", hm)
                 event.getByLabel("slimmedJets", hj)
                 if not hm.isValid() or not hj.isValid() or hm.product().size() < 1:
