@@ -1,6 +1,8 @@
 // Hierarchy matching of the two accepted signal muons to pre-selected cleanedDisplacedMuons and
-// KalmanVertexFitter(refit=true) of (a) the two matched legs (best-best) and (b) every pair of distinct
-// pre-selected objects (Any pair). Study note: kb/studies/preselected-vertexing-efficiency.md.
+// KalmanVertexFitter(refit=true) of (a) the two matched legs (best-best), (b) the hierarchy fallback (hf*: other matched
+// components of the same two objects, tried in hierarchy order until a fit is valid) and (c) every pair of distinct
+// pre-selected objects (Any pair). The hierarchy order is the hierarchyOrder parameter (types, best first).
+// Study notes: kb/studies/preselected-vertexing-efficiency.md, kb/studies/met-proxy-residual.md (hf*, pfMu*, chi*).
 // All original events are read; nothing is filtered. Components: 0 inner, 1 outer (embedded DSA), 2 global.
 // Eligible component = passes its ID AND own track |eta|<2.4. A second hierarchy match without the
 // reco-eta gate is stored only as a cross-check against the component-matching study.
@@ -31,6 +33,7 @@
 #include "DataFormats/Math/interface/LorentzVector.h"
 #include "DataFormats/MuonReco/interface/Muon.h"
 #include "DataFormats/PatCandidates/interface/MET.h"
+#include "DataFormats/PatCandidates/interface/PackedCandidate.h"
 #include "DataFormats/TrackReco/interface/Track.h"
 #include "DataFormats/VertexReco/interface/Vertex.h"
 #include "MagneticField/Engine/interface/MagneticField.h"
@@ -110,12 +113,13 @@ namespace {
     std::array<float, 2> dr{{-1.f, -1.f}};
   };
 
-  // Staged global -> outer -> inner globally-nearest greedy one-to-one; a matched object is claimed whole.
+  // Staged (types in the given order, best first) globally-nearest greedy one-to-one; a matched object is claimed whole.
   // Sorted by dR, then gen index, then original object index.
-  Match hierarchy(const std::array<Gen, 2>& gen, const std::vector<Comp>& comps, bool requireEta) {
+  Match hierarchy(const std::array<Gen, 2>& gen, const std::vector<Comp>& comps, bool requireEta,
+                  const std::array<int, 3>& order) {
     Match m;
     std::set<int> claimed;
-    for (const int type : {2, 1, 0}) {
+    for (const int type : order) {
       const double threshold = type == 1 ? 0.10 : 0.06;
       std::vector<std::tuple<double, int, int, int>> pairs;  // dR, genParticleIndex, obj, comp
       for (int g = 0; g < 2; ++g) {
@@ -142,6 +146,14 @@ namespace {
       }
     }
     return m;
+  }
+
+  // Same-charge station-2 dR match of one component to one gen muon, with the type's threshold (as hierarchy()).
+  bool matchesGen(const Gen& g, const Comp& k) {
+    if (!g.st2.ok || !k.st2.ok || k.q != g.q) return false;
+    const double d = std::hypot(static_cast<double>(g.st2.eta) - k.st2.eta,
+                                reco::deltaPhi(static_cast<double>(g.st2.phi), static_cast<double>(k.st2.phi)));
+    return d < (k.type == 1 ? 0.10 : 0.06);
   }
 
   // Independent per-type matching (no cross-type reservation): one-to-one within the type, objects used at most once.
@@ -216,22 +228,38 @@ public:
         beamspot_(consumes<reco::BeamSpot>(ps.getParameter<edm::InputTag>("beamspot"))),
         met_(consumes<std::vector<pat::MET>>(ps.getParameter<edm::InputTag>("met"))),
         genMet_(consumes<std::vector<reco::GenMET>>(ps.getParameter<edm::InputTag>("genMet"))),
+        packed_(consumes<std::vector<pat::PackedCandidate>>(ps.getParameter<edm::InputTag>("packedCandidates"))),
         field_(esConsumes()),
         ttb_(esConsumes(edm::ESInputTag("", "TransientTrackBuilder"))),
         setup_(ps.getParameter<edm::ParameterSet>("propagatorSt2"), consumesCollector()) {
     usesResource(TFileService::kSharedResource);
+    const auto order = ps.getParameter<std::vector<int>>("hierarchyOrder");
+    if (order.size() != 3 || std::set<int>(order.begin(), order.end()) != std::set<int>{0, 1, 2})
+      throw cms::Exception("PreselectedVertexing") << "hierarchyOrder must be a permutation of 0 1 2";
+    for (int r = 0; r < 3; ++r) {
+      order_[r] = order[r];
+      rank_[order[r]] = r;
+    }
     edm::Service<TFileService> fs;
     fs->make<TNamed>("sample", ps.getParameter<std::string>("sample").c_str());
     fs->make<TNamed>("revision", ps.getParameter<std::string>("revision").c_str());
+    const char* typeName[3] = {"inner", "outer(DSA)", "global"};
+    fs->make<TNamed>("hierarchyOrder", (std::string(typeName[order_[0]]) + ">" + typeName[order_[1]] + ">" +
+                                        typeName[order_[2]]).c_str());
     fs->make<TNamed>("definitions",
       "All original events. Signal gen: status1,lastCopy,abs(pdgId)13,firstDifferentMother abs1000023; accepted: "
       "abs(eta)<2.4,0<=Lxy<740,abs(vz)<960,no pT cut. twoAcc: exactly two signal muons, opposite charge, both accepted. "
-      "Comp types 0 inner,1 outer(DSA),2 global; eligible = own ID and own |eta|<2.4. Hierarchy global,outer,inner, "
+      "Comp types 0 inner,1 outer(DSA),2 global; eligible = own ID and own |eta|<2.4. Hierarchy order = TNamed hierarchyOrder (matching stages and per-object best component), "
       "station-2 position eta/phi, dR<0.06 (I,G) <0.10 (O), same charge, whole-object claim, no fallback. "
       "Best-best = fit of the hierarchy-matched components' tracks (one set). Typed combos: independent per-type matching, ordered (gen0 type a, gen1 type b), types 0 I,1 O,2 G; "
       "Pairs = all unordered pairs of distinct eligible-object best components (global>outer>inner) in twoAcc events. "
       "KalmanVertexFitter(refit), status 0 not fitted,1 shared,2 failed,3 valid. *NoEta = cross-check without reco-eta gate. "
-      "Reco dR/pT from track reference-point momenta. dPhi = phi(MET)-phi(mumu) wrapped.");
+      "Reco dR/pT from track reference-point momenta. dPhi = phi(MET)-phi(mumu) wrapped. "
+      "hf* = hierarchy fallback: legs = eligible components of the two best-best matched objects that each pass the same-charge "
+      "station-2 dR match to that gen; pairs ordered by (better leg rank, worse leg rank, gen0 leg rank), fitted in order until "
+      "one is valid; hf fields describe the first valid pair, else the first pair; hfTypeA/B = gen0/gen1 leg types. "
+      "pfMu* = packedPFCandidates abs(pdgId)13 (all), count and vector px/py sum. chi* = prunedGenParticles abs(pdgId)1000022, "
+      "status 1, lastCopy; chiOK = exactly two with first different-PDG parents abs 32 and 1000023; chiPx/Py vector sum.");
     evt_ = fs->make<TTree>("events", "One row per event");
     pair_ = fs->make<TTree>("pairs", "Any-pair fits in twoAcc events; event = entry in events");
     combo_ = fs->make<TTree>("combos", "Typed ordered fits (gen0 type a, gen1 type b); one row per existing combo; event = entry in events");
@@ -245,6 +273,9 @@ public:
     E(genDR); E(genMuMuPt); E(genMuMuPhi); E(genMetPt); E(genMetPhi); E(pfMetPt); E(pfMetPhi);
     E(bbStatus); E(bbChi2); E(bbNdof); E(bbProb); E(bbVx); E(bbVy); E(bbVz); E(bbLxyBS); E(bbMass);
     E(bbRecoDR); E(bbRecoMuMuPt); E(bbRecoMuMuPhi);
+    E(hfN); E(hfTried); E(hfFirstIsBB); E(hfFirstStatus); E(hfStatus); E(hfTypeA); E(hfTypeB); E(hfChi2); E(hfNdof);
+    E(hfProb); E(hfVx); E(hfVy); E(hfVz); E(hfLxyBS); E(hfMass); E(hfRecoDR); E(hfRecoMuMuPt); E(hfRecoMuMuPhi);
+    E(pfMuN); E(pfMuPx); E(pfMuPy); E(nChi); E(chiOK); E(chiPx); E(chiPy);
     E(anyNPairs); E(anyNValid);
 #undef E
 #define P(x) pair_->Branch(#x, &x##_)
@@ -299,7 +330,7 @@ public:
     const auto& indices = ev.get(indices_);
     if (indices.size() != muons.size()) throw cms::Exception("PreselectedVertexing") << "Cleaner index size";
     std::vector<Comp> comps;
-    std::vector<int> objBest(muons.size(), -1);  // best eligible component per cleaned-object position (global>outer>inner)
+    std::vector<int> objBest(muons.size(), -1);  // best eligible component per cleaned-object position (hierarchy order)
     for (size_t i = 0; i < muons.size(); ++i) {
       const auto& mu = muons[i];
       const std::array<reco::TrackRef, 3> refs{{mu.innerTrack(), mu.outerTrack(), mu.globalTrack()}};
@@ -327,7 +358,7 @@ public:
       if (comps[c].idPass && comps[c].inEta) {
         eligibleObjs.insert(comps[c].obj);
         const int pos = static_cast<int>(std::lower_bound(indices.begin(), indices.end(), comps[c].obj) - indices.begin());
-        if (objBest[pos] < 0 || comps[c].type > comps[objBest[pos]].type) objBest[pos] = static_cast<int>(c);
+        if (objBest[pos] < 0 || rank_[comps[c].type] < rank_[comps[objBest[pos]].type]) objBest[pos] = static_cast<int>(c);
       }
     nObj_ = static_cast<int>(indices.size());
     nElig_ = static_cast<int>(eligibleObjs.size());
@@ -342,6 +373,31 @@ public:
       genMetPt_ = gmets[0].pt();
       genMetPhi_ = gmets[0].phi();
     }
+    for (const auto& c : ev.get(packed_)) {
+      if (std::abs(c.pdgId()) != 13) continue;
+      ++pfMuN_;
+      pfMuPx_ += c.px();
+      pfMuPy_ += c.py();
+    }
+    {
+      std::vector<const reco::GenParticle*> chis;
+      for (const auto& p : ev.get(gen_))
+        if (std::abs(p.pdgId()) == 1000022 && p.status() == 1 && p.isLastCopy()) chis.push_back(&p);
+      nChi_ = static_cast<int>(chis.size());
+      if (chis.size() == 2) {
+        std::array<int, 2> par{{0, 0}};
+        for (int i = 0; i < 2; ++i) {
+          const auto* mom = firstDifferentMother(*chis[i]);
+          par[i] = mom ? std::abs(mom->pdgId()) : 0;
+        }
+        std::sort(par.begin(), par.end());
+        chiOK_ = par[0] == 32 && par[1] == 1000023;
+        if (chiOK_) {
+          chiPx_ = chis[0]->px() + chis[1]->px();
+          chiPy_ = chis[0]->py() + chis[1]->py();
+        }
+      }
+    }
 
     KalmanVertexFitter kvf(true);
     int eventRow = tree_entries_;
@@ -352,8 +408,8 @@ public:
       genMuMuPhi_ = std::atan2(sy, sx);
       genDR_ = reco::deltaR(gen[0].eta, gen[0].phi, gen[1].eta, gen[1].phi);
 
-      const Match m = hierarchy(gen, comps, true);
-      const Match mn = hierarchy(gen, comps, false);
+      const Match m = hierarchy(gen, comps, true, order_);
+      const Match mn = hierarchy(gen, comps, false, order_);
       for (int g = 0; g < 2; ++g) {
         matchComp_.push_back(m.comp[g]); matchType_.push_back(m.type[g]); matchObj_.push_back(m.obj[g]);
         matchDR_.push_back(m.dr[g]);
@@ -414,6 +470,49 @@ public:
         const double rx = a.ref->px() + b.ref->px(), ry = a.ref->py() + b.ref->py();
         bbRecoMuMuPt_ = std::hypot(rx, ry);
         bbRecoMuMuPhi_ = std::atan2(ry, rx);
+
+        // Hierarchy fallback: same two objects, other components that are themselves matched to the same gen muon.
+        std::array<std::vector<int>, 2> legs;
+        for (int g = 0; g < 2; ++g)
+          for (size_t c = 0; c < comps.size(); ++c) {
+            const auto& k = comps[c];
+            if (k.obj == m.obj[g] && k.idPass && k.inEta && matchesGen(gen[g], k)) legs[g].push_back(static_cast<int>(c));
+          }
+        std::vector<std::tuple<int, int, int, int, int>> cand;  // better rank, worse rank, gen0 rank, comp0, comp1
+        for (const int c0 : legs[0])
+          for (const int c1 : legs[1]) {
+            const int r0 = rank_[comps[c0].type], r1 = rank_[comps[c1].type];
+            cand.emplace_back(std::min(r0, r1), std::max(r0, r1), r0, c0, c1);
+          }
+        std::sort(cand.begin(), cand.end());
+        hfN_ = static_cast<int>(cand.size());
+        hfFirstIsBB_ = !cand.empty() && std::get<3>(cand[0]) == m.comp[0] && std::get<4>(cand[0]) == m.comp[1];
+        for (size_t i = 0; i < cand.size(); ++i) {
+          const int c0 = std::get<3>(cand[i]), c1 = std::get<4>(cand[i]);
+          Fit h;
+          if (c0 == m.comp[0] && c1 == m.comp[1]) {  // the best-best fit above
+            h.status = bbStatus_; h.chi2 = bbChi2_; h.ndof = bbNdof_; h.prob = bbProb_; h.vx = bbVx_; h.vy = bbVy_;
+            h.vz = bbVz_; h.lxyBS = bbLxyBS_; h.mass = bbMass_;
+          } else if (shared) {  // sharing is a property of the two objects, the same for every pair
+            h.status = kShared;
+          } else {
+            h = fitLegs(comps[c0].ref, comps[c1].ref, ttb, kvf, bs);
+          }
+          ++hfTried_;
+          if (i == 0) hfFirstStatus_ = h.status;
+          if (i == 0 || h.status == kValid) {
+            const auto& ra = comps[c0].ref;
+            const auto& rb = comps[c1].ref;
+            hfStatus_ = h.status; hfTypeA_ = comps[c0].type; hfTypeB_ = comps[c1].type;
+            hfChi2_ = h.chi2; hfNdof_ = h.ndof; hfProb_ = h.prob; hfVx_ = h.vx; hfVy_ = h.vy; hfVz_ = h.vz;
+            hfLxyBS_ = h.lxyBS; hfMass_ = h.mass;
+            hfRecoDR_ = reco::deltaR(ra->eta(), ra->phi(), rb->eta(), rb->phi());
+            const double hx = ra->px() + rb->px(), hy = ra->py() + rb->py();
+            hfRecoMuMuPt_ = std::hypot(hx, hy);
+            hfRecoMuMuPhi_ = std::atan2(hy, hx);
+          }
+          if (h.status == kValid || h.status == kShared) break;
+        }
       }
 
       // Any pairs: distinct eligible objects, each at its best component.
@@ -465,6 +564,10 @@ private:
     bbChi2_ = bbNdof_ = bbProb_ = bbVx_ = bbVy_ = bbVz_ = bbLxyBS_ = bbMass_ = bbRecoDR_ = bbRecoMuMuPt_ =
         bbRecoMuMuPhi_ = -999.f;
     anyNPairs_ = anyNValid_ = 0;
+    hfN_ = hfTried_ = 0; hfFirstIsBB_ = false; hfFirstStatus_ = hfStatus_ = kNotFitted; hfTypeA_ = hfTypeB_ = -1;
+    hfChi2_ = hfNdof_ = hfProb_ = hfVx_ = hfVy_ = hfVz_ = hfLxyBS_ = hfMass_ = hfRecoDR_ = hfRecoMuMuPt_ = hfRecoMuMuPhi_ =
+        -999.f;
+    pfMuN_ = nChi_ = 0; pfMuPx_ = pfMuPy_ = 0; chiOK_ = false; chiPx_ = chiPy_ = -999;
   }
 
   const edm::EDGetTokenT<std::vector<reco::GenParticle>> gen_;
@@ -473,9 +576,11 @@ private:
   const edm::EDGetTokenT<reco::BeamSpot> beamspot_;
   const edm::EDGetTokenT<std::vector<pat::MET>> met_;
   const edm::EDGetTokenT<std::vector<reco::GenMET>> genMet_;
+  const edm::EDGetTokenT<std::vector<pat::PackedCandidate>> packed_;
   const edm::ESGetToken<MagneticField, IdealMagneticFieldRecord> field_;
   const edm::ESGetToken<TransientTrackBuilder, TransientTrackRecord> ttb_;
   const PropagateToMuonSetup setup_;
+  std::array<int, 3> order_{{2, 0, 1}}, rank_{{0, 0, 0}};  // types best first; rank_[type]
   TTree *evt_ = nullptr, *pair_ = nullptr, *combo_ = nullptr;
   int tree_entries_ = 0;
 
@@ -496,6 +601,11 @@ private:
   int bbStatus_ = 0, anyNPairs_ = 0, anyNValid_ = 0;
   float bbChi2_ = -999, bbNdof_ = -999, bbProb_ = -999, bbVx_ = -999, bbVy_ = -999, bbVz_ = -999,
         bbLxyBS_ = -999, bbMass_ = -999, bbRecoDR_ = -999, bbRecoMuMuPt_ = -999, bbRecoMuMuPhi_ = -999;
+  int hfN_ = 0, hfTried_ = 0, hfFirstStatus_ = 0, hfStatus_ = 0, hfTypeA_ = -1, hfTypeB_ = -1, pfMuN_ = 0, nChi_ = 0;
+  bool hfFirstIsBB_ = false, chiOK_ = false;
+  float hfChi2_ = -999, hfNdof_ = -999, hfProb_ = -999, hfVx_ = -999, hfVy_ = -999, hfVz_ = -999, hfLxyBS_ = -999,
+        hfMass_ = -999, hfRecoDR_ = -999, hfRecoMuMuPt_ = -999, hfRecoMuMuPhi_ = -999;
+  double pfMuPx_ = 0, pfMuPy_ = 0, chiPx_ = -999, chiPy_ = -999;
   int pEvent_ = 0, pObjA_ = 0, pObjB_ = 0, pTypeA_ = 0, pTypeB_ = 0, pCat_ = 0, pStatus_ = 0;
   bool pIsBB_ = false;
   float pChi2_ = 0, pNdof_ = 0, pProb_ = 0, pVx_ = 0, pVy_ = 0, pVz_ = 0, pLxyBS_ = 0, pMass_ = 0, pRecoDR_ = 0,

@@ -6,7 +6,11 @@ Checks per sample: (a) the hierarchy match of every twoAcc event equals the scal
 on the saved primitives (gated and, with eligibility=ID only, the NoEta version); (b) with --old-efficiency, the
 NoEta hierarchy equals the component study's saved per-gen rows (object index and stage) for the same events
 (valid when the input is a prefix of the sample's events, i.e. inputEntry = tree entry); (c) bookkeeping:
-categories partition best-best, status/cat consistency, pair tree rows = sum(anyNPairs), valid <= pairs.
+categories partition best-best, status/cat consistency, pair tree rows = sum(anyNPairs), valid <= pairs;
+(d) when hf* branches exist: the fallback candidate list recomputed from the primitives (same objects, components that
+pass ID, eta and the same-charge station-2 dR match, ordered by hierarchy rank) gives hfN, its first pair is best-best,
+and the reported leg types are those of pair hfTried-1 (valid) or pair 0 (none valid); chiOK implies nChi == 2.
+The hierarchy order is read from the file (TNamed hierarchyOrder; absent = Global > DSA > Inner, the earlier fixed order).
 """
 import argparse
 from importlib import util
@@ -20,9 +24,14 @@ cme = util.module_from_spec(spec)
 spec.loader.exec_module(cme)
 
 
+TYPE_OF = {"inner": 0, "outer(DSA)": 1, "global": 2}
+
+
 def check_file(path, old, oracle_events):
     with uproot.open(path) as f:
         sample = str(f["preselectedVertexing/sample"].member("fTitle"))
+        key = "preselectedVertexing/hierarchyOrder"
+        order = tuple(TYPE_OF[x] for x in str(f[key].member("fTitle")).split(">")) if key in f else (2, 1, 0)
         t = f["preselectedVertexing/events"]
         a = t.arrays(library="np")
         npairs = f["preselectedVertexing/pairs"].num_entries
@@ -50,7 +59,7 @@ def check_file(path, old, oracle_events):
                                          (False, a["matchObjNoEta"][ei], a["matchTypeNoEta"][ei], a["indObjNoEta"][ei])):
             if k < oracle_events:
                 elig = idp & (eta if gated else True)
-                indep, hier, tier = cme.oracle(gq, gp, ge, gf, ct, co, cq, (cp * elig).astype(int), ce, cf)
+                indep, hier, tier = cme.oracle(gq, gp, ge, gf, ct, co, cq, (cp * elig).astype(int), ce, cf, order)
                 ind_flat = np.asarray(inds).reshape(3, 2)  # [type][gen]
                 if not (np.array_equal(hier, objs) and np.array_equal(tier, types)
                         and np.array_equal(indep.T, ind_flat)):
@@ -64,6 +73,37 @@ def check_file(path, old, oracle_events):
                     if ref is None or ref != mine:
                         mism_old += 1
     out.update(oracle_events=checked, oracle_mismatch=mism_oracle, old_mismatch=mism_old if old_sel else None)
+    if "hfN" in a:
+        rank = {t: r for r, t in enumerate(order)}
+        mism_hf = 0
+        for ei in two:
+            comp = np.asarray(a["matchComp"][ei])
+            if len(comp) != 2 or comp.min() < 0:
+                assert a["hfN"][ei] == 0 and a["hfStatus"][ei] == 0, "hf filled without best-best"
+                continue
+            ct = np.asarray(a["cType"][ei]); co = np.asarray(a["cObj"][ei]); cq = np.asarray(a["cQ"][ei])
+            ok_c = (np.asarray(a["cIdPass"][ei]).astype(bool) & np.asarray(a["cInEta"][ei]).astype(bool)
+                    & np.asarray(a["cProp"][ei]).astype(bool))
+            ce = np.asarray(a["cEta2"][ei], dtype=np.float32); cf = np.asarray(a["cPhi2"][ei], dtype=np.float32)
+            gq = np.asarray(a["sigQ"][ei]); ge = np.asarray(a["sigEta2"][ei], dtype=np.float32)
+            gf = np.asarray(a["sigPhi2"][ei], dtype=np.float32); gp = np.asarray(a["sigProp"][ei]).astype(bool)
+            legs = []
+            for g in range(2):
+                legs.append([k for k in range(len(ct)) if co[k] == co[comp[g]] and ok_c[k] and gp[g] and cq[k] == gq[g]
+                             and np.hypot(float(ge[g]) - float(ce[k]),
+                                          np.remainder(float(gf[g]) - float(cf[k]) + np.pi, 2 * np.pi) - np.pi)
+                             < (.10 if ct[k] == 1 else .06)])
+            cand = sorted((min(rank[ct[x]], rank[ct[y]]), max(rank[ct[x]], rank[ct[y]]), rank[ct[x]], x, y)
+                          for x in legs[0] for y in legs[1])
+            n_t = int(a["hfTried"][ei])
+            pick = cand[n_t - 1] if a["hfStatus"][ei] == 3 else cand[0]
+            if (len(cand) != a["hfN"][ei] or not a["hfFirstIsBB"][ei] or (cand[0][3], cand[0][4]) != tuple(comp)
+                    or not 1 <= n_t <= len(cand) or (ct[pick[3]], ct[pick[4]]) != (a["hfTypeA"][ei], a["hfTypeB"][ei])
+                    or a["hfFirstStatus"][ei] != a["bbStatus"][ei]):
+                mism_hf += 1
+        assert np.all(a["nChi"][a["chiOK"].astype(bool)] == 2), "chiOK without two chi1"
+        out.update(hf_mismatch=mism_hf, hf_valid=int((a["hfStatus"] == 3).sum()), chiOK=int(a["chiOK"].sum()),
+                   hf_fallback_used=int(((a["hfStatus"] == 3) & (a["hfTried"] > 1)).sum()))
     # bookkeeping
     st, ok = a["bbStatus"], a["twoAcc"]
     matched = np.array([len(m) == 2 and m[0] >= 0 and m[1] >= 0 for m in a["matchComp"]])
@@ -105,7 +145,7 @@ def main():
     for path in files:
         res = check_file(path, old, args.oracle_events)
         print(res, flush=True)
-        if res["oracle_mismatch"] or res["old_mismatch"]:
+        if res["oracle_mismatch"] or res["old_mismatch"] or res.get("hf_mismatch"):
             raise SystemExit("MISMATCH in " + str(path))
 
 

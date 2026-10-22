@@ -71,8 +71,9 @@ def matching(gq, gp, ge, gf, ct, co, cq, cp, ce, cf):
     return independent, hierarchy, tier, distances
 
 
-def oracle(gq, gp, ge, gf, ct, co, cq, cp, ce, cf):
-    """Bounded real-event check: enumerate pairs with scalar periodic distance, repeatedly take minimum."""
+def oracle(gq, gp, ge, gf, ct, co, cq, cp, ce, cf, order=(2, 1, 0)):
+    """Bounded real-event check: enumerate pairs with scalar periodic distance, repeatedly take minimum.
+    order: hierarchy stages (component types, best first)."""
     import math
     pairs = [[] for _ in range(3)]
     for g in range(len(gq)):
@@ -100,7 +101,7 @@ def oracle(gq, gp, ge, gf, ct, co, cq, cp, ce, cf):
         assign(pairs[c], indep[:, c], set())
     hier, tiers = np.full(len(gq), -1, dtype=np.int32), np.full(len(gq), -1, dtype=np.int32)
     used = set()
-    for c in (2, 1, 0):
+    for c in order:
         assign(pairs[c], hier, used, c)
     return indep, hier, tiers
 
