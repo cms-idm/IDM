@@ -14,8 +14,8 @@ vector sum of the two legs' reference-point track pT; G = vector sum of the two 
 dmag = |X| - |G|; rel = dmag / |G|; dphiG = phi(X) - phi(G) wrapped to [-pi, pi); upar = (X - G) . G/|G|;
 uperp = z-component of G/|G| x (X - G) (positive = residual counter-clockwise from G); dphiMM = phi(X) - phi(mumu) wrapped.
 |G| < 1 GeV: rel, dphiG, upar, uperp undefined (counted); |X| = 0: dphiG and dphiMM undefined (counted).
-Chains (same vertex): base -> chi2/ndof < 4 -> dR < 0.9 -> |dphi(X, mumu)| < 0.5 for X = PF (A), proxy (A'), genMetTrue (E);
-missing MET fails. Raw, unweighted, one entry per event; pooling unweighted. Max gen |d0| = straight line to (0,0).
+Chains (same vertex): base -> chi2/ndof < 4 -> dR < 0.9 -> |dphi(X, mumu)| < 0.5 for X = PF (A), proxy (A'), genMetTrue (E),
+pT(chi1 chi1) (C1, truth invisible; user 2026-10-22); missing or zero-length X fails. Raw, unweighted, one entry per event; pooling unweighted. Max gen |d0| = straight line to (0,0).
 """
 import argparse
 from array import array
@@ -46,7 +46,7 @@ BRANCHES = ["twoAcc", "hfStatus", "hfTried", "hfTypeA", "hfTypeB", "hfChi2", "hf
             "pfMetPt", "pfMetPhi", "genMetPt", "genMetPhi", "pfMuN", "pfMuPx", "pfMuPy", "chiOK", "chiPx", "chiPy", "sigD0"]
 TREE_FLOATS = ["maxD0", "Gx", "Gy", "Gpt", "mmPt", "mmPhi", "chi2ndof", "recoDR", "genMetGx", "genMetGy"] + [
     "%s_%s" % (x, v) for x in XS for v in ("px", "py", "pt", "dmag", "rel", "dphiG", "upar", "uperp", "dphiMM")] + [
-    "genMet_dphiMM"]
+    "genMet_dphiMM", "chi_dphiMM"]
 
 
 def wrap(x):
@@ -116,6 +116,7 @@ def derive(c):
         q[x + "_dphiMM"] = np.where(xok & (q["mmPt"] > 0), wrap(np.arctan2(vy, vx) - q["mmPhi"]), np.nan)
     gm_ok = np.isfinite(c["genMetPt"]) & (c["genMetPt"] > 0) & np.isfinite(c["genMetPhi"])  # 0: no direction
     q["genMet_dphiMM"] = np.where(gm_ok & (q["mmPt"] > 0), wrap(c["genMetPhi"] - q["mmPhi"]), np.nan)
+    q["chi_dphiMM"] = np.where((q["Gpt"] > 0) & (q["mmPt"] > 0), wrap(np.arctan2(q["Gy"], q["Gx"]) - q["mmPhi"]), np.nan)
     q["genMetGx"] = np.where(gm_ok, c["genMetPt"] * np.cos(c["genMetPhi"]), np.nan) - q["Gx"]
     q["genMetGy"] = np.where(gm_ok, c["genMetPt"] * np.sin(c["genMetPhi"]), np.nan) - q["Gy"]
     pair = np.full(n, -1)
@@ -193,7 +194,8 @@ def analyze(args):
     # chains and migrations (overall and per pair type), on base events
     root.mkdir("chains")
     root.cd("chains")
-    dphis = {"A_PF": q["PF_dphiMM"], "Aprime_proxy": q["proxy_dphiMM"], "E_genMet": q["genMet_dphiMM"]}
+    dphis = {"A_PF": q["PF_dphiMM"], "Aprime_proxy": q["proxy_dphiMM"], "E_genMet": q["genMet_dphiMM"],
+             "C1_chi1chi1": q["chi_dphiMM"]}
     chain_rows = {}
     for pname in ("all",) + PAIRS:
         sel = m["base"] & ((pair >= 0) if pname == "all" else (pair == PAIRS.index(pname)))
@@ -291,7 +293,7 @@ def plot(args):
                     key=lambda s: float(s.split("_")[0][5:].replace("p", ".")))
     lifes = sorted({re.search(r"(ctau-[^_]+)$", s).group(1) for s in samples}, key=lambda s: float(s[5:]))
     order = ["dmag", "rel", "dphiG", "absdphiG", "upar", "uperp", "absdphiMM"]
-    for pop in POPS:
+    for pop in (() if args.chains_only else POPS):
         targets = [("overall", p) for p in ("all",) + PAIRS]
         targets += [("mass/" + mm, p) for mm in masses for p in ("all",) + PAIRS]
         targets += [("lifetime/" + ll, p) for ll in lifes for p in ("all",) + PAIRS]
@@ -345,8 +347,8 @@ def plot(args):
                         save(fig, out / pop / "overlays" / ("%s_%s_%s_%s.png" % (kind, v, pname,
                              "unit" if norm else "raw")), list(axes))
     # 2D: median and 16-84% band vs max gen |d0| and vs |G|, from the event tree
-    ev = f["events"].arrays(library="np")
-    for pop, flag in (("a", "popA"), ("b", "popB")):
+    ev = None if args.chains_only else f["events"].arrays(library="np")
+    for pop, flag in (() if args.chains_only else (("a", "popA"), ("b", "popB"))):
         for pname in ("all",) + PAIRS:
             sel = (ev[flag] > 0) & ((ev["pair"] >= 0) if pname == "all" else (ev["pair"] == PAIRS.index(pname)))
             for xvar, edges, xl in (("maxD0", D0_EDGES, "max gen |d0| of the two signal muons [cm] (bin index axis)"),
@@ -381,10 +383,11 @@ def plot(args):
     # chains A, A', E per pair type
     fig, axes = plt.subplots(1, 7, figsize=(24, 4.5))
     for ax, pname in zip(axes, ("all",) + PAIRS):
-        for j, (cname, lab) in enumerate((("A_PF", "A: PF MET"), ("Aprime_proxy", "A': proxy"), ("E_genMet", "E: gen MET"))):
+        for j, (cname, lab) in enumerate((("A_PF", "A: PF MET"), ("Aprime_proxy", "A': proxy"), ("E_genMet", "E: gen MET"),
+                                          ("C1_chi1chi1", "C1: pT(chi1 chi1)"))):
             v = f["chains/chain_%s__%s" % (cname, pname)].values()
-            ax.bar(np.arange(4) + 0.27 * (j - 1), v / max(v[0], 1), width=0.27, label=lab)
-            ax.text(3 + 0.27 * (j - 1), v[3] / max(v[0], 1) + 0.02, "%.1f%%" % (100 * v[3] / max(v[0], 1)),
+            ax.bar(np.arange(4) + 0.2 * (j - 1.5), v / max(v[0], 1), width=0.2, label=lab)
+            ax.text(3 + 0.2 * (j - 1.5), v[3] / max(v[0], 1) + 0.02, "%.1f%%" % (100 * v[3] / max(v[0], 1)),
                     ha="center", fontsize=6, rotation=90)
         ax.set_xticks(range(4))
         ax.set_xticklabels(["base", "chi2/ndof<4", "dR<0.9", "|dphi|<0.5"], rotation=45, fontsize=7)
@@ -392,7 +395,8 @@ def plot(args):
         ax.set_ylim(0, 1.15)
     axes[0].set_ylabel("Fraction of base events")
     axes[0].legend(fontsize=7)
-    fig.suptitle("Sequential requirements on the hierarchy vertex; dphi = phi(MET) - phi(reco dimuon pT)", fontsize=10)
+    fig.suptitle("Sequential requirements on the hierarchy vertex; dphi = phi(MET or pT(chi1 chi1)) - phi(reco dimuon pT)",
+                 fontsize=10)
     save(fig, out / "chains_A_Aprime_E.png")
 
 
@@ -410,6 +414,7 @@ def main():
     b.add_argument("--output", required=True)
     b.add_argument("--plot-dir", required=True)
     b.add_argument("--log", action="store_true")
+    b.add_argument("--chains-only", action="store_true", help="only the chain figure (A, A', E, C1)")
     args = p.parse_args()
     analyze(args) if args.cmd == "analyze" else plot(args)
 
