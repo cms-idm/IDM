@@ -89,7 +89,7 @@ def load(args):
 def derive(c):
     """Per-event derived quantities (all events; validity masks separate)."""
     n = len(c["twoAcc"])
-    met_ok = np.isfinite(c["pfMetPt"]) & (c["pfMetPt"] > -500)
+    met_ok = np.isfinite(c["pfMetPt"]) & (c["pfMetPt"] > -500) & np.isfinite(c["pfMetPhi"])
     base = (c["twoAcc"] > 0) & (c["hfStatus"] == 3)
     chi_ok = c["chiOK"] > 0
     q = {"maxD0": c["sigD0"], "Gx": np.where(chi_ok, c["chiPx"], np.nan), "Gy": np.where(chi_ok, c["chiPy"], np.nan)}
@@ -114,7 +114,7 @@ def derive(c):
         q[x + "_upar"] = rx * ux + ry * uy
         q[x + "_uperp"] = ux * ry - uy * rx
         q[x + "_dphiMM"] = np.where(xok & (q["mmPt"] > 0), wrap(np.arctan2(vy, vx) - q["mmPhi"]), np.nan)
-    gm_ok = np.isfinite(c["genMetPt"]) & (c["genMetPt"] > -500)
+    gm_ok = np.isfinite(c["genMetPt"]) & (c["genMetPt"] > 0) & np.isfinite(c["genMetPhi"])  # 0: no direction
     q["genMet_dphiMM"] = np.where(gm_ok & (q["mmPt"] > 0), wrap(c["genMetPhi"] - q["mmPhi"]), np.nan)
     q["genMetGx"] = np.where(gm_ok, c["genMetPt"] * np.cos(c["genMetPhi"]), np.nan) - q["Gx"]
     q["genMetGy"] = np.where(gm_ok, c["genMetPt"] * np.sin(c["genMetPhi"]), np.nan) - q["Gy"]
@@ -313,7 +313,8 @@ def plot(args):
                 ax.set_ylim(bottom=0)
                 used.append(ax)
             axes.flat[-1].axis("off")
-            axes.flat[0].legend(fontsize=7, loc="upper left")
+            handles, labels = axes.flat[0].get_legend_handles_labels()
+            axes.flat[-1].legend(handles, labels, fontsize=8, loc="lower left")
             axes.flat[-1].text(0.0, 0.8, "events %d\n|G| < 1 GeV (no direction): %d\nPF |MET| = 0: %d, proxy |MET| = 0: %d"
                                % tuple(cnt), fontsize=9, va="top")
             fig.suptitle("%s | %s | %s" % (gname.replace("/", ": "), PAIR_LABEL[pname], POPS[pop]), fontsize=11)
