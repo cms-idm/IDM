@@ -489,6 +489,7 @@ def plot(args):
                 ax.set_title(TRIG_LABEL[t], fontsize=9)
                 if is_log_x(v):
                     ax.set_xscale("symlog", linthresh=0.1)
+                    ax.set_xlim(left=0)
             axes[0].legend(fontsize=7, loc="upper left")
             fig.suptitle("Trigger efficiency vs %s | %s" % (v, g.replace("/", ": ")), fontsize=11)
             save(fig, out / "per_group" / g.replace("/", "_") / ("eff_%s.png" % v), list(axes))
@@ -502,6 +503,7 @@ def plot(args):
             axes_fmt(ax, v)
             if is_log_x(v):
                 ax.set_xscale("symlog", linthresh=0.1)
+                ax.set_xlim(left=0)
             ax.legend(fontsize=7)
             ax.set_title("All samples | %s" % POPS[pop], fontsize=9)
             save(fig, out / "triggers" / pop / ("compare_%s.png" % v), [ax])
@@ -521,6 +523,7 @@ def plot(args):
                     axes_fmt(ax, v)
                     if is_log_x(v):
                         ax.set_xscale("symlog", linthresh=0.1)
+                        ax.set_xlim(left=0)
                     ax.legend(fontsize=6, ncol=2 if kind == "mass" else 1)
                     ax.set_title("%s | %s overlay | %s" % (TRIG_LABEL[t], kind, POPS[pop]), fontsize=9)
                     save(fig, out / "overlays" / pop / ("%s_%s_%s.png" % (kind, t, v)), [ax])
