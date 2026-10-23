@@ -597,7 +597,7 @@ def compare_an(args):
     out.chmod(0o700)  # contains private CMS-internal AN content
     pages = {p: next(Path(args.an_dir).glob("page%d-*.png" % p)) for p, _, _ in AN_FIGS.values()}
     foot = ("Right: Run-3 signal MC 2022EE (09-28), offline cuts Flag_METFilters + |PF-Calo|/Calo < 0.5; raw unweighted events; "
-            "Clopper-Pearson 68%%; points pooled over 4 lifetimes. Left: AN-18-124 v12 (Run 2), PRIVATE.")
+            "Clopper-Pearson 68%; points pooled over 4 lifetimes. Left: AN-18-124 v12 (Run 2), PRIVATE.")
 
     def eff(path_num, path_den):
         num, den = f[path_num], f[path_den]
@@ -648,12 +648,17 @@ def compare_an(args):
         ax.set_title("lead gen signal muon pT %s GeV, %s" % (tag.replace("_inf", "+").replace("_", "-"), TRIG_LABEL[trig]),
                      fontsize=8)
 
-    def compose(key, nrows, ncols, fill, width_ratio=1.0):
+    def compose(key, nrows, ncols, fill, width_ratio=1.0, stacked=False):
+        """AN crop and our panels at equal size: side by side, or AN on top of ours (stacked, for 1x3 strips)."""
         page, box, title = AN_FIGS[key]
         img = mpimg.imread(str(pages[page]))[box[1]:box[3], box[0]:box[2]]
-        h_in = 6.5 if nrows == 1 else 4.0 * nrows
-        fig = plt.figure(figsize=(9 + 5.2 * ncols * width_ratio, h_in))
-        gs = fig.add_gridspec(1, 2, width_ratios=[9, 5.2 * ncols * width_ratio])
+        w = max(9.0, 5.2 * ncols * width_ratio)
+        if stacked:
+            fig = plt.figure(figsize=(w, 2 * 5.0))
+            gs = fig.add_gridspec(2, 1, height_ratios=[1, 1])
+        else:
+            fig = plt.figure(figsize=(2 * w, 6.5 if nrows == 1 else 4.5 * nrows))
+            gs = fig.add_gridspec(1, 2, width_ratios=[1, 1])
         axl = fig.add_subplot(gs[0])
         axl.imshow(img)
         axl.axis("off")
@@ -756,8 +761,8 @@ def compare_an(args):
     compose("fig92", 2, 2, f92)
     compose("fig93", 1, 1, f93)
     compose("fig94", 1, 1, f94)
-    compose("fig95", 1, 3, f95)
-    compose("fig96", 1, 3, f96)
+    compose("fig95", 1, 3, f95, stacked=True)
+    compose("fig96", 1, 3, f96, stacked=True)
     compose("tables", 1, 1, ftables, width_ratio=2.6)
     print("AN COMPARISON written to %s" % out)
 
