@@ -596,8 +596,8 @@ def compare_an(args):
     out.mkdir(parents=True, exist_ok=True)
     out.chmod(0o700)  # contains private CMS-internal AN content
     pages = {p: next(Path(args.an_dir).glob("page%d-*.png" % p)) for p, _, _ in AN_FIGS.values()}
-    foot = ("Right: Run-3 signal MC 2022EE (09-28), offline cuts Flag_METFilters + |PF-Calo|/Calo < 0.5; raw unweighted events; "
-            "Clopper-Pearson 68%; points pooled over 4 lifetimes. Left: AN-18-124 v12 (Run 2), PRIVATE.")
+    foot = ("Run-3 panels: signal MC 2022EE (09-28), offline cuts Flag_METFilters + |PF-Calo|/Calo < 0.5; raw unweighted events; "
+            "Clopper-Pearson 68%; points pooled over 4 lifetimes. AN panels: AN-18-124 v12 (Run 2), PRIVATE.")
 
     def eff(path_num, path_den):
         num, den = f[path_num], f[path_den]
@@ -667,7 +667,8 @@ def compare_an(args):
         axes = [fig.add_subplot(sub[r, c]) for r in range(nrows) for c in range(ncols)]
         fill(axes)
         fig.text(0.01, 0.005, foot, fontsize=6.5, color="0.35")
-        fig.suptitle("%s | left: AN, right: this study (Run 3)" % key, fontsize=11)
+        fig.suptitle("%s | %s: AN, %s: this study (Run 3)" % ((key,) + (("top", "bottom") if stacked else ("left", "right"))),
+                     fontsize=11)
         fig.tight_layout(rect=(0, 0.02, 1, 0.96))
         fig.savefig(out / ("%s.png" % key), dpi=110)
         plt.close(fig)
