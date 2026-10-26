@@ -572,7 +572,7 @@ public:
                 hfVertexPath_.push_back(ok ? end.path() : -999.f);
                 hfVertexDistance_.push_back(ok ? (end.position() - target).mag() : -999.f);
                 hfVertexEta_.push_back(ok ? momentum.eta() : -999.f);
-                hfVertexPhi_.push_back(ok ? momentum.phi() : -999.f);
+                hfVertexPhi_.push_back(ok ? static_cast<float>(momentum.phi()) : -999.f);
               }
             }
           }
