@@ -67,7 +67,8 @@ def load(args):
                 if k.startswith("hf") and np.any(np.asarray(ak.num(a[k]))[~fit] != 0):
                     raise RuntimeError("Propagation attempted without a valid fit")
                 c[k] = np.full((n, 2), np.nan)
-                c[k][selected] = ak.to_numpy(a[k][selected])
+                if np.any(selected):
+                    c[k][selected] = ak.to_numpy(a[k][selected])
             if np.any(fit & ~two) or np.any(two & (np.prod(c["sigQ"], axis=1) != -1)):
                 raise RuntimeError("Fit/acceptance/charge inconsistency")
             if np.any(fit & ~c["hfFirstIsBB"]):
