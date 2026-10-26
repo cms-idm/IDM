@@ -387,16 +387,16 @@ def plot_dr_cms(args):
         h.GetYaxis().SetTitle(ytitle)
         for ax in (h.GetXaxis(), h.GetYaxis()):
             ax.SetTitleSize(0.05); ax.SetLabelSize(0.042)
-        h.GetXaxis().SetTitleOffset(1.1); h.GetYaxis().SetTitleOffset(1.35)
+        h.GetXaxis().SetTitleOffset(1.1); h.GetYaxis().SetTitleOffset(1.65)
 
     def labels(c, lines):
         c.cd()
         t = ROOT.TLatex(); t.SetNDC(); keep.append(t)
-        t.SetTextFont(61); t.SetTextSize(0.05); t.SetTextAlign(11); t.DrawLatex(0.15, 0.94, "CMS")
-        t.SetTextFont(52); t.SetTextSize(0.038); t.DrawLatex(0.255, 0.94, "Simulation Private Work")
+        t.SetTextFont(61); t.SetTextSize(0.05); t.SetTextAlign(11); t.DrawLatex(0.17, 0.94, "CMS")
+        t.SetTextFont(52); t.SetTextSize(0.038); t.DrawLatex(0.275, 0.94, "Simulation Private Work")
         t.SetTextFont(42); t.SetTextAlign(31); t.DrawLatex(0.96, 0.94, "2022EE (13.6 TeV)")
         t.SetTextSize(0.033); t.SetTextAlign(13)
-        for i, line in enumerate(lines): t.DrawLatex(0.19, 0.88 - 0.045 * i, line)
+        for i, line in enumerate(lines): t.DrawLatex(0.21, 0.88 - 0.045 * i, line)
 
     def save(c, hists, name, bottom=0.5):
         top = max(h.GetBinContent(h.GetMaximumBin()) for h in hists)  # GetMaximum() would return a SetMaximum value
@@ -408,7 +408,7 @@ def plot_dr_cms(args):
 
     def canvas(name):
         c = ROOT.TCanvas(name, "", 800, 700)
-        c.SetLeftMargin(0.14); c.SetRightMargin(0.04); c.SetTopMargin(0.08); c.SetBottomMargin(0.13)
+        c.SetLeftMargin(0.17); c.SetRightMargin(0.04); c.SetTopMargin(0.08); c.SetBottomMargin(0.13)
         keep.append(c)
         return c
 
