@@ -360,8 +360,24 @@ def plot_dr_cms(args):
     out = Path(args.plot_dir)
     out.mkdir(parents=True, exist_ok=True)
     with uproot.open(args.output) as f:
-        ev = f["events"].arrays(["complete", "pair", "fallback", "gen_dr", "reco_dr"], library="np")
+        ev = f["events"].arrays(["complete", "pair", "fallback", "gen_dr", "reco_dr", "run", "lumi", "event"], library="np")
     complete = ev["complete"] == 1
+    cut = ""
+    if args.max_chi2ndof is not None:
+        # hf vertex chi2/ndof is not in the events tree; take it from the inputs, concatenated in the same sorted order.
+        chi2, ndof, ids = [], [], []
+        for path in sorted(Path(args.input_dir).glob("*.root")):
+            with uproot.open(path) as f:
+                a = f["preselectedVertexing/events"].arrays(["hfChi2", "hfNdof", "run", "lumi", "event"], library="np")
+            chi2.append(a["hfChi2"]); ndof.append(a["hfNdof"]); ids.append(np.stack([a[k] for k in ("run", "lumi", "event")], 1))
+        ids = np.concatenate(ids)
+        if len(ids) != len(complete) or np.any(ids != np.stack([ev[k] for k in ("run", "lumi", "event")], 1)):
+            raise RuntimeError("Input events do not align with the events tree")
+        chi2, ndof = np.concatenate(chi2), np.concatenate(ndof)
+        if np.any(complete & ~(ndof > 0)):
+            raise RuntimeError("Complete pair with ndof <= 0")
+        complete &= chi2 / np.where(ndof > 0, ndof, 1) < args.max_chi2ndof
+        cut = ", #chi^{2}/ndof < %g" % args.max_chi2ndof
     oo = tuple(ORDERINGS).index("OO")
     edges = np.round(np.arange(64) * 0.05, 2)
     redges = np.round(np.arange(-50, 51) * 0.02, 2)
@@ -415,9 +431,12 @@ def plot_dr_cms(args):
     count = 0
     for tag, mask, label in (("all", complete, "All vertex types"), ("dsadsa", complete & (ev["pair"] == oo), "DSA#minusDSA vertex")):
         n, nfb = int(mask.sum()), int((mask & (ev["fallback"] == 1)).sum())
-        head = "%s: %d pairs (%d via fit fallback)" % (label, n, nfb)
+        head = "%s%s: %d pairs (%d via fit fallback)" % (label, cut, n, nfb)
         x = {s: ev[s + "_dr"][mask] for s in ("gen", "reco")}
         x["residual"] = x["reco"] - x["gen"]
+        g9, r9 = x["gen"] < 0.9, x["reco"] < 0.9
+        print("%s dR<0.9 of N=%d: gen %d reco %d both %d gen_only %d reco_only %d" %
+              (tag, n, g9.sum(), r9.sum(), (g9 & r9).sum(), (g9 & ~r9).sum(), (~g9 & r9).sum()))
         h = {s: th1("h_%s_%s" % (s, tag), x[s], redges if s == "residual" else edges) for s in x}
         for s in x:
             c = canvas("c_%s_%s" % (s, tag))
@@ -467,7 +486,11 @@ def main():
     c.add_argument("--output", required=True); c.add_argument("--plot-dir", required=True)
     c.add_argument("--log", action="store_true")
     c.add_argument("--cms", action="store_true", help="PyROOT, CMS style")
+    c.add_argument("--max-chi2ndof", type=float, help="--cms only: keep pairs with hf vertex chi2/ndof < this")
+    c.add_argument("--input-dir", help="per-sample inputs (needed for --max-chi2ndof)")
     args = p.parse_args()
+    if args.cmd == "plot-dr" and args.max_chi2ndof is not None and not (args.cms and args.input_dir):
+        p.error("--max-chi2ndof needs --cms and --input-dir")
     if args.cmd == "plot-dr" and args.cms:
         plot_dr_cms(args)
     else:
