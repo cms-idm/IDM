@@ -43,8 +43,11 @@
 #include "RecoVertex/KalmanVertexFit/interface/KalmanVertexFitter.h"
 #include "RecoVertex/VertexPrimitives/interface/TransientVertex.h"
 #include "TrackingTools/Records/interface/TransientTrackRecord.h"
+#include "TrackingTools/Records/interface/TrackingComponentsRecord.h"
 #include "TrackingTools/TransientTrack/interface/TransientTrackBuilder.h"
 #include "TrackingTools/TrajectoryState/interface/FreeTrajectoryState.h"
+#include "TrackingTools/TrajectoryState/interface/TrajectoryStateTransform.h"
+#include "TrackPropagation/SteppingHelixPropagator/interface/SteppingHelixPropagator.h"
 #include "TMath.h"
 #include "TNamed.h"
 #include "TTree.h"
@@ -250,6 +253,8 @@ public:
         packed_(consumes<std::vector<pat::PackedCandidate>>(ps.getParameter<edm::InputTag>("packedCandidates"))),
         field_(esConsumes()),
         ttb_(esConsumes(edm::ESInputTag("", "TransientTrackBuilder"))),
+        vertexPropagator_(esConsumes(edm::ESInputTag("", "SteppingHelixPropagatorAny"))),
+        vertexDirections_(ps.getUntrackedParameter<bool>("vertexDirections", false)),
         setup_(ps.getParameter<edm::ParameterSet>("propagatorSt2"), consumesCollector()) {
     usesResource(TFileService::kSharedResource);
     const auto order = ps.getParameter<std::vector<int>>("hierarchyOrder");
@@ -262,6 +267,13 @@ public:
     edm::Service<TFileService> fs;
     fs->make<TNamed>("sample", ps.getParameter<std::string>("sample").c_str());
     fs->make<TNamed>("revision", ps.getParameter<std::string>("revision").c_str());
+    fs->make<TNamed>("vertexDirections", vertexDirections_ ?
+      "Original hf tracks, no vertex constraint; SteppingHelixPropagatorAny to 3D PCA to fitted vertex. "
+      "Vectors in gen-index order. hfVertexValid per leg: 0 failure,1 valid; empty if no valid hf fit. "
+      "hfVertexStatus = SteppingHelixStateInfo::Result; hfVertexPath signed cm; hfVertexDistance 3D miss distance cm. "
+      "hfRefEta/Phi at stored original-track reference; hfVertexEta/Phi from propagated momentum; -999 on failure. "
+      "Material/field settings are those of SteppingHelixPropagatorAny loaded by the cfg. No rematching or fallback on propagation failure."
+      : "disabled");
     const char* typeName[3] = {"inner", "outer(DSA)", "global"};
     fs->make<TNamed>("hierarchyOrder", (std::string(typeName[order_[0]]) + ">" + typeName[order_[1]] + ">" +
                                         typeName[order_[2]]).c_str());
@@ -298,6 +310,8 @@ public:
     E(bbRecoDR); E(bbRecoMuMuPt); E(bbRecoMuMuPhi); E(bbSigmaLxy); E(bbBx); E(bbBy); E(bbBz);
     E(hfN); E(hfTried); E(hfFirstIsBB); E(hfFirstStatus); E(hfStatus); E(hfTypeA); E(hfTypeB); E(hfChi2); E(hfNdof);
     E(hfProb); E(hfVx); E(hfVy); E(hfVz); E(hfLxyBS); E(hfMass); E(hfRecoDR); E(hfRecoMuMuPt); E(hfRecoMuMuPhi);
+    E(hfVertexValid); E(hfVertexStatus); E(hfVertexPath); E(hfVertexDistance);
+    E(hfRefEta); E(hfRefPhi); E(hfVertexEta); E(hfVertexPhi);
     E(pfMuN); E(pfMuPx); E(pfMuPy); E(nChi); E(chiOK); E(chiPx); E(chiPy);
     E(anyNPairs); E(anyNValid);
 #undef E
@@ -539,6 +553,28 @@ public:
             const double hx = ra->px() + rb->px(), hy = ra->py() + rb->py();
             hfRecoMuMuPt_ = std::hypot(hx, hy);
             hfRecoMuMuPhi_ = std::atan2(hy, hx);
+            if (h.status == kValid && vertexDirections_) {
+              const auto* prop = dynamic_cast<const SteppingHelixPropagator*>(&es.getData(vertexPropagator_));
+              if (!prop) throw cms::Exception("PreselectedVertexing") << "Expected SteppingHelixPropagatorAny";
+              const GlobalPoint target(h.vx, h.vy, h.vz);
+              for (const auto& ref : {ra, rb}) {
+                hfRefEta_.push_back(ref->eta());
+                hfRefPhi_.push_back(ref->phi());
+                const auto start = trajectoryStateTransform::initialFreeState(*ref, field);
+                SteppingHelixStateInfo end;
+                prop->propagate(SteppingHelixStateInfo(start), target, end);
+                const auto momentum = end.isValid() ? end.momentum() : GlobalVector();
+                const bool ok = end.isValid() && std::isfinite(momentum.eta()) && std::isfinite(momentum.phi()) &&
+                                momentum.perp() > 0 && std::isfinite(end.path()) &&
+                                std::isfinite((end.position() - target).mag());
+                hfVertexValid_.push_back(ok);
+                hfVertexStatus_.push_back(static_cast<int>(end.status()));
+                hfVertexPath_.push_back(ok ? end.path() : -999.f);
+                hfVertexDistance_.push_back(ok ? (end.position() - target).mag() : -999.f);
+                hfVertexEta_.push_back(ok ? momentum.eta() : -999.f);
+                hfVertexPhi_.push_back(ok ? momentum.phi() : -999.f);
+              }
+            }
           }
           if (h.status == kValid || h.status == kShared) break;
         }
@@ -582,6 +618,8 @@ public:
 
 private:
   void reset() {
+    hfVertexValid_.clear(); hfVertexStatus_.clear();
+    for (auto* v : {&hfVertexPath_, &hfVertexDistance_, &hfRefEta_, &hfRefPhi_, &hfVertexEta_, &hfVertexPhi_}) v->clear();
     nSig_ = 0; twoAcc_ = false; nObj_ = nElig_ = 0;
     for (auto* v : {&sigIndex_, &sigQ_, &sigAcc_, &sigProp_, &cObj_, &cType_, &cQ_, &cIdPass_, &cInEta_, &cProp_,
                     &matchComp_, &matchType_, &matchObj_, &indObj_, &indObjNoEta_, &matchCompNoEta_, &matchTypeNoEta_, &matchObjNoEta_})
@@ -609,6 +647,8 @@ private:
   const edm::EDGetTokenT<std::vector<pat::PackedCandidate>> packed_;
   const edm::ESGetToken<MagneticField, IdealMagneticFieldRecord> field_;
   const edm::ESGetToken<TransientTrackBuilder, TransientTrackRecord> ttb_;
+  const edm::ESGetToken<Propagator, TrackingComponentsRecord> vertexPropagator_;
+  const bool vertexDirections_;
   const PropagateToMuonSetup setup_;
   std::array<int, 3> order_{{2, 0, 1}}, rank_{{0, 0, 0}};  // types best first; rank_[type]
   TTree *evt_ = nullptr, *pair_ = nullptr, *combo_ = nullptr;
@@ -621,6 +661,8 @@ private:
   std::vector<int> sigIndex_, sigQ_, sigAcc_, sigProp_, cObj_, cType_, cQ_, cIdPass_, cInEta_, cProp_;
   std::vector<float> sigPt_, sigEta_, sigPhi_, sigLxy_, sigD0_, sigEta2_, sigPhi2_, cEta2_, cPhi2_;
   std::vector<float> sigVx_, sigVy_, sigVz_, sigBx_, sigBy_, sigBz_;
+  std::vector<int> hfVertexValid_, hfVertexStatus_;
+  std::vector<float> hfVertexPath_, hfVertexDistance_, hfRefEta_, hfRefPhi_, hfVertexEta_, hfVertexPhi_;
   std::vector<int> indObj_, indObjNoEta_;
   int kEvent_ = 0, kTypeA_ = 0, kTypeB_ = 0, kStatus_ = 0;
   float kChi2_ = 0, kNdof_ = 0, kProb_ = 0, kVx_ = 0, kVy_ = 0, kVz_ = 0, kLxyBS_ = 0, kMass_ = 0, kRecoDR_ = 0,
