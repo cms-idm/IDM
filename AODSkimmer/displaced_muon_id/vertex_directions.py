@@ -270,6 +270,82 @@ def plot(args):
     print("PLOTTED %d linear PNGs" % count + (" and %d log copies" % count if args.log else ""))
 
 
+def plot_dr(args):
+    """Gen vs reco-at-PCA dR in 0.05 bins to 3.15, overlays and per-pair residuals; all pairs and final DSA-DSA."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import uproot
+    out = Path(args.plot_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    with uproot.open(args.output) as f:
+        ev = f["events"].arrays(["complete", "pair", "fallback", "gen_dr", "reco_dr"], library="np")
+    complete = ev["complete"] == 1
+    oo = tuple(ORDERINGS).index("OO")
+    edges = np.round(np.arange(64) * 0.05, 2)
+    redges = np.round(np.arange(-50, 51) * 0.02, 2)
+    note = ("2022EE signal MC | two accepted gen muons, both matched (G>I>DSA), valid hf vertex, two valid PCA states"
+            " | raw, unweighted")
+    color = dict(gen="#0072B2", reco="#D55E00", residual="#009E73")
+    title = dict(gen="Gen at production", reco="Original reco tracks at PCA to fitted vertex",
+                 residual="Per pair: reco at PCA minus gen")
+
+    def hist(x, e):
+        if not np.all(np.isfinite(x)):
+            raise ValueError("Nonfinite dR in complete-pair population")
+        values, _ = np.histogram(x, bins=e)  # numpy's last bin is closed; move x == upper edge to overflow
+        values[-1] -= (x == e[-1]).sum()
+        return values, (x < e[0]).sum(), (x >= e[-1]).sum()
+
+    def save(fig, ax, name):
+        fig.savefig(out / (name + ".png"), dpi=140)
+        if args.log:
+            ax.set_yscale("log"); ax.set_ylim(bottom=0.5); fig.savefig(out / (name + "_log.png"), dpi=140)
+        plt.close(fig)
+
+    count = 0
+    for tag, mask, label in (("all", complete, "All vertex types"), ("dsadsa", complete & (ev["pair"] == oo), "DSA–DSA vertex")):
+        n, nfb = mask.sum(), (mask & (ev["fallback"] == 1)).sum()
+        pop = "%s: %d pairs (%d via fit fallback)" % (label, n, nfb)
+        x = {s: ev[s + "_dr"][mask] for s in ("gen", "reco")}
+        x["residual"] = x["reco"] - x["gen"]
+        h = {s: hist(x[s], redges if s == "residual" else edges) for s in x}
+        for s in x:
+            values, under, over = h[s]
+            e = redges if s == "residual" else edges
+            fig, ax = plt.subplots(figsize=(7, 5))
+            ax.stairs(values, e, lw=1.6, color=color[s])
+            ax.set_xlim(e[0], e[-1])
+            ax.set_xlabel(r"$\Delta R_\mathrm{reco} - \Delta R_\mathrm{gen}$" if s == "residual" else LABEL["dr"])
+            ax.set_ylabel("Pairs / %g" % (e[1] - e[0]))
+            ax.set_ylim(bottom=0)
+            ax.set_title(title[s] + " — " + label)
+            fig.text(.02, .025, note, fontsize=7)
+            fig.text(.02, .005, "%s | underflow %d | overflow %d" % (pop, under, over), fontsize=7)
+            fig.tight_layout(rect=(0, .06, 1, 1))
+            save(fig, ax, "%s_dr_%s" % (s, tag)); count += 1
+        for norm in (False, True):
+            fig, ax = plt.subplots(figsize=(7, 5))
+            for s in ("gen", "reco"):
+                values, under, over = h[s]
+                w = values / float(n) if norm else values
+                ax.stairs(w, edges, lw=1.6, color=color[s],
+                          label="%s (overflow %d)" % ("Gen at production" if s == "gen" else "Reco at PCA to vertex", over))
+            ax.set_xlim(edges[0], edges[-1])
+            ax.set_xlabel(LABEL["dr"])
+            ax.set_ylabel("Fraction of pairs / 0.05 (unit area incl. overflow)" if norm else "Pairs / 0.05")
+            ax.set_ylim(bottom=0)
+            ax.set_title(("Unit-area normalized" if norm else "Unnormalized") + " — " + label)
+            ax.legend(frameon=False)
+            fig.text(.02, .025, note, fontsize=7)
+            fig.text(.02, .005, pop + " | same pairs in both series", fontsize=7)
+            fig.tight_layout(rect=(0, .06, 1, 1))
+            save(fig, ax, "overlay_dr_%s%s" % (tag, "_unitarea" if norm else "")); count += 1
+        print("%s N=%d fallback=%d gen_over=%d reco_over=%d residual_under=%d residual_over=%d" %
+              (tag, n, nfb, h["gen"][2], h["reco"][2], h["residual"][1], h["residual"][2]))
+    print("PLOTTED %d linear PNGs" % count + (" and %d log copies" % count if args.log else ""))
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -281,8 +357,11 @@ def main():
     b.add_argument("--output", required=True); b.add_argument("--plot-dir", required=True)
     b.add_argument("--log", action="store_true")
     b.add_argument("--dr-only", action="store_true", help="dR only: 0.1 bins/ticks to 3.1, last bin ends at 3.14")
+    c = sub.add_parser("plot-dr", help="dR 0.05 bins to 3.15: gen, reco, overlays, residual; all and DSA-DSA")
+    c.add_argument("--output", required=True); c.add_argument("--plot-dir", required=True)
+    c.add_argument("--log", action="store_true")
     args = p.parse_args()
-    analyze(args) if args.cmd == "analyze" else plot(args)
+    {"analyze": analyze, "plot": plot, "plot-dr": plot_dr}[args.cmd](args)
 
 
 if __name__ == "__main__":
