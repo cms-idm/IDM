@@ -184,8 +184,9 @@ def plot(args):
     groups = sorted({k.split("/")[1] for k in f.keys() if k.startswith("groups/") and k.count("/") == 2})
     foot = ("Signal MC, best-best fit (G>I>DSA), events with two accepted signal muons and a fit attempted; "
             "raw unweighted; 68% Clopper-Pearson; bins with < 20 attempted fits omitted")
-    foot_s = ("Valid best-best fits; sigma(Lxy) from the vertex covariance (beamspot fixed); "
-              "band = 16-84% of valid fits per bin (spread, not an uncertainty)")
+    foot_s = ("Valid best-best fits with defined sigma(Lxy) > 0 (sentinels excluded; count in the analyze log); sigma from "
+              "the vertex covariance (beamspot fixed); band = 16-84% per bin (spread, not an uncertainty); "
+              "bins with < 20 such fits omitted")
 
     def cmap(i, n):
         return plt.get_cmap("turbo")(0.05 + 0.9 * i / max(n - 1, 1)) if n > 10 else plt.get_cmap("tab10")(i)
@@ -220,8 +221,8 @@ def plot(args):
         ok = d >= 20
         if bars:
             ax.errorbar(x[ok], r[ok], yerr=[(r - lo)[ok], (hi - r)[ok]], fmt="o", ms=3, lw=1, label=label, color=color)
-        else:
-            ax.plot(x[ok], r[ok], "-o", ms=2.5, lw=1, label=label, color=color)
+        else:  # full grid with NaN at omitted bins, so lines never bridge them
+            ax.plot(x, np.where(ok, r, np.nan), "-o", ms=2.5, lw=1, label=label, color=color)
 
     def save(fig, path, note, log_axes=()):
         fig.text(0.01, 0.005, note, fontsize=6.5, color="0.35")
@@ -259,9 +260,10 @@ def plot(args):
             q = {qn: h1(g, "%s__%s" % (qn, var))[0] for qn, _ in QUANTILES}
             n, edges = h1(g, "nsigma__" + var)
             x = 0.5 * (edges[1:] + edges[:-1]); ok = n >= 20
+            gap = lambda y: np.where(ok, y, np.nan)  # omitted bins stay gaps
             a = ax[0, i]
-            a.fill_between(x[ok], q["q16"][ok], q["q84"][ok], color="C0", alpha=.3, step="mid", label="16–84%")
-            a.plot(x[ok], q["q50"][ok], "o-", color="C0", ms=3, label="median")
+            a.fill_between(x, gap(q["q16"]), gap(q["q84"]), color="C0", alpha=.3, step="mid", label="16–84%")
+            a.plot(x, gap(q["q50"]), "o-", color="C0", ms=3, label="median")
             a.set_xlabel(LABELS[var]); a.set_ylabel(r"$\sigma(L_{xy})$ [cm]"); a.grid(alpha=.3); a.legend(fontsize=7)
             a.set_ylim(0, None); a.set_xlim(edges[0], edges[-1])
             o = f["groups/%s/sigma2d__%s" % (g, var)]
@@ -272,7 +274,7 @@ def plot(args):
             top = ye[min(len(ye) - 1, np.searchsorted(ye, np.nanmax(q["q84"][ok]) * 3 if ok.any() else ye[-1]))]
             b.set_ylim(0, top); b.set_xlabel(LABELS[var]); b.set_ylabel(r"$\sigma(L_{xy})$ [cm]")
             b.set_title("valid fits per cell (raw); cells above the y range in ROOT", fontsize=7)
-        fig.suptitle("%s: valid fits %d" % (glabel(g), int(h1(g, "nsigma__lxy")[0].sum())), fontsize=9)
+        fig.suptitle("%s: valid fits with defined sigma %d" % (glabel(g), int(h1(g, "nsigma__lxy")[0].sum())), fontsize=9)
         save(fig, fname, foot_s, log_axes=(ax[0, 0], ax[0, 1]))
 
     def sigma_overlay(gs, fname, title):
@@ -282,14 +284,14 @@ def plot(args):
                 med, edges = h1(g, "q50__" + var)
                 n, _ = h1(g, "nsigma__" + var)
                 x = 0.5 * (edges[1:] + edges[:-1]); ok = n >= 20
-                ax[i].plot(x[ok], med[ok], "-o", ms=2.5, lw=1, color=cmap(j, len(gs)), label=glabel(g))
+                ax[i].plot(x, np.where(ok, med, np.nan), "-o", ms=2.5, lw=1, color=cmap(j, len(gs)), label=glabel(g))
             ax[i].set_xlabel(LABELS[var]); ax[i].set_ylabel(r"Median $\sigma(L_{xy})$ [cm]"); ax[i].grid(alpha=.3)
             ax[i].set_ylim(0, None); ax[i].set_xlim(edges[0], edges[-1])
         hd, lb = ax[0].get_legend_handles_labels()
         fig.legend(hd, lb, loc="upper center", ncol=6, fontsize=6.5)
         fig.subplots_adjust(top=0.8)
         fig.suptitle(title, fontsize=9, y=0.88)
-        save(fig, fname, "Valid best-best fits; median per bin; bins with < 20 valid fits omitted", log_axes=tuple(ax))
+        save(fig, fname, "Valid best-best fits with defined sigma(Lxy) > 0; median per bin; bins with < 20 such fits omitted", log_axes=tuple(ax))
 
     mg = sorted([g for g in groups if g.startswith("mass_")], key=numkey)
     lg = sorted([g for g in groups if g.startswith("ctau_")], key=numkey)
