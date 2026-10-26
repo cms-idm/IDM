@@ -288,7 +288,7 @@ def plot(args):
         fig.legend(hd, lb, loc="upper center", ncol=6, fontsize=6.5)
         fig.subplots_adjust(top=0.8)
         fig.suptitle(title, fontsize=9, y=0.88)
-        save(fig, fname, "Valid best-best fits; median per bin; bins with < 20 valid fits omitted", log_axes=ax)
+        save(fig, fname, "Valid best-best fits; median per bin; bins with < 20 valid fits omitted", log_axes=tuple(ax))
 
     mg = sorted([g for g in groups if g.startswith("mass_")], key=numkey)
     lg = sorted([g for g in groups if g.startswith("ctau_")], key=numkey)
