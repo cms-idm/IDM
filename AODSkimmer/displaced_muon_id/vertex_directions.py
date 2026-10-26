@@ -297,10 +297,11 @@ def plot_dr(args):
         values[-1] -= (x == e[-1]).sum()
         return values, (x < e[0]).sum(), (x >= e[-1]).sum()
 
-    def save(fig, ax, name):
+    def save(fig, ax, name, bottom=0.5):
         fig.savefig(out / (name + ".png"), dpi=140)
         if args.log:
-            ax.set_yscale("log"); ax.set_ylim(bottom=0.5); fig.savefig(out / (name + "_log.png"), dpi=140)
+            top = ax.get_ylim()[1]
+            ax.set_yscale("log"); ax.set_ylim(bottom, 3 * top); fig.savefig(out / (name + "_log.png"), dpi=140)
         plt.close(fig)
 
     count = 0
@@ -340,7 +341,7 @@ def plot_dr(args):
             fig.text(.02, .025, note, fontsize=7)
             fig.text(.02, .005, pop + " | same pairs in both series", fontsize=7)
             fig.tight_layout(rect=(0, .06, 1, 1))
-            save(fig, ax, "overlay_dr_%s%s" % (tag, "_unitarea" if norm else "")); count += 1
+            save(fig, ax, "overlay_dr_%s%s" % (tag, "_unitarea" if norm else ""), 0.5 / n if norm else 0.5); count += 1
         print("%s N=%d fallback=%d gen_over=%d reco_over=%d residual_under=%d residual_over=%d" %
               (tag, n, nfb, h["gen"][2], h["reco"][2], h["residual"][1], h["residual"][2]))
     print("PLOTTED %d linear PNGs" % count + (" and %d log copies" % count if args.log else ""))
