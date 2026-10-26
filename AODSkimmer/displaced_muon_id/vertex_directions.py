@@ -347,6 +347,110 @@ def plot_dr(args):
     print("PLOTTED %d linear PNGs" % count + (" and %d log copies" % count if args.log else ""))
 
 
+def plot_dr_cms(args):
+    """plot-dr content in PyROOT, CMS style: same bins, populations and outputs as plot_dr."""
+    import ROOT
+    import uproot
+    ROOT.gROOT.SetBatch(True)
+    ROOT.gStyle.SetOptStat(0); ROOT.gStyle.SetOptTitle(0)
+    ROOT.gStyle.SetTextFont(42); ROOT.gStyle.SetLabelFont(42, "XYZ"); ROOT.gStyle.SetTitleFont(42, "XYZ")
+    ROOT.gStyle.SetPadTickX(1); ROOT.gStyle.SetPadTickY(1)
+    ROOT.TH1.AddDirectory(False)
+    out = Path(args.plot_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    with uproot.open(args.output) as f:
+        ev = f["events"].arrays(["complete", "pair", "fallback", "gen_dr", "reco_dr"], library="np")
+    complete = ev["complete"] == 1
+    oo = tuple(ORDERINGS).index("OO")
+    edges = np.round(np.arange(64) * 0.05, 2)
+    redges = np.round(np.arange(-50, 51) * 0.02, 2)
+    color = dict(gen=ROOT.TColor.GetColor("#0072B2"), reco=ROOT.TColor.GetColor("#D55E00"),
+                 residual=ROOT.TColor.GetColor("#009E73"))
+    legend = dict(gen="Gen at production", reco="Reco at PCA to fitted vertex", residual="Per pair")
+    xtitle = dict(dr="Dimuon #DeltaR", residual="#DeltaR_{reco} #minus #DeltaR_{gen}")
+    keep = []
+
+    def th1(name, x, e):
+        if not np.all(np.isfinite(x)):
+            raise ValueError("Nonfinite dR in complete-pair population")
+        h = ROOT.TH1D(name, "", len(e) - 1, array("d", e))
+        values, _ = np.histogram(x, bins=e)
+        values[-1] -= (x == e[-1]).sum()  # numpy's last bin is closed; x == upper edge is overflow, as in TH1
+        for i, v in enumerate(values, 1): h.SetBinContent(i, float(v))
+        h.SetBinContent(0, float((x < e[0]).sum())); h.SetBinContent(len(e), float((x >= e[-1]).sum()))
+        h.SetEntries(len(x))
+        return h
+
+    def frame(h, ytitle):
+        h.GetXaxis().SetTitle(xtitle["residual" if h.GetXaxis().GetXmin() < 0 else "dr"])
+        h.GetYaxis().SetTitle(ytitle)
+        for ax in (h.GetXaxis(), h.GetYaxis()):
+            ax.SetTitleSize(0.05); ax.SetLabelSize(0.042)
+        h.GetXaxis().SetTitleOffset(1.1); h.GetYaxis().SetTitleOffset(1.35)
+
+    def labels(c, lines):
+        c.cd()
+        t = ROOT.TLatex(); t.SetNDC(); keep.append(t)
+        t.SetTextFont(61); t.SetTextSize(0.05); t.SetTextAlign(11); t.DrawLatex(0.15, 0.94, "CMS")
+        t.SetTextFont(52); t.SetTextSize(0.038); t.DrawLatex(0.255, 0.94, "Simulation Private Work")
+        t.SetTextFont(42); t.SetTextAlign(31); t.DrawLatex(0.96, 0.94, "2022EE (13.6 TeV)")
+        t.SetTextSize(0.033); t.SetTextAlign(13)
+        for i, line in enumerate(lines): t.DrawLatex(0.19, 0.88 - 0.045 * i, line)
+
+    def save(c, hists, name, bottom=0.5):
+        top = max(h.GetMaximum() for h in hists)
+        hists[0].SetMinimum(0); hists[0].SetMaximum(1.45 * top)
+        c.Modified(); c.SaveAs(str(out / (name + ".png")))
+        if args.log:
+            c.SetLogy(1); hists[0].SetMinimum(bottom); hists[0].SetMaximum(top * 60)
+            c.Modified(); c.SaveAs(str(out / (name + "_log.png"))); c.SetLogy(0)
+
+    def canvas(name):
+        c = ROOT.TCanvas(name, "", 800, 700)
+        c.SetLeftMargin(0.14); c.SetRightMargin(0.04); c.SetTopMargin(0.08); c.SetBottomMargin(0.13)
+        keep.append(c)
+        return c
+
+    count = 0
+    for tag, mask, label in (("all", complete, "All vertex types"), ("dsadsa", complete & (ev["pair"] == oo), "DSA#minusDSA vertex")):
+        n, nfb = int(mask.sum()), int((mask & (ev["fallback"] == 1)).sum())
+        head = "%s: %d pairs (%d via fit fallback)" % (label, n, nfb)
+        x = {s: ev[s + "_dr"][mask] for s in ("gen", "reco")}
+        x["residual"] = x["reco"] - x["gen"]
+        h = {s: th1("h_%s_%s" % (s, tag), x[s], redges if s == "residual" else edges) for s in x}
+        for s in x:
+            c = canvas("c_%s_%s" % (s, tag))
+            hs = h[s]; hs.SetLineColor(color[s]); hs.SetLineWidth(3)
+            frame(hs, "Pairs / %g" % (redges[1] - redges[0] if s == "residual" else 0.05))
+            hs.Draw("hist")
+            under, over = int(hs.GetBinContent(0)), int(hs.GetBinContent(hs.GetNbinsX() + 1))
+            flow = ("Underflow %d, overflow %d" % (under, over) if s == "residual"
+                    else "Overflow (#DeltaR #geq 3.15): %d" % over)
+            labels(c, [head, legend[s] if s != "residual" else "Reco at PCA #minus gen, per pair", flow])
+            save(c, [hs], "%s_dr_%s" % (s, tag)); count += 1
+        for norm in (False, True):
+            c = canvas("c_overlay_%s_%d" % (tag, norm))
+            hs = [h[s].Clone("o_%s_%s_%d" % (s, tag, norm)) for s in ("gen", "reco")]
+            for s, hh in zip(("gen", "reco"), hs):
+                hh.SetLineColor(color[s]); hh.SetLineWidth(3)
+                if norm: hh.Scale(1.0 / n)  # n includes overflow: drawn bins sum to 1 - overflow fraction
+            frame(hs[0], "Fraction of pairs / 0.05" if norm else "Pairs / 0.05")
+            hs[0].Draw("hist"); hs[1].Draw("hist same")
+            leg = ROOT.TLegend(0.52, 0.66, 0.94, 0.78); keep.append(leg)
+            leg.SetBorderSize(0); leg.SetFillStyle(0); leg.SetTextSize(0.033)
+            for s, hh in zip(("gen", "reco"), hs):
+                leg.AddEntry(hh, "%s" % legend[s], "l")
+            leg.Draw()
+            over = [int(h[s].GetBinContent(h[s].GetNbinsX() + 1)) for s in ("gen", "reco")]
+            labels(c, [head, "Overflow (#DeltaR #geq 3.15): gen %d, reco %d" % tuple(over)] +
+                   (["Unit area incl. overflow"] if norm else []))
+            save(c, hs, "overlay_dr_%s%s" % (tag, "_unitarea" if norm else ""), 0.5 / n if norm else 0.5); count += 1
+        print("%s N=%d fallback=%d gen_over=%d reco_over=%d residual_under=%d residual_over=%d" %
+              (tag, n, nfb, h["gen"].GetBinContent(64), h["reco"].GetBinContent(64),
+               h["residual"].GetBinContent(0), h["residual"].GetBinContent(101)))
+    print("PLOTTED %d linear PNGs" % count + (" and %d log copies" % count if args.log else ""))
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -361,8 +465,12 @@ def main():
     c = sub.add_parser("plot-dr", help="dR 0.05 bins to 3.15: gen, reco, overlays, residual; all and DSA-DSA")
     c.add_argument("--output", required=True); c.add_argument("--plot-dir", required=True)
     c.add_argument("--log", action="store_true")
+    c.add_argument("--cms", action="store_true", help="PyROOT, CMS style")
     args = p.parse_args()
-    {"analyze": analyze, "plot": plot, "plot-dr": plot_dr}[args.cmd](args)
+    if args.cmd == "plot-dr" and args.cms:
+        plot_dr_cms(args)
+    else:
+        {"analyze": analyze, "plot": plot, "plot-dr": plot_dr}[args.cmd](args)
 
 
 if __name__ == "__main__":
