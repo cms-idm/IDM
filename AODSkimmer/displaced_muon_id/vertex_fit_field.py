@@ -244,6 +244,7 @@ def plot(args):
                 curve(ax[i], *frac(g, var), label=glabel(g), color=cmap(j, len(gs)) if len(gs) > 1 else "k",
                       bars=len(gs) <= 10)
             ax[i].set_xlabel(LABELS[var]); ax[i].set_ylabel("Failed / attempted fits"); ax[i].set_ylim(0, 1.05)
+            ax[i].set_xlim(EDGES[var][0], EDGES[var][-1])
             ax[i].grid(alpha=.3)
         if len(gs) > 1:
             hd, lb = ax[0].get_legend_handles_labels()
@@ -262,12 +263,12 @@ def plot(args):
             a.fill_between(x[ok], q["q16"][ok], q["q84"][ok], color="C0", alpha=.3, step="mid", label="16–84%")
             a.plot(x[ok], q["q50"][ok], "o-", color="C0", ms=3, label="median")
             a.set_xlabel(LABELS[var]); a.set_ylabel(r"$\sigma(L_{xy})$ [cm]"); a.grid(alpha=.3); a.legend(fontsize=7)
-            a.set_ylim(0, None)
+            a.set_ylim(0, None); a.set_xlim(edges[0], edges[-1])
             o = f["groups/%s/sigma2d__%s" % (g, var)]
             v = o.values()
             xe, ye = o.axes[0].edges(), o.axes[1].edges()
             b = ax[1, i]
-            b.pcolormesh(xe, ye, v.T, cmap="viridis", shading="flat")
+            b.pcolormesh(xe, ye, np.where(v > 0, v, np.nan).T, cmap="viridis", shading="flat")  # empty cells blank
             top = ye[min(len(ye) - 1, np.searchsorted(ye, np.nanmax(q["q84"][ok]) * 3 if ok.any() else ye[-1]))]
             b.set_ylim(0, top); b.set_xlabel(LABELS[var]); b.set_ylabel(r"$\sigma(L_{xy})$ [cm]")
             b.set_title("valid fits per cell (raw); cells above the y range in ROOT", fontsize=7)
@@ -283,7 +284,7 @@ def plot(args):
                 x = 0.5 * (edges[1:] + edges[:-1]); ok = n >= 20
                 ax[i].plot(x[ok], med[ok], "-o", ms=2.5, lw=1, color=cmap(j, len(gs)), label=glabel(g))
             ax[i].set_xlabel(LABELS[var]); ax[i].set_ylabel(r"Median $\sigma(L_{xy})$ [cm]"); ax[i].grid(alpha=.3)
-            ax[i].set_ylim(0, None)
+            ax[i].set_ylim(0, None); ax[i].set_xlim(edges[0], edges[-1])
         hd, lb = ax[0].get_legend_handles_labels()
         fig.legend(hd, lb, loc="upper center", ncol=6, fontsize=6.5)
         fig.subplots_adjust(top=0.8)
@@ -310,7 +311,7 @@ def plot(args):
         l_, u_ = cp(n, d)
         curve(a, edges, r, l_, u_, d)
         a.set_title("DSA–DSA, gen $L_{xy}$ %d–%d cm: %d attempted" % (lo, hi, int(d.sum())), fontsize=8)
-        a.set_xlabel(LABELS["bz"]); a.set_ylim(0, 1.05); a.grid(alpha=.3)
+        a.set_xlabel(LABELS["bz"]); a.set_ylim(0, 1.05); a.set_xlim(edges[0], edges[-1]); a.grid(alpha=.3)
     ax[0].set_ylabel("Failed / attempted fits")
     save(fig, out / "dsa_slices_failfrac_vs_bz.png", foot.replace("fit attempted", "fit attempted, both legs DSA"))
     print("Plots done in", out, flush=True)
