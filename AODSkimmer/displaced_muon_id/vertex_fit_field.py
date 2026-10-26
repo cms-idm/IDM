@@ -103,8 +103,8 @@ def analyze(args):
     fail = att & (st == 2)
     valid = att & (st == 3)
     sig_ok = valid & (e["sigma"] > 0)
-    print("STATUS (twoAcc): not fitted %d, shared %d, failed %d, valid %d; valid with sigma sentinel %d" % tuple(
-        int((two & (st == s)).sum()) for s in range(4)) + (int((valid & ~sig_ok).sum()),), flush=True)
+    print("STATUS (twoAcc): not fitted %d, shared %d, failed %d, valid %d; valid with sigma sentinel %d" % (tuple(
+        int((two & (st == s)).sum()) for s in range(4)) + (int((valid & ~sig_ok).sum()),)), flush=True)
     dsa = att & (e["mtype"][:, 0] == 1) & (e["mtype"][:, 1] == 1)
 
     groups = {"overall": None}
