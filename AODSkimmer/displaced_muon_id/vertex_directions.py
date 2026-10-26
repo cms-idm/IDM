@@ -234,24 +234,40 @@ def plot(args):
     out = Path(args.plot_dir)
     out.mkdir(parents=True, exist_ok=True)
     with uproot.open(args.output) as f:
+        if args.dr_only:
+            events = f["events"].arrays(["complete", "gen_dr", "reco_dr"], library="np")
         for source in ("gen", "reco"):
-            for var in EDGES:
-                h = f["distributions/%s_%s" % (source, var)]
-                values, edges = h.to_numpy()
-                flow = h.values(flow=True)
+            for var in (("dr",) if args.dr_only else EDGES):
+                if args.dr_only:
+                    x = events[source + "_dr"][events["complete"] == 1]
+                    if not np.all(np.isfinite(x)):
+                        raise ValueError("Nonfinite dR in complete-pair population")
+                    edges = np.r_[np.arange(32, dtype=float) / 10., 3.14]
+                    values, _ = np.histogram(x[(x >= 0) & (x < 3.14)], bins=edges)
+                    flow = np.r_[(x < 0).sum(), values, (x >= 3.14).sum()]
+                else:
+                    h = f["distributions/%s_%s" % (source, var)]
+                    values, edges = h.to_numpy()
+                    flow = h.values(flow=True)
                 fig, ax = plt.subplots(figsize=(7, 5))
                 ax.stairs(values, edges, lw=1.6, color="#0072B2" if source == "gen" else "#D55E00")
+                if args.dr_only:
+                    ax.set_xlim(0, 3.14)
+                    ax.set_xticks(np.arange(32, dtype=float) / 10.)
+                    ax.tick_params(axis="x", labelrotation=90, labelsize=6)
                 ax.set_xlabel(LABEL[var]); ax.set_ylabel(("Muons" if var in ("phi", "eta") else "Pairs") + " / bin")
                 ax.set_ylim(bottom=0)
                 ax.set_title("Gen at production" if source == "gen" else "Original reco tracks at PCA to fitted vertex")
-                fig.text(.02, .025, "2022EE signal MC | same complete pairs | raw, unweighted", fontsize=8)
+                fig.text(.02, .025, "2022EE signal MC | same complete pairs | raw, unweighted" +
+                         (" | last bin 3.10–3.14" if args.dr_only else ""), fontsize=8)
                 fig.text(.02, .005, "Entries: %d | underflow: %d | overflow: %d" % (flow.sum(), flow[0], flow[-1]), fontsize=8)
                 fig.tight_layout(rect=(0, .06, 1, 1))
                 fig.savefig(out / (source + "_" + var + ".png"), dpi=140)
                 if args.log:
                     ax.set_yscale("log"); fig.savefig(out / (source + "_" + var + "_log.png"), dpi=140)
                 plt.close(fig)
-    print("PLOTTED 10 linear PNGs" + (" and 10 log copies" if args.log else ""))
+    count = 2 if args.dr_only else 10
+    print("PLOTTED %d linear PNGs" % count + (" and %d log copies" % count if args.log else ""))
 
 
 def main():
@@ -264,6 +280,7 @@ def main():
     b = sub.add_parser("plot")
     b.add_argument("--output", required=True); b.add_argument("--plot-dir", required=True)
     b.add_argument("--log", action="store_true")
+    b.add_argument("--dr-only", action="store_true", help="dR only: 0.1 bins/ticks to 3.1, last bin ends at 3.14")
     args = p.parse_args()
     analyze(args) if args.cmd == "analyze" else plot(args)
 
