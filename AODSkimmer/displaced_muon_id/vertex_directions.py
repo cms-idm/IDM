@@ -356,6 +356,7 @@ def plot_dr_cms(args):
     ROOT.gStyle.SetTextFont(42); ROOT.gStyle.SetLabelFont(42, "XYZ"); ROOT.gStyle.SetTitleFont(42, "XYZ")
     ROOT.gStyle.SetPadTickX(1); ROOT.gStyle.SetPadTickY(1)
     ROOT.TH1.AddDirectory(False)
+    ROOT.TGaxis.SetMaxDigits(6)  # no x10^n exponent colliding with the CMS label
     out = Path(args.plot_dir)
     out.mkdir(parents=True, exist_ok=True)
     with uproot.open(args.output) as f:
@@ -398,7 +399,7 @@ def plot_dr_cms(args):
         for i, line in enumerate(lines): t.DrawLatex(0.19, 0.88 - 0.045 * i, line)
 
     def save(c, hists, name, bottom=0.5):
-        top = max(h.GetMaximum() for h in hists)
+        top = max(h.GetBinContent(h.GetMaximumBin()) for h in hists)  # GetMaximum() would return a SetMaximum value
         hists[0].SetMinimum(0); hists[0].SetMaximum(1.45 * top)
         c.Modified(); c.SaveAs(str(out / (name + ".png")))
         if args.log:
@@ -425,8 +426,8 @@ def plot_dr_cms(args):
             hs.Draw("hist")
             under, over = int(hs.GetBinContent(0)), int(hs.GetBinContent(hs.GetNbinsX() + 1))
             flow = ("Underflow %d, overflow %d" % (under, over) if s == "residual"
-                    else "Overflow (#DeltaR #geq 3.15): %d" % over)
-            labels(c, [head, legend[s] if s != "residual" else "Reco at PCA #minus gen, per pair", flow])
+                    else "Overflow at #DeltaR #geq 3.15: %d" % over)
+            labels(c, [head, legend[s] if s != "residual" else "Reco at PCA minus gen, per pair", flow])
             save(c, [hs], "%s_dr_%s" % (s, tag)); count += 1
         for norm in (False, True):
             c = canvas("c_overlay_%s_%d" % (tag, norm))
@@ -436,13 +437,13 @@ def plot_dr_cms(args):
                 if norm: hh.Scale(1.0 / n)  # n includes overflow: drawn bins sum to 1 - overflow fraction
             frame(hs[0], "Fraction of pairs / 0.05" if norm else "Pairs / 0.05")
             hs[0].Draw("hist"); hs[1].Draw("hist same")
-            leg = ROOT.TLegend(0.52, 0.66, 0.94, 0.78); keep.append(leg)
+            leg = ROOT.TLegend(0.52, 0.60, 0.94, 0.72); keep.append(leg)
             leg.SetBorderSize(0); leg.SetFillStyle(0); leg.SetTextSize(0.033)
             for s, hh in zip(("gen", "reco"), hs):
                 leg.AddEntry(hh, "%s" % legend[s], "l")
             leg.Draw()
             over = [int(h[s].GetBinContent(h[s].GetNbinsX() + 1)) for s in ("gen", "reco")]
-            labels(c, [head, "Overflow (#DeltaR #geq 3.15): gen %d, reco %d" % tuple(over)] +
+            labels(c, [head, "Overflow at #DeltaR #geq 3.15: gen %d, reco %d" % tuple(over)] +
                    (["Unit area incl. overflow"] if norm else []))
             save(c, hs, "overlay_dr_%s%s" % (tag, "_unitarea" if norm else ""), 0.5 / n if norm else 0.5); count += 1
         print("%s N=%d fallback=%d gen_over=%d reco_over=%d residual_under=%d residual_over=%d" %
