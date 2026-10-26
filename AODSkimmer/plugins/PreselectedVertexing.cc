@@ -2,7 +2,8 @@
 // KalmanVertexFitter(refit=true) of (a) the two matched legs (best-best), (b) the hierarchy fallback (hf*: other matched
 // components of the same two objects, tried in hierarchy order until a fit is valid) and (c) every pair of distinct
 // pre-selected objects (Any pair). The hierarchy order is the hierarchyOrder parameter (types, best first).
-// Study notes: kb/studies/preselected-vertexing-efficiency.md, kb/studies/met-proxy-residual.md (hf*, pfMu*, chi*).
+// Study notes: kb/studies/preselected-vertexing-efficiency.md, kb/studies/met-proxy-residual.md (hf*, pfMu*, chi*),
+// kb/studies/vertex-fit-field.md (sigV*, sigB*, bbSigmaLxy, bbB*).
 // All original events are read; nothing is filtered. Components: 0 inner, 1 outer (embedded DSA), 2 global.
 // Eligible component = passes its ID AND own track |eta|<2.4. A second hierarchy match without the
 // reco-eta gate is stored only as a cross-check against the component-matching study.
@@ -96,7 +97,7 @@ namespace {
 
   struct Gen {
     int index = -1, q = 0;
-    float pt = 0, eta = 0, phi = 0, px = 0, py = 0, lxy = 0, d0 = 0;
+    float pt = 0, eta = 0, phi = 0, px = 0, py = 0, lxy = 0, d0 = 0, vx = 0, vy = 0, vz = 0, bx = 0, by = 0, bz = 0;
     bool accepted = false;
     Pos st2;
   };
@@ -186,9 +187,22 @@ namespace {
   struct Fit {
     int status = kNotFitted;
     float vx = -999, vy = -999, vz = -999, chi2 = -999, ndof = -999, prob = -999, lxyBS = -999, mass = -999;
+    float sigmaLxy = -999, bx = -999, by = -999, bz = -999;
   };
+  // sigma(Lxy): full 3D propagation of the vertex covariance, beamspot fixed; Lxy = |v - bs(vz)| in xy, so
+  // g = (dx, dy, -dxdz*dx - dydz*dy)/L. -999 if L = 0, the covariance is non-finite or the variance is not positive.
+  float sigmaLxyBS(const reco::Vertex& v, const reco::BeamSpot& bs) {
+    const double dx = v.x() - bs.x(v.z()), dy = v.y() - bs.y(v.z()), l = std::hypot(dx, dy);
+    if (!(l > 0)) return -999.f;
+    const std::array<double, 3> g{{dx / l, dy / l, -(bs.dxdz() * dx + bs.dydz() * dy) / l}};
+    double var = 0;
+    for (int i = 0; i < 3; ++i)
+      for (int j = 0; j < 3; ++j) var += g[i] * v.covariance(i, j) * g[j];
+    if (!std::isfinite(var) || !(var > 0)) return -999.f;
+    return static_cast<float>(std::sqrt(var));
+  }
   Fit fitLegs(const reco::TrackRef& a, const reco::TrackRef& b, const TransientTrackBuilder& ttb,
-              const KalmanVertexFitter& kvf, const reco::BeamSpot& bs) {
+              const KalmanVertexFitter& kvf, const reco::BeamSpot& bs, const MagneticField& field) {
     Fit f;
     std::vector<reco::TransientTrack> tts{ttb.build(a), ttb.build(b)};
     const TransientVertex tv = kvf.vertex(tts);
@@ -205,6 +219,11 @@ namespace {
     f.ndof = v.ndof();
     f.prob = TMath::Prob(v.chi2(), static_cast<int>(std::lround(v.ndof())));
     f.lxyBS = std::hypot(v.x() - bs.x(v.z()), v.y() - bs.y(v.z()));
+    f.sigmaLxy = sigmaLxyBS(v, bs);
+    const auto bf = field.inTesla(GlobalPoint(v.x(), v.y(), v.z()));
+    f.bx = bf.x();
+    f.by = bf.y();
+    f.bz = bf.z();
     auto p4 = [](const reco::Track& t) { return math::PtEtaPhiMLorentzVector(t.pt(), t.eta(), t.phi(), kMuonMass); };
     f.mass = (p4(*a) + p4(*b)).mass();
     return f;
@@ -259,20 +278,24 @@ public:
       "station-2 dR match to that gen; pairs ordered by (better leg rank, worse leg rank, gen0 leg rank), fitted in order until "
       "one is valid; hf fields describe the first valid pair, else the first pair; hfTypeA/B = gen0/gen1 leg types. "
       "pfMu* = packedPFCandidates abs(pdgId)13 (all), count and vector px/py sum. chi* = prunedGenParticles abs(pdgId)1000022, "
-      "status 1, lastCopy; chiOK = exactly two with first different-PDG parents abs 32 and 1000023; chiPx/Py vector sum.");
+      "status 1, lastCopy; chiOK = exactly two with first different-PDG parents abs 32 and 1000023; chiPx/Py vector sum. "
+      "sigV* = gen muon production vertex [cm]; sigB*, bbB* = MagneticField::inTesla at the gen / bb fitted vertex [T]; "
+      "bbSigmaLxy = sqrt(g^T C g), C = fitted vertex 3x3 covariance, g = (dx,dy,-dxdz*dx-dydz*dy)/Lxy, dx,dy = vertex - "
+      "beamspot(vz), beamspot fixed; -999 if Lxy=0 or the variance is non-finite or not positive (valid fits only).");
     evt_ = fs->make<TTree>("events", "One row per event");
     pair_ = fs->make<TTree>("pairs", "Any-pair fits in twoAcc events; event = entry in events");
     combo_ = fs->make<TTree>("combos", "Typed ordered fits (gen0 type a, gen1 type b); one row per existing combo; event = entry in events");
 #define E(x) evt_->Branch(#x, &x##_)
     E(run); E(lumi); E(event); E(nSig); E(twoAcc); E(nObj); E(nElig);
     E(sigIndex); E(sigQ); E(sigAcc); E(sigPt); E(sigEta); E(sigPhi); E(sigLxy); E(sigD0); E(sigProp); E(sigEta2); E(sigPhi2);
+    E(sigVx); E(sigVy); E(sigVz); E(sigBx); E(sigBy); E(sigBz);
     E(cObj); E(cType); E(cQ); E(cIdPass); E(cInEta); E(cProp); E(cEta2); E(cPhi2);
     E(matchComp); E(matchType); E(matchObj); E(matchDR);
     E(matchCompNoEta); E(matchTypeNoEta); E(matchObjNoEta);
     E(indObj); E(indObjNoEta);
     E(genDR); E(genMuMuPt); E(genMuMuPhi); E(genMetPt); E(genMetPhi); E(pfMetPt); E(pfMetPhi);
     E(bbStatus); E(bbChi2); E(bbNdof); E(bbProb); E(bbVx); E(bbVy); E(bbVz); E(bbLxyBS); E(bbMass);
-    E(bbRecoDR); E(bbRecoMuMuPt); E(bbRecoMuMuPhi);
+    E(bbRecoDR); E(bbRecoMuMuPt); E(bbRecoMuMuPhi); E(bbSigmaLxy); E(bbBx); E(bbBy); E(bbBz);
     E(hfN); E(hfTried); E(hfFirstIsBB); E(hfFirstStatus); E(hfStatus); E(hfTypeA); E(hfTypeB); E(hfChi2); E(hfNdof);
     E(hfProb); E(hfVx); E(hfVy); E(hfVz); E(hfLxyBS); E(hfMass); E(hfRecoDR); E(hfRecoMuMuPt); E(hfRecoMuMuPhi);
     E(pfMuN); E(pfMuPx); E(pfMuPy); E(nChi); E(chiOK); E(chiPx); E(chiPy);
@@ -311,6 +334,9 @@ public:
       g.pt = p.pt(); g.eta = p.eta(); g.phi = p.phi(); g.px = p.px(); g.py = p.py();
       g.lxy = p.vertex().rho();
       g.d0 = std::abs(p.vx() * std::sin(p.phi()) - p.vy() * std::cos(p.phi()));
+      g.vx = p.vx(); g.vy = p.vy(); g.vz = p.vz();
+      const auto gb = field->inTesla(GlobalPoint(p.vx(), p.vy(), p.vz()));
+      g.bx = gb.x(); g.by = gb.y(); g.bz = gb.z();
       g.accepted = std::abs(p.eta()) < 2.4 && g.lxy >= 0 && g.lxy < 740 && std::abs(p.vz()) < 960;
       const FreeTrajectoryState start(GlobalPoint(p.vx(), p.vy(), p.vz()), GlobalVector(p.px(), p.py(), p.pz()),
                                       TrackCharge(p.charge()), field);
@@ -322,6 +348,8 @@ public:
       sigIndex_.push_back(g.index); sigQ_.push_back(g.q); sigAcc_.push_back(g.accepted); sigPt_.push_back(g.pt);
       sigEta_.push_back(g.eta); sigPhi_.push_back(g.phi); sigLxy_.push_back(g.lxy); sigD0_.push_back(g.d0);
       sigProp_.push_back(g.st2.ok); sigEta2_.push_back(g.st2.eta); sigPhi2_.push_back(g.st2.phi);
+      sigVx_.push_back(g.vx); sigVy_.push_back(g.vy); sigVz_.push_back(g.vz);
+      sigBx_.push_back(g.bx); sigBy_.push_back(g.by); sigBz_.push_back(g.bz);
     }
     twoAcc_ = sig.size() == 2 && sig[0].q * sig[1].q < 0 && sig[0].accepted && sig[1].accepted;
 
@@ -439,7 +467,7 @@ public:
           if (shared)
             f.status = kShared;
           else
-            f = fitLegs(ca.ref, cb.ref, ttb, kvf, bs);
+            f = fitLegs(ca.ref, cb.ref, ttb, kvf, bs, *field);
           const double rx = ca.ref->px() + cb.ref->px(), ry = ca.ref->py() + cb.ref->py();
           kEvent_ = eventRow; kTypeA_ = a; kTypeB_ = b; kStatus_ = f.status; kChi2_ = f.chi2; kNdof_ = f.ndof;
           kProb_ = f.prob; kVx_ = f.vx; kVy_ = f.vy; kVz_ = f.vz; kLxyBS_ = f.lxyBS; kMass_ = f.mass;
@@ -462,10 +490,11 @@ public:
         if (shared)
           f.status = kShared;
         else
-          f = fitLegs(a.ref, b.ref, ttb, kvf, bs);
+          f = fitLegs(a.ref, b.ref, ttb, kvf, bs, *field);
         bbStatus_ = f.status;
         bbChi2_ = f.chi2; bbNdof_ = f.ndof; bbProb_ = f.prob; bbVx_ = f.vx; bbVy_ = f.vy; bbVz_ = f.vz;
         bbLxyBS_ = f.lxyBS; bbMass_ = f.mass;
+        bbSigmaLxy_ = f.sigmaLxy; bbBx_ = f.bx; bbBy_ = f.by; bbBz_ = f.bz;
         bbRecoDR_ = reco::deltaR(a.ref->eta(), a.ref->phi(), b.ref->eta(), b.ref->phi());
         const double rx = a.ref->px() + b.ref->px(), ry = a.ref->py() + b.ref->py();
         bbRecoMuMuPt_ = std::hypot(rx, ry);
@@ -496,7 +525,7 @@ public:
           } else if (shared) {  // sharing is a property of the two objects, the same for every pair
             h.status = kShared;
           } else {
-            h = fitLegs(comps[c0].ref, comps[c1].ref, ttb, kvf, bs);
+            h = fitLegs(comps[c0].ref, comps[c1].ref, ttb, kvf, bs, *field);
           }
           ++hfTried_;
           if (i == 0) hfFirstStatus_ = h.status;
@@ -531,7 +560,7 @@ public:
           if (shared)
             f.status = kShared;
           else
-            f = fitLegs(a.ref, b.ref, ttb, kvf, bs);
+            f = fitLegs(a.ref, b.ref, ttb, kvf, bs, *field);
           ++anyNPairs_;
           if (f.status == kValid) ++anyNValid_;
           const double rx = a.ref->px() + b.ref->px(), ry = a.ref->py() + b.ref->py();
@@ -557,12 +586,13 @@ private:
     for (auto* v : {&sigIndex_, &sigQ_, &sigAcc_, &sigProp_, &cObj_, &cType_, &cQ_, &cIdPass_, &cInEta_, &cProp_,
                     &matchComp_, &matchType_, &matchObj_, &indObj_, &indObjNoEta_, &matchCompNoEta_, &matchTypeNoEta_, &matchObjNoEta_})
       v->clear();
-    for (auto* v : {&sigPt_, &sigEta_, &sigPhi_, &sigLxy_, &sigD0_, &sigEta2_, &sigPhi2_, &cEta2_, &cPhi2_, &matchDR_})
+    for (auto* v : {&sigPt_, &sigEta_, &sigPhi_, &sigLxy_, &sigD0_, &sigEta2_, &sigPhi2_, &cEta2_, &cPhi2_, &matchDR_,
+                    &sigVx_, &sigVy_, &sigVz_, &sigBx_, &sigBy_, &sigBz_})
       v->clear();
     genDR_ = genMuMuPt_ = genMuMuPhi_ = genMetPt_ = genMetPhi_ = pfMetPt_ = pfMetPhi_ = -999.f;
     bbStatus_ = kNotFitted;
     bbChi2_ = bbNdof_ = bbProb_ = bbVx_ = bbVy_ = bbVz_ = bbLxyBS_ = bbMass_ = bbRecoDR_ = bbRecoMuMuPt_ =
-        bbRecoMuMuPhi_ = -999.f;
+        bbRecoMuMuPhi_ = bbSigmaLxy_ = bbBx_ = bbBy_ = bbBz_ = -999.f;
     anyNPairs_ = anyNValid_ = 0;
     hfN_ = hfTried_ = 0; hfFirstIsBB_ = false; hfFirstStatus_ = hfStatus_ = kNotFitted; hfTypeA_ = hfTypeB_ = -1;
     hfChi2_ = hfNdof_ = hfProb_ = hfVx_ = hfVy_ = hfVz_ = hfLxyBS_ = hfMass_ = hfRecoDR_ = hfRecoMuMuPt_ = hfRecoMuMuPhi_ =
@@ -590,6 +620,7 @@ private:
   bool twoAcc_ = false;
   std::vector<int> sigIndex_, sigQ_, sigAcc_, sigProp_, cObj_, cType_, cQ_, cIdPass_, cInEta_, cProp_;
   std::vector<float> sigPt_, sigEta_, sigPhi_, sigLxy_, sigD0_, sigEta2_, sigPhi2_, cEta2_, cPhi2_;
+  std::vector<float> sigVx_, sigVy_, sigVz_, sigBx_, sigBy_, sigBz_;
   std::vector<int> indObj_, indObjNoEta_;
   int kEvent_ = 0, kTypeA_ = 0, kTypeB_ = 0, kStatus_ = 0;
   float kChi2_ = 0, kNdof_ = 0, kProb_ = 0, kVx_ = 0, kVy_ = 0, kVz_ = 0, kLxyBS_ = 0, kMass_ = 0, kRecoDR_ = 0,
@@ -600,7 +631,8 @@ private:
         pfMetPt_ = -999, pfMetPhi_ = -999;
   int bbStatus_ = 0, anyNPairs_ = 0, anyNValid_ = 0;
   float bbChi2_ = -999, bbNdof_ = -999, bbProb_ = -999, bbVx_ = -999, bbVy_ = -999, bbVz_ = -999,
-        bbLxyBS_ = -999, bbMass_ = -999, bbRecoDR_ = -999, bbRecoMuMuPt_ = -999, bbRecoMuMuPhi_ = -999;
+        bbLxyBS_ = -999, bbMass_ = -999, bbRecoDR_ = -999, bbRecoMuMuPt_ = -999, bbRecoMuMuPhi_ = -999,
+        bbSigmaLxy_ = -999, bbBx_ = -999, bbBy_ = -999, bbBz_ = -999;
   int hfN_ = 0, hfTried_ = 0, hfFirstStatus_ = 0, hfStatus_ = 0, hfTypeA_ = -1, hfTypeB_ = -1, pfMuN_ = 0, nChi_ = 0;
   bool hfFirstIsBB_ = false, chiOK_ = false;
   float hfChi2_ = -999, hfNdof_ = -999, hfProb_ = -999, hfVx_ = -999, hfVy_ = -999, hfVz_ = -999, hfLxyBS_ = -999,
