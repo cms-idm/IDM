@@ -43,7 +43,7 @@ process.preselectedVertexing = cms.EDAnalyzer("PreselectedVertexing",
     vertexDirections=cms.untracked.bool(options.vertexDirections),
     genParticles=cms.InputTag("prunedGenParticles"), muons=cms.InputTag("cleanedDisplacedMuons"),
     originalIndex=cms.InputTag("cleanedDisplacedMuons", "originalIndex"), beamspot=cms.InputTag("offlineBeamSpot"),
-    met=cms.InputTag("slimmedMETs"), genMet=cms.InputTag("genMetTrue"), packedCandidates=cms.InputTag("packedPFCandidates"),
+    met=cms.InputTag("slimmedMETs"), puppiMet=cms.InputTag("slimmedMETsPuppi"), genMet=cms.InputTag("genMetTrue"), packedCandidates=cms.InputTag("packedPFCandidates"),
     hierarchyOrder=cms.vint32([int(x) for x in options.hierarchyOrder.split(",")]), sample=cms.string(options.sample),
     revision=cms.string(options.revision), propagatorSt2=cms.PSet(
         useSimpleGeometry=cms.bool(True), useStation2=cms.bool(True), fallbackToME1=cms.bool(False),

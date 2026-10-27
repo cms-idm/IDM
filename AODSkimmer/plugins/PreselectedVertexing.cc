@@ -249,6 +249,7 @@ public:
         indices_(consumes<std::vector<int>>(ps.getParameter<edm::InputTag>("originalIndex"))),
         beamspot_(consumes<reco::BeamSpot>(ps.getParameter<edm::InputTag>("beamspot"))),
         met_(consumes<std::vector<pat::MET>>(ps.getParameter<edm::InputTag>("met"))),
+        puppiMet_(consumes<std::vector<pat::MET>>(ps.getParameter<edm::InputTag>("puppiMet"))),
         genMet_(consumes<std::vector<reco::GenMET>>(ps.getParameter<edm::InputTag>("genMet"))),
         packed_(consumes<std::vector<pat::PackedCandidate>>(ps.getParameter<edm::InputTag>("packedCandidates"))),
         field_(esConsumes()),
@@ -271,7 +272,7 @@ public:
       "Original hf tracks, no vertex constraint; SteppingHelixPropagatorAny to 3D PCA to fitted vertex. "
       "Vectors in gen-index order. hfVertexValid per leg: 0 failure,1 valid; empty if no valid hf fit. "
       "hfVertexStatus = SteppingHelixStateInfo::Result; hfVertexPath signed cm; hfVertexDistance 3D miss distance cm. "
-      "hfRefEta/Phi at stored original-track reference; hfVertexEta/Phi from propagated momentum; -999 on failure. "
+      "hfRefEta/Phi at stored original-track reference; hfVertexEta/Phi/Pt from propagated momentum; -999 on failure. "
       "Material/field settings are those of SteppingHelixPropagatorAny loaded by the cfg. No rematching or fallback on propagation failure."
       : "disabled");
     const char* typeName[3] = {"inner", "outer(DSA)", "global"};
@@ -286,6 +287,7 @@ public:
       "Pairs = all unordered pairs of distinct eligible-object best components (global>outer>inner) in twoAcc events. "
       "KalmanVertexFitter(refit), status 0 not fitted,1 shared,2 failed,3 valid. *NoEta = cross-check without reco-eta gate. "
       "Reco dR/pT from track reference-point momenta. dPhi = phi(MET)-phi(mumu) wrapped. "
+      "puppiMet* = slimmedMETsPuppi[0] corPt/corPhi(Type1); -999 if the collection is empty. "
       "hf* = hierarchy fallback: legs = eligible components of the two best-best matched objects that each pass the same-charge "
       "station-2 dR match to that gen; pairs ordered by (better leg rank, worse leg rank, gen0 leg rank), fitted in order until "
       "one is valid; hf fields describe the first valid pair, else the first pair; hfTypeA/B = gen0/gen1 leg types. "
@@ -305,13 +307,13 @@ public:
     E(matchComp); E(matchType); E(matchObj); E(matchDR);
     E(matchCompNoEta); E(matchTypeNoEta); E(matchObjNoEta);
     E(indObj); E(indObjNoEta);
-    E(genDR); E(genMuMuPt); E(genMuMuPhi); E(genMetPt); E(genMetPhi); E(pfMetPt); E(pfMetPhi);
+    E(genDR); E(genMuMuPt); E(genMuMuPhi); E(genMetPt); E(genMetPhi); E(pfMetPt); E(pfMetPhi); E(puppiMetPt); E(puppiMetPhi);
     E(bbStatus); E(bbChi2); E(bbNdof); E(bbProb); E(bbVx); E(bbVy); E(bbVz); E(bbLxyBS); E(bbMass);
     E(bbRecoDR); E(bbRecoMuMuPt); E(bbRecoMuMuPhi); E(bbSigmaLxy); E(bbBx); E(bbBy); E(bbBz);
     E(hfN); E(hfTried); E(hfFirstIsBB); E(hfFirstStatus); E(hfStatus); E(hfTypeA); E(hfTypeB); E(hfChi2); E(hfNdof);
     E(hfProb); E(hfVx); E(hfVy); E(hfVz); E(hfLxyBS); E(hfMass); E(hfRecoDR); E(hfRecoMuMuPt); E(hfRecoMuMuPhi);
     E(hfVertexValid); E(hfVertexStatus); E(hfVertexPath); E(hfVertexDistance);
-    E(hfRefEta); E(hfRefPhi); E(hfVertexEta); E(hfVertexPhi);
+    E(hfRefEta); E(hfRefPhi); E(hfVertexEta); E(hfVertexPhi); E(hfVertexPt);
     E(pfMuN); E(pfMuPx); E(pfMuPy); E(nChi); E(chiOK); E(chiPx); E(chiPy);
     E(anyNPairs); E(anyNValid);
 #undef E
@@ -409,6 +411,11 @@ public:
     if (!mets.empty()) {
       pfMetPt_ = mets[0].corPt(pat::MET::Type1);
       pfMetPhi_ = mets[0].corPhi(pat::MET::Type1);
+    }
+    const auto& puppiMets = ev.get(puppiMet_);
+    if (!puppiMets.empty()) {
+      puppiMetPt_ = puppiMets[0].corPt(pat::MET::Type1);
+      puppiMetPhi_ = puppiMets[0].corPhi(pat::MET::Type1);
     }
     const auto& gmets = ev.get(genMet_);
     if (!gmets.empty()) {
@@ -573,6 +580,7 @@ public:
                 hfVertexDistance_.push_back(ok ? (end.position() - target).mag() : -999.f);
                 hfVertexEta_.push_back(ok ? momentum.eta() : -999.f);
                 hfVertexPhi_.push_back(ok ? static_cast<float>(momentum.phi()) : -999.f);
+                hfVertexPt_.push_back(ok ? momentum.perp() : -999.f);
               }
             }
           }
@@ -619,7 +627,7 @@ public:
 private:
   void reset() {
     hfVertexValid_.clear(); hfVertexStatus_.clear();
-    for (auto* v : {&hfVertexPath_, &hfVertexDistance_, &hfRefEta_, &hfRefPhi_, &hfVertexEta_, &hfVertexPhi_}) v->clear();
+    for (auto* v : {&hfVertexPath_, &hfVertexDistance_, &hfRefEta_, &hfRefPhi_, &hfVertexEta_, &hfVertexPhi_, &hfVertexPt_}) v->clear();
     nSig_ = 0; twoAcc_ = false; nObj_ = nElig_ = 0;
     for (auto* v : {&sigIndex_, &sigQ_, &sigAcc_, &sigProp_, &cObj_, &cType_, &cQ_, &cIdPass_, &cInEta_, &cProp_,
                     &matchComp_, &matchType_, &matchObj_, &indObj_, &indObjNoEta_, &matchCompNoEta_, &matchTypeNoEta_, &matchObjNoEta_})
@@ -627,7 +635,7 @@ private:
     for (auto* v : {&sigPt_, &sigEta_, &sigPhi_, &sigLxy_, &sigD0_, &sigEta2_, &sigPhi2_, &cEta2_, &cPhi2_, &matchDR_,
                     &sigVx_, &sigVy_, &sigVz_, &sigBx_, &sigBy_, &sigBz_})
       v->clear();
-    genDR_ = genMuMuPt_ = genMuMuPhi_ = genMetPt_ = genMetPhi_ = pfMetPt_ = pfMetPhi_ = -999.f;
+    genDR_ = genMuMuPt_ = genMuMuPhi_ = genMetPt_ = genMetPhi_ = pfMetPt_ = pfMetPhi_ = puppiMetPt_ = puppiMetPhi_ = -999.f;
     bbStatus_ = kNotFitted;
     bbChi2_ = bbNdof_ = bbProb_ = bbVx_ = bbVy_ = bbVz_ = bbLxyBS_ = bbMass_ = bbRecoDR_ = bbRecoMuMuPt_ =
         bbRecoMuMuPhi_ = bbSigmaLxy_ = bbBx_ = bbBy_ = bbBz_ = -999.f;
@@ -642,7 +650,7 @@ private:
   const edm::EDGetTokenT<std::vector<reco::Muon>> muons_;
   const edm::EDGetTokenT<std::vector<int>> indices_;
   const edm::EDGetTokenT<reco::BeamSpot> beamspot_;
-  const edm::EDGetTokenT<std::vector<pat::MET>> met_;
+  const edm::EDGetTokenT<std::vector<pat::MET>> met_, puppiMet_;
   const edm::EDGetTokenT<std::vector<reco::GenMET>> genMet_;
   const edm::EDGetTokenT<std::vector<pat::PackedCandidate>> packed_;
   const edm::ESGetToken<MagneticField, IdealMagneticFieldRecord> field_;
@@ -662,7 +670,7 @@ private:
   std::vector<float> sigPt_, sigEta_, sigPhi_, sigLxy_, sigD0_, sigEta2_, sigPhi2_, cEta2_, cPhi2_;
   std::vector<float> sigVx_, sigVy_, sigVz_, sigBx_, sigBy_, sigBz_;
   std::vector<int> hfVertexValid_, hfVertexStatus_;
-  std::vector<float> hfVertexPath_, hfVertexDistance_, hfRefEta_, hfRefPhi_, hfVertexEta_, hfVertexPhi_;
+  std::vector<float> hfVertexPath_, hfVertexDistance_, hfRefEta_, hfRefPhi_, hfVertexEta_, hfVertexPhi_, hfVertexPt_;
   std::vector<int> indObj_, indObjNoEta_;
   int kEvent_ = 0, kTypeA_ = 0, kTypeB_ = 0, kStatus_ = 0;
   float kChi2_ = 0, kNdof_ = 0, kProb_ = 0, kVx_ = 0, kVy_ = 0, kVz_ = 0, kLxyBS_ = 0, kMass_ = 0, kRecoDR_ = 0,
@@ -670,7 +678,7 @@ private:
   std::vector<int> matchComp_, matchType_, matchObj_, matchCompNoEta_, matchTypeNoEta_, matchObjNoEta_;
   std::vector<float> matchDR_;
   float genDR_ = -999, genMuMuPt_ = -999, genMuMuPhi_ = -999, genMetPt_ = -999, genMetPhi_ = -999,
-        pfMetPt_ = -999, pfMetPhi_ = -999;
+        pfMetPt_ = -999, pfMetPhi_ = -999, puppiMetPt_ = -999, puppiMetPhi_ = -999;
   int bbStatus_ = 0, anyNPairs_ = 0, anyNValid_ = 0;
   float bbChi2_ = -999, bbNdof_ = -999, bbProb_ = -999, bbVx_ = -999, bbVy_ = -999, bbVz_ = -999,
         bbLxyBS_ = -999, bbMass_ = -999, bbRecoDR_ = -999, bbRecoMuMuPt_ = -999, bbRecoMuMuPhi_ = -999,

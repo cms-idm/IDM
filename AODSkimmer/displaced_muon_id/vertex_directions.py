@@ -471,6 +471,174 @@ def plot_dr_cms(args):
     print("PLOTTED %d linear PNGs" % count + (" and %d log copies" % count if args.log else ""))
 
 
+def plot_dphi(args):
+    """|dphi(X, reco mumu)|, X = PF/PUPPI/gen MET, gen chi1chi1 pT; complete pairs with chi2/ndof and PCA dR cuts.
+
+    PyROOT, CMS style. Main mumu pT = sum of hf-leg pT at the 3D PCA to the fitted vertex (hfVertexPt/Phi);
+    cross-check (printed only) = hfRecoMuMuPhi at the track reference points. Raw, unweighted, one entry per pair.
+    Study: kb/studies/met-dimuon-dphi.md Part 3.
+    """
+    import awkward as ak
+    import ROOT
+    import uproot
+    ROOT.gROOT.SetBatch(True)
+    ROOT.gStyle.SetOptStat(0); ROOT.gStyle.SetOptTitle(0)
+    ROOT.gStyle.SetTextFont(42); ROOT.gStyle.SetLabelFont(42, "XYZ"); ROOT.gStyle.SetTitleFont(42, "XYZ")
+    ROOT.gStyle.SetPadTickX(1); ROOT.gStyle.SetPadTickY(1)
+    ROOT.TH1.AddDirectory(False)
+    ROOT.TGaxis.SetMaxDigits(6)
+    out = Path(args.plot_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    ids = ("run", "lumi", "event")
+    with uproot.open(args.output) as f:
+        ev = f["events"].arrays(["complete", "pair", "fallback", "reco_dr", *ids], library="np")
+    scalars = ("hfChi2", "hfNdof", "hfStatus", "hfRecoMuMuPhi", "pfMetPt", "pfMetPhi", "puppiMetPt", "puppiMetPhi",
+               "genMetPt", "genMetPhi", "chiOK", "nChi", "chiPx", "chiPy") + ids
+    vectors = ("hfVertexValid", "hfVertexPt", "hfVertexPhi")
+    parts = []
+    for path in sorted(Path(args.input_dir).glob("*.root")):
+        with uproot.open(path) as f:
+            a = f["preselectedVertexing/events"].arrays(list(scalars + vectors), library="ak")
+        c = {k: np.asarray(a[k]) for k in scalars}
+        fit = c["hfStatus"] == 3
+        for k in vectors:  # two legs for valid fits, empty otherwise (PreselectedVertexing)
+            if np.any(np.asarray(ak.num(a[k]))[fit] != 2) or np.any(np.asarray(ak.num(a[k]))[~fit] != 0):
+                raise RuntimeError("Unexpected %s length in %s" % (k, path.name))
+            c[k] = np.full((len(fit), 2), np.nan)
+            if np.any(fit):
+                c[k][fit] = ak.to_numpy(a[k][fit])
+        parts.append(c)
+    e = {k: np.concatenate([c[k] for c in parts]) for k in parts[0]}
+    if len(e["run"]) != len(ev["run"]) or any(np.any(e[k] != ev[k]) for k in ids):
+        raise RuntimeError("Input events do not align with the events tree")
+    complete = ev["complete"] == 1
+    if np.any(complete & ((e["hfStatus"] != 3) | ~(e["hfNdof"] > 0) | np.any(e["hfVertexValid"] != 1, axis=1))):
+        raise RuntimeError("Complete pair without a valid fit, ndof > 0 and two valid PCA states")
+    chi2ndof = e["hfChi2"] / np.where(e["hfNdof"] > 0, e["hfNdof"], 1)
+    sel = complete & (chi2ndof < args.max_chi2ndof) & (ev["reco_dr"] < args.max_dr)
+    if np.any(sel & ~np.all(e["hfVertexPt"] > 0, axis=1)):
+        raise RuntimeError("Selected pair with non-positive PCA pT")
+    pt, ph = e["hfVertexPt"], e["hfVertexPhi"]
+    mumu = {"pca": np.arctan2((pt * np.sin(ph)).sum(axis=1), (pt * np.cos(ph)).sum(axis=1)),
+            "ref": e["hfRecoMuMuPhi"]}
+    # Validity from flags, not finiteness: atan2/wrap of -999 sentinels give plausible angles.
+    xphi = {"pf": (e["pfMetPhi"], e["pfMetPt"] != -999), "puppi": (e["puppiMetPhi"], e["puppiMetPt"] != -999),
+            "gen": (e["genMetPhi"], e["genMetPt"] != -999),
+            "chi": (np.arctan2(e["chiPy"], e["chiPx"]), e["chiOK"].astype(bool))}
+    keys = ("pf", "puppi", "gen", "chi")
+    legend = dict(pf="PF p_{T}^{miss} (Type-1)", puppi="PUPPI p_{T}^{miss} (Type-1)", gen="Gen p_{T}^{miss}",
+                  chi="Gen #chi_{1}#chi_{1} p_{T}")
+    xtitle = dict(pf="|#Delta#phi(PF #vec{p}_{T}^{miss}, #vec{p}_{T}^{#mu#mu})|",
+                  puppi="|#Delta#phi(PUPPI #vec{p}_{T}^{miss}, #vec{p}_{T}^{#mu#mu})|",
+                  gen="|#Delta#phi(gen #vec{p}_{T}^{miss}, #vec{p}_{T}^{#mu#mu})|",
+                  chi="|#Delta#phi(gen #vec{p}_{T}^{#chi_{1}#chi_{1}}, #vec{p}_{T}^{#mu#mu})|",
+                  overlay="|#Delta#phi(X, #vec{p}_{T}^{#mu#mu})|")
+    color = dict(pf=ROOT.TColor.GetColor("#0072B2"), puppi=ROOT.TColor.GetColor("#E69F00"),
+                 gen=ROOT.TColor.GetColor("#009E73"), chi=ROOT.TColor.GetColor("#CC79A7"))
+    style = dict(pf=1, puppi=2, gen=1, chi=7)
+    edges = np.round(np.arange(64) * 0.05, 2)  # 0-3.15 in 0.05; |dphi| <= pi, so no overflow; 0.5 is an edge
+    oo = tuple(ORDERINGS).index("OO")
+    keep = []
+
+    def th1(name, x):
+        h = ROOT.TH1D(name, "", len(edges) - 1, array("d", edges))
+        values, _ = np.histogram(x, bins=edges)
+        values[-1] -= (x == edges[-1]).sum()
+        for i, v in enumerate(values, 1): h.SetBinContent(i, float(v))
+        h.SetBinContent(0, float((x < edges[0]).sum())); h.SetBinContent(len(edges), float((x >= edges[-1]).sum()))
+        h.SetEntries(len(x))
+        return h
+
+    def frame(h, xt, yt):
+        h.GetXaxis().SetTitle(xt); h.GetYaxis().SetTitle(yt)
+        for ax in (h.GetXaxis(), h.GetYaxis()):
+            ax.SetTitleSize(0.05); ax.SetLabelSize(0.042)
+        h.GetXaxis().SetTitleOffset(1.15); h.GetYaxis().SetTitleOffset(1.65)
+
+    def labels(c, lines):
+        c.cd()
+        t = ROOT.TLatex(); t.SetNDC(); keep.append(t)
+        t.SetTextFont(61); t.SetTextSize(0.05); t.SetTextAlign(11); t.DrawLatex(0.17, 0.94, "CMS")
+        t.SetTextFont(52); t.SetTextSize(0.038); t.DrawLatex(0.275, 0.94, "Simulation Private Work")
+        t.SetTextFont(42); t.SetTextAlign(31); t.DrawLatex(0.96, 0.94, "2022EE (13.6 TeV)")
+        t.SetTextSize(0.033); t.SetTextAlign(33)
+        for i, line in enumerate(lines): t.DrawLatex(0.93, 0.88 - 0.045 * i, line)
+
+    def cutline(top):
+        ln = ROOT.TLine(args.cut, 0, args.cut, top); keep.append(ln)
+        ln.SetLineColor(ROOT.kGray + 2); ln.SetLineStyle(3); ln.SetLineWidth(2)
+        ln.Draw()
+
+    def save(c, hists, name, scale, bottom):
+        top = max(h.GetBinContent(h.GetMaximumBin()) for h in hists)
+        hists[0].SetMinimum(0); hists[0].SetMaximum(scale * top)
+        cutline(scale * top)
+        c.Modified(); c.SaveAs(str(out / (name + ".png")))
+        if args.log:
+            c.SetLogy(1); hists[0].SetMinimum(bottom); hists[0].SetMaximum(top * 300)
+            keep[-1].SetY2(top * 300)
+            c.Modified(); c.SaveAs(str(out / (name + "_log.png"))); c.SetLogy(0)
+
+    def canvas(name):
+        c = ROOT.TCanvas(name, "", 800, 700)
+        c.SetLeftMargin(0.17); c.SetRightMargin(0.04); c.SetTopMargin(0.08); c.SetBottomMargin(0.13)
+        keep.append(c)
+        return c
+
+    cuts = "#chi^{2}/ndof < %g, #DeltaR_{PCA} < %g" % (args.max_chi2ndof, args.max_dr)
+    print("complete=%d selected(chi2/ndof<%g & reco_dr<%g)=%d" % (complete.sum(), args.max_chi2ndof, args.max_dr, sel.sum()))
+    count = 0
+    for tag, label in (("all", "All vertex types"), ("dsadsa", "DSA#minusDSA vertex")):
+        mask = sel & (ev["pair"] == oo) if tag == "dsadsa" else sel
+        n, nfb = int(mask.sum()), int((mask & (ev["fallback"] == 1)).sum())
+        print("%s N=%d fallback=%d" % (tag, n, nfb))
+        h, frac = {}, {}
+        for k in keys:
+            phi, ok = xphi[k]
+            bad = mask & ~ok
+            if k == "chi":
+                print("  chi excluded %d (nChi!=2: %d, wrong parents: %d)" %
+                      (bad.sum(), (bad & (e["nChi"] != 2)).sum(), (bad & (e["nChi"] == 2)).sum()))
+            elif bad.any():
+                raise RuntimeError("%s MET missing for %d selected pairs" % (k, bad.sum()))
+            for mm in ("pca", "ref"):
+                x = np.abs(wrap(phi[mask & ok] - mumu[mm][mask & ok]))
+                if not np.all(np.isfinite(x)):
+                    raise ValueError("Nonfinite dphi")
+                npass = int((x < args.cut).sum())
+                print("  %s mumu=%s |dphi|<%g: %d / %d = %.4f" % (k, mm, args.cut, npass, len(x), npass / len(x)))
+                if mm == "pca":
+                    h[k], frac[k] = th1("h_%s_%s" % (k, tag), x), (npass, len(x))
+        head = ["%s: %d pairs (%d via fit fallback)" % (label, n, nfb), cuts, "p_{T}^{#mu#mu} from tracks at PCA to vertex"]
+        for k in keys:
+            c = canvas("c_%s_%s" % (k, tag))
+            hk = h[k]; hk.SetLineColor(color[k]); hk.SetLineWidth(3)
+            frame(hk, xtitle[k], "Pairs / 0.05")
+            hk.Draw("hist")
+            extra = ["%s, N = %d" % (legend[k], frac[k][1]),
+                     "|#Delta#phi| < %g: %.1f%%" % (args.cut, 100.0 * frac[k][0] / frac[k][1])]
+            labels(c, head + extra)
+            save(c, [hk], "dphi_%s_%s" % (k, tag), 1.45, 0.5); count += 1
+        for norm in (False, True):
+            c = canvas("c_overlay_%s_%d" % (tag, norm))
+            hs = [h[k].Clone("o_%s_%s_%d" % (k, tag, norm)) for k in keys]
+            for k, hh in zip(keys, hs):
+                hh.SetLineColor(color[k]); hh.SetLineWidth(3); hh.SetLineStyle(style[k])
+                if norm: hh.Scale(1.0 / frac[k][1])
+            frame(hs[0], xtitle["overlay"], "Fraction of pairs / 0.05" if norm else "Pairs / 0.05")
+            hs[0].Draw("hist")
+            for hh in hs[1:]: hh.Draw("hist same")
+            leg = ROOT.TLegend(0.40, 0.50, 0.93, 0.70); keep.append(leg)
+            leg.SetBorderSize(0); leg.SetFillStyle(0); leg.SetTextSize(0.031)
+            leg.SetHeader("X  (fraction |#Delta#phi| < %g)" % args.cut)
+            for k, hh in zip(keys, hs):
+                leg.AddEntry(hh, "%s  (%.1f%%)" % (legend[k], 100.0 * frac[k][0] / frac[k][1]), "l")
+            leg.Draw()
+            labels(c, head + (["Each unit area"] if norm else []))
+            save(c, hs, "overlay_dphi_%s%s" % (tag, "_unitarea" if norm else ""), 1.9, 0.5 / n if norm else 0.5); count += 1
+    print("PLOTTED %d linear PNGs" % count + (" and %d log copies" % count if args.log else ""))
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -488,13 +656,19 @@ def main():
     c.add_argument("--cms", action="store_true", help="PyROOT, CMS style")
     c.add_argument("--max-chi2ndof", type=float, help="--cms only: keep pairs with hf vertex chi2/ndof < this")
     c.add_argument("--input-dir", help="per-sample inputs (needed for --max-chi2ndof)")
+    d = sub.add_parser("plot-dphi", help="|dphi(MET or chi1chi1, reco mumu at PCA)|, CMS style; all and DSA-DSA")
+    d.add_argument("--output", required=True, help="analyze output (events tree)")
+    d.add_argument("--input-dir", required=True, help="per-sample inputs of the same run (MET, chi, PCA pT branches)")
+    d.add_argument("--plot-dir", required=True); d.add_argument("--log", action="store_true")
+    d.add_argument("--max-chi2ndof", type=float, default=4.0); d.add_argument("--max-dr", type=float, default=0.9)
+    d.add_argument("--cut", type=float, default=0.5, help="|dphi| threshold for the printed fractions")
     args = p.parse_args()
     if args.cmd == "plot-dr" and args.max_chi2ndof is not None and not (args.cms and args.input_dir):
         p.error("--max-chi2ndof needs --cms and --input-dir")
     if args.cmd == "plot-dr" and args.cms:
         plot_dr_cms(args)
     else:
-        {"analyze": analyze, "plot": plot, "plot-dr": plot_dr}[args.cmd](args)
+        {"analyze": analyze, "plot": plot, "plot-dr": plot_dr, "plot-dphi": plot_dphi}[args.cmd](args)
 
 
 if __name__ == "__main__":
