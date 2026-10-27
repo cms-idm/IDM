@@ -189,6 +189,7 @@ def plot(args):
     ROOT.gStyle.SetOptStat(0); ROOT.gStyle.SetOptTitle(0)
     ROOT.gStyle.SetTextFont(42); ROOT.gStyle.SetLabelFont(42, "XYZ"); ROOT.gStyle.SetTitleFont(42, "XYZ")
     ROOT.gStyle.SetPadTickX(1); ROOT.gStyle.SetPadTickY(1)
+    ROOT.gStyle.SetEndErrorSize(0)
     ROOT.TH1.AddDirectory(False)
     ROOT.TGaxis.SetMaxDigits(6)
     out = Path(args.plot_dir)
@@ -199,11 +200,12 @@ def plot(args):
     color = lambda i: ROOT.TColor.GetColor(palette[i % len(palette)])
     style = lambda i: 1 + (i // len(palette))
     keep = []
-    count = [0]
+    count = [0, 0]
+    BOTTOM, TOP = 0.13, 0.92  # pad frame in NDC
 
     def canvas(name):
         c = ROOT.TCanvas(name, "", 800, 700)
-        c.SetLeftMargin(0.15); c.SetRightMargin(0.04); c.SetTopMargin(0.08); c.SetBottomMargin(0.13)
+        c.SetLeftMargin(0.17); c.SetRightMargin(0.04); c.SetTopMargin(1 - TOP); c.SetBottomMargin(BOTTOM)
         keep.append(c)
         return c
 
@@ -211,30 +213,40 @@ def plot(args):
         h.GetXaxis().SetTitle(xt); h.GetYaxis().SetTitle(yt)
         for ax in (h.GetXaxis(), h.GetYaxis()):
             ax.SetTitleSize(0.05); ax.SetLabelSize(0.042)
-        h.GetXaxis().SetTitleOffset(1.15); h.GetYaxis().SetTitleOffset(1.45)
+        h.GetXaxis().SetTitleOffset(1.15); h.GetYaxis().SetTitleOffset(1.65)
 
     def labels(c, lines):
         c.cd()
         t = ROOT.TLatex(); t.SetNDC(); keep.append(t)
-        t.SetTextFont(61); t.SetTextSize(0.05); t.SetTextAlign(11); t.DrawLatex(0.15, 0.94, "CMS")
-        t.SetTextFont(52); t.SetTextSize(0.038); t.DrawLatex(0.255, 0.94, "Simulation Private Work")
+        t.SetTextFont(61); t.SetTextSize(0.05); t.SetTextAlign(11); t.DrawLatex(0.17, 0.94, "CMS")
+        t.SetTextFont(52); t.SetTextSize(0.038); t.DrawLatex(0.275, 0.94, "Simulation Private Work")
         t.SetTextFont(42); t.SetTextAlign(31); t.DrawLatex(0.96, 0.94, "2022EE (13.6 TeV)")
         t.SetTextSize(0.032); t.SetTextAlign(13)
-        for i, line in enumerate(lines): t.DrawLatex(0.19, 0.88 - 0.042 * i, line)
+        for i, line in enumerate(lines): t.DrawLatex(0.21, 0.895 - 0.042 * i, line)
 
-    def legend(n):
-        leg = ROOT.TLegend(0.55, max(0.30, 0.88 - 0.038 * n), 0.94, 0.88); keep.append(leg)
-        leg.SetBorderSize(0); leg.SetFillStyle(0); leg.SetTextSize(0.028 if n > 8 else 0.033)
-        if n > 9: leg.SetNColumns(2)
-        return leg
+    # Legend in two columns under the text lines; returns the legend and its bottom edge (NDC).
+    def legend(n, nlines):
+        rows = (n + 1) // 2
+        size = 0.030 if n <= 4 else 0.024
+        top = 0.895 - 0.042 * nlines - 0.01
+        bottom = top - rows * (size * 1.25)
+        leg = ROOT.TLegend(0.20, bottom, 0.95, top); keep.append(leg)
+        leg.SetBorderSize(0); leg.SetFillStyle(0); leg.SetTextSize(size); leg.SetNColumns(2)
+        return leg, bottom
 
-    def save(c, fr, name, log_bottom=None):
+    # Frame maximum so that data up to `hi` stays below the legend (linear axis starting at `lo`).
+    def headroom(lo, hi, bottom):
+        return lo + (hi - lo) * (TOP - BOTTOM) / max(bottom - BOTTOM - 0.02, 0.1)
+
+    def save(c, fr, name, log=None):
         c.Modified(); c.SaveAs(str(out / (name + ".png"))); count[0] += 1
-        if args.log and log_bottom is not None:
-            top = fr.GetMaximum()
-            c.SetLogy(1); fr.SetMinimum(log_bottom); fr.SetMaximum(top * 30)
-            c.Modified(); c.SaveAs(str(out / (name + "_log.png"))); c.SetLogy(0)
-            fr.SetMinimum(0); fr.SetMaximum(top)
+        if args.log and log is not None:
+            lo, hi, bottom = log  # data range and legend bottom; same headroom in log10
+            lmax = np.log10(lo) + (np.log10(hi) - np.log10(lo)) * (TOP - BOTTOM) / max(bottom - BOTTOM - 0.02, 0.1)
+            old = (fr.GetMinimum(), fr.GetMaximum())
+            c.SetLogy(1); fr.SetMinimum(lo); fr.SetMaximum(10 ** lmax)
+            c.Modified(); c.SaveAs(str(out / (name + "_log.png"))); c.SetLogy(0); count[1] += 1
+            fr.SetMinimum(old[0]); fr.SetMaximum(old[1])
 
     def get(group, name):
         h = f.Get("%s/%s" % (group, name))
@@ -247,16 +259,15 @@ def plot(args):
     ctaus = sorted({"ctau-" + s.rsplit("_ctau-", 1)[1] for s in names}, key=lambda s: float(s[5:].replace("p", ".")))
     pretty = lambda g: (g.split("/")[1].replace("Mchi-", "m_{#chi} = ").replace("_dMchi-", ", #Deltam = ").replace("p", ".") + " GeV"
                         if g.startswith("mass/") else "c#tau = " + g.split("-")[1].replace("p", ".") + " mm")
-    figures = [("overall", "overall", [("overall", tag, label) for tag, label, _ in TYPES], "Matched legs, all samples")]
+    figures = [("overall", [("overall", tag, label) for tag, label, _ in TYPES], "Matched legs, all samples")]
     for tag, label, _ in TYPES:
-        figures.append(("ctau_" + tag, "c#tau overlay", [("ctau/" + c, tag, pretty("ctau/" + c)) for c in ctaus],
+        figures.append(("ctau_" + tag, [("ctau/" + c, tag, pretty("ctau/" + c)) for c in ctaus],
                         label + " legs, pooled over masses"))
-        figures.append(("mass_" + tag, "mass overlay", [("mass/" + m, tag, pretty("mass/" + m)) for m in masses],
+        figures.append(("mass_" + tag, [("mass/" + m, tag, pretty("mass/" + m)) for m in masses],
                         label + " legs, pooled over c#tau"))
 
-    tree = f.Get("legs")
     sample_of = {}
-    for g in [s for fig in figures for (s, _, _) in fig[2]]:
+    for g in [s for fig in figures for (s, _, _) in fig[1]]:
         if g == "overall":
             sample_of[g] = None
         else:
@@ -264,41 +275,48 @@ def plot(args):
             sample_of[g] = [i for i, s in enumerate(names)
                             if (s.rsplit("_ctau-", 1)[0] == key if g.startswith("mass/") else "ctau-" + s.rsplit("_ctau-", 1)[1] == key)]
     cols = {k: np.asarray(v) for k, v in
-            ROOT.RDataFrame(tree).AsNumpy(["sample", "type", "pfMatched", "d0", "lxy", "pt", "r"]).items()}
+            ROOT.RDataFrame(f.Get("legs")).AsNumpy(["sample", "type", "hasPF", "pfMatched", "d0", "lxy", "pt", "dr", "r"]).items()}
     type_code = {tag: t for tag, _, t in TYPES}
 
-    for fname, kind, series, head in figures:
+    def leg_mask(g, tag):
+        m = np.ones(len(cols["type"]), bool)
+        if sample_of[g] is not None: m &= np.isin(cols["sample"], sample_of[g])
+        if type_code[tag] is not None: m &= cols["type"] == type_code[tag]
+        return m
+
+    def style_graph(gr, i):
+        gr.SetLineColor(color(i)); gr.SetMarkerColor(color(i)); gr.SetLineStyle(style(i))
+        gr.SetMarkerStyle(20 + i % 4); gr.SetMarkerSize(0.8); gr.SetLineWidth(2)
+
+    for fname, series, head in figures:
+        out_note = "Legs beyond the x range not shown"
         # Fractions vs x: PF-match among matched legs; same sign among PF-matched legs.
         for var in X_EDGES:
             for metric, num, den, ytitle in (("pfmatch", "pf", "den", "Fraction with a PF muon within #DeltaR < 0.2"),
                                              ("samesign", "ss", "pf", "Same-sign fraction of PF-matched legs")):
                 c = canvas("c_%s_%s_%s" % (fname, metric, var))
                 fr = ROOT.TH1D("fr_%s_%s_%s" % (fname, metric, var), "", 1, X_EDGES[var][0], X_EDGES[var][-1]); keep.append(fr)
-                fr.SetMinimum(0); fr.SetMaximum(1.45 if len(series) <= 4 else 1.9)
+                lines = [head, out_note]
+                leg, bottom = legend(len(series), len(lines))
+                fr.SetMinimum(0); fr.SetMaximum(headroom(0, 1.05, bottom))
                 frame(fr, X_TITLES[var], ytitle); fr.Draw("axis")
-                leg = legend(len(series))
                 for i, (g, tag, label) in enumerate(series):
                     p, d = get(g, "%s_%s_%s" % (num, var, tag)), get(g, "%s_%s_%s" % (den, var, tag))
-                    if d.Integral(0, d.GetNbinsX() + 1) == 0:
+                    total = int(d.Integral(0, d.GetNbinsX() + 1))
+                    if total == 0:
                         continue
                     eff = ROOT.TEfficiency(p, d); keep.append(eff)
                     gr = eff.CreateGraph(); keep.append(gr)
-                    gr.SetLineColor(color(i)); gr.SetMarkerColor(color(i)); gr.SetLineStyle(style(i))
-                    gr.SetMarkerStyle(20 + i % 4); gr.SetMarkerSize(0.8); gr.SetLineWidth(2)
-                    gr.Draw("PZ same")
-                    over = (int(d.GetBinContent(d.GetNbinsX() + 1)))
-                    leg.AddEntry(gr, "%s (%d legs%s)" % (label, d.Integral(0, d.GetNbinsX() + 1),
-                                                       ", %d overflow" % over if over and len(series) <= 4 else ""), "lp")
+                    style_graph(gr, i); gr.Draw("PZ same")
+                    leg.AddEntry(gr, "%s (%d)" % (label, total), "lp")
                 leg.Draw()
-                labels(c, [head])
+                labels(c, lines)
                 save(c, fr, "%s_%s_vs_%s" % (fname, metric, var))
-        # Median r vs x, q16-q84 band as error bars, bins with >= MIN_MEDIAN PF-matched legs.
+        # Median r vs x, 16th-84th percentile bars, bins with >= MIN_MEDIAN PF-matched legs.
         for var, edges in X_EDGES.items():
             allpts = []
             for i, (g, tag, label) in enumerate(series):
-                m = (cols["pfMatched"] == 1) & np.isfinite(cols["r"])
-                if sample_of[g] is not None: m &= np.isin(cols["sample"], sample_of[g])
-                if type_code[tag] is not None: m &= cols["type"] == type_code[tag]
+                m = leg_mask(g, tag) & (cols["pfMatched"] == 1) & np.isfinite(cols["r"])
                 pts = []
                 for lo, hi in zip(edges[:-1], edges[1:]):
                     v = cols["r"][m & (cols[var] >= lo) & (cols[var] < hi)]
@@ -309,59 +327,68 @@ def plot(args):
             lows = [p[1] - p[2] for _, _, _, pts in allpts for p in pts] or [-0.5]
             highs = [p[1] + p[3] for _, _, _, pts in allpts for p in pts] or [0.5]
             ylo, yhi = min(min(lows), 0.0), max(max(highs), 0.0)
-            span = max(yhi - ylo, 0.1)
+            ylo -= 0.05 * max(yhi - ylo, 0.1)
+            lines = [head, "Bars: 16th#minus84th percentile; " + out_note]
             c = canvas("c_%s_rmed_%s" % (fname, var))
             fr = ROOT.TH1D("frm_%s_%s" % (fname, var), "", 1, edges[0], edges[-1]); keep.append(fr)
-            # Room above the data for the labels and legend (taller legend for many series).
-            fr.SetMinimum(ylo - 0.08 * span); fr.SetMaximum(yhi + span * (0.8 if len(series) <= 4 else 1.4))
+            leg, bottom = legend(len(series), len(lines))
+            fr.SetMinimum(ylo); fr.SetMaximum(headroom(ylo, yhi, bottom))
             frame(fr, X_TITLES[var], "Median (p_{T}^{leg} #minus p_{T}^{PF}) / p_{T}^{leg}"); fr.Draw("axis")
             zero = ROOT.TLine(edges[0], 0, edges[-1], 0); zero.SetLineStyle(3); zero.SetLineColor(ROOT.kGray + 2); zero.Draw(); keep.append(zero)
-            leg = legend(len(series))
             for i, label, nlegs, pts in allpts:
                 if not pts:
                     continue
                 gr = ROOT.TGraphAsymmErrors(len(pts)); keep.append(gr)
                 for j, (xc, q50, dlo, dhi) in enumerate(pts):
                     gr.SetPoint(j, xc, q50); gr.SetPointError(j, 0, 0, dlo, dhi)
-                gr.SetLineColor(color(i)); gr.SetMarkerColor(color(i)); gr.SetLineStyle(style(i))
-                gr.SetMarkerStyle(20 + i % 4); gr.SetMarkerSize(0.8); gr.SetLineWidth(2)
-                gr.Draw("PZ same")
-                leg.AddEntry(gr, "%s (%d legs)" % (label, nlegs), "lp")
+                style_graph(gr, i); gr.Draw("PZ same")
+                leg.AddEntry(gr, "%s (%d)" % (label, nlegs), "lp")
             leg.Draw()
-            labels(c, [head, "Bars: 16th#minus84th percentile"])
+            labels(c, lines)
             save(c, fr, "%s_rmedian_vs_%s" % (fname, var))
-        # Distributions: nearest-PF dR (legs with a PF muon) and r (PF-matched legs); unnormalized and unit area.
-        for dist in ("dr", "r"):
+        # Distributions from the exact per-leg values: wide and zoomed views, unnormalized and unit area.
+        for dist, view, edges in (("dr", "", np.round(np.arange(0, 4.001, 0.04), 2)),
+                                  ("dr", "_zoom", np.round(np.arange(0, 0.02001, 0.0002), 4)),
+                                  ("r", "", DIST_EDGES["r"]),
+                                  ("r", "_zoom", np.round(np.arange(-0.05, 0.05001, 0.001), 3))):
             for norm in (False, True):
-                c = canvas("c_%s_%s_%d" % (fname, dist, norm))
+                c = canvas("c_%s_%s%s_%d" % (fname, dist, view, norm))
                 hs = []
                 for i, (g, tag, label) in enumerate(series):
-                    h = get(g, "%s_%s" % (dist, tag)).Clone("h_%s_%s_%s_%d_%d" % (fname, dist, tag, i, norm)); keep.append(h)
-                    tot = h.Integral(0, h.GetNbinsX() + 1)
-                    if tot == 0:
+                    sel = leg_mask(g, tag) & ((cols["hasPF"] == 1) if dist == "dr" else (cols["pfMatched"] == 1) & np.isfinite(cols["r"]))
+                    v = cols[dist][sel]
+                    if len(v) == 0:
                         continue
-                    if norm: h.Scale(1.0 / tot)  # unit area including flow bins
+                    h = ROOT.TH1D("h_%s_%s%s_%s_%d_%d" % (fname, dist, view, tag, i, norm), "", len(edges) - 1, array("d", edges))
+                    h.Sumw2()
+                    for b, n in enumerate(flowcounts(v, edges)):
+                        h.SetBinContent(b, float(n)); h.SetBinError(b, float(np.sqrt(n)))
+                    if norm: h.Scale(1.0 / len(v))  # unit area including flow bins
                     h.SetLineColor(color(i)); h.SetLineStyle(style(i)); h.SetLineWidth(2)
-                    hs.append((h, label, tot))
+                    keep.append(h); hs.append((h, label, len(v)))
                 if not hs:
                     continue
+                flow = "#DeltaR #geq %g" % edges[-1] if dist == "dr" else "outside [%g, %g]" % (edges[0], edges[-1])
+                lines = [head, ("Unit area incl. %s" if norm else "Not drawn: %s") % flow]
+                leg, bottom = legend(len(hs), len(lines))
                 top = max(h.GetBinContent(h.GetMaximumBin()) for h, _, _ in hs)
+                top = top if top > 0 else 1.0  # everything in flow bins: keep a drawable frame
+                low = min([h.GetBinContent(b) for h, _, _ in hs for b in range(1, h.GetNbinsX() + 1) if h.GetBinContent(b) > 0]
+                          or [top * 1e-3])
                 fr = hs[0][0]
-                frame(fr, DIST_TITLES[dist], ("Fraction of legs / %g" if norm else "Legs / %g") % (fr.GetBinWidth(1)))
-                fr.SetMinimum(0); fr.SetMaximum(top * (1.5 if len(hs) <= 4 else 2.0))
+                width = edges[1] - edges[0]
+                frame(fr, DIST_TITLES[dist], ("Fraction of legs / %g" if norm else "Legs / %g") % width)
+                fr.SetMinimum(0); fr.SetMaximum(headroom(0, top, bottom))
                 fr.Draw("hist")
                 for h, _, _ in hs[1:]: h.Draw("hist same")
-                leg = legend(len(hs))
                 for h, label, tot in hs:
                     leg.AddEntry(h, "%s (%d)" % (label, tot), "l")
                 leg.Draw()
-                if dist == "dr":
-                    ln = ROOT.TLine(0.2, 0, 0.2, fr.GetMaximum()); ln.SetLineStyle(3); ln.SetLineColor(ROOT.kGray + 2); ln.Draw(); keep.append(ln)
-                flow = "overflow #geq 1" if dist == "dr" else "under/overflow outside [#minus1, 1]"
-                labels(c, [head, ("Unit area incl. %s" if norm else "Not drawn: %s") % flow])
-                save(c, fr, "%s_%s%s" % (fname, dist, "_unitarea" if norm else ""),
-                     log_bottom=(0.5 / min(t for _, _, t in hs)) if norm else 0.5)
-    print("PLOTTED %d linear PNGs" % count[0] + (" plus log copies of the distributions" if args.log else ""))
+                if dist == "dr" and edges[-1] > 0.2:
+                    ln = ROOT.TLine(0.2, 0, 0.2, headroom(0, top, bottom)); ln.SetLineStyle(3); ln.SetLineColor(ROOT.kGray + 2); ln.Draw(); keep.append(ln)
+                labels(c, lines)
+                save(c, fr, "%s_%s%s%s" % (fname, dist, view, "_unitarea" if norm else ""), log=(0.5 * low, top, bottom))
+    print("PLOTTED %d linear PNGs and %d log copies (distributions only)" % tuple(count))
 
 
 def main():
@@ -373,7 +400,7 @@ def main():
     a.add_argument("--expected-samples", type=int, default=72); a.add_argument("--expected-events", type=int, default=720000)
     b = sub.add_parser("plot")
     b.add_argument("--output", required=True); b.add_argument("--plot-dir", required=True)
-    b.add_argument("--log", action="store_true", help="log copies of the distributions (fractions stay linear)")
+    b.add_argument("--log", action="store_true", help="log copies of the distributions (fractions and medians stay linear)")
     args = p.parse_args()
     {"analyze": analyze, "plot": plot}[args.cmd](args)
 
