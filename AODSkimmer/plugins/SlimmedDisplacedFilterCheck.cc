@@ -4,7 +4,8 @@
 // slimmedDisplacedMuons, in raw order. Partner: equal charge, muon type flags (global/tracker/standalone), component
 // presence, and exactly equal pT/eta/phi/charge of the inner, outer and global tracks (PAT embeds exact copies), plus
 // equal outer-track DSA-ID inputs (valid CSC/DT hits, normalized chi2, ptError). Every slimmed muon must have exactly
-// one raw partner, no raw muon may be claimed twice, and partners must be in increasing raw index in
+// one raw partner (or belong to a group of k identical slimmed muons with the same k identical raw candidates), no raw
+// muon may be claimed twice, and partners must be in increasing raw index in
 // originalObjectRef-key order (the production filter keeps raw order); violations are counted per event.
 // Diagnostic only: filterCode per raw muon replicates CMSSW_13_0_13 DisplacedMuonFilterProducer cuts that can be
 // evaluated on MINIAOD (0 passes; 1 STA+inner both pT < min; 2 STA-only pT < minPtSTA; 3 STA-only < minMatches valid
@@ -62,26 +63,42 @@ public:
     for (unsigned int i = 0; i < raw.size(); ++i)
       filterCode_[i] = code(raw[i]);
 
-    // Exact partner of each slimmed muon among the raw muons.
+    // Exact partners of each slimmed muon among the raw muons. Raw displacedMuons can contain identical copies (same
+    // TrackRefs); when k slimmed muons share the same k raw candidates, all k are kept, paired in key/raw order.
     std::vector<bool> kept(raw.size(), false);
     std::vector<std::pair<unsigned int, int>> keyToRaw;  // (originalObjectRef key, raw index)
-    for (const pat::Muon& s : slimmed) {
-      int partner = -1, n = 0;
+    std::vector<std::vector<unsigned int>> cand(slimmed.size());
+    for (unsigned int j = 0; j < slimmed.size(); ++j)
       for (unsigned int i = 0; i < raw.size(); ++i)
-        if (sameMuon(raw[i], s)) {
-          partner = i;
-          ++n;
-        }
-      if (n == 0) {
+        if (sameMuon(raw[i], slimmed[j]))
+          cand[j].push_back(i);
+    std::vector<bool> done(slimmed.size(), false);
+    for (unsigned int j = 0; j < slimmed.size(); ++j) {
+      if (done[j])
+        continue;
+      if (cand[j].empty()) {
         ++badNoPartner_;
         continue;
       }
-      if (n > 1 || kept[partner]) {
-        ++badAmbig_;
+      std::vector<unsigned int> group, keys;
+      for (unsigned int k = j; k < slimmed.size(); ++k)
+        if (cand[k] == cand[j]) {
+          group.push_back(k);
+          keys.push_back(slimmed[k].originalObjectRef().key());
+          done[k] = true;
+        }
+      bool clash = group.size() != cand[j].size();
+      for (unsigned int i : cand[j])
+        clash = clash || kept[i];
+      if (clash) {
+        badAmbig_ += group.size();
         continue;
       }
-      kept[partner] = true;
-      keyToRaw.emplace_back(s.originalObjectRef().key(), partner);
+      std::sort(keys.begin(), keys.end());
+      for (unsigned int k = 0; k < keys.size(); ++k) {
+        kept[cand[j][k]] = true;
+        keyToRaw.emplace_back(keys[k], cand[j][k]);
+      }
     }
     std::sort(keyToRaw.begin(), keyToRaw.end());
     for (unsigned int k = 1; k < keyToRaw.size(); ++k)
