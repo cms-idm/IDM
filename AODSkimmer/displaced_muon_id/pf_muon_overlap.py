@@ -236,7 +236,7 @@ def analyze(args):
     pair = lambda x: x.reshape(-1, 2)
     shared_ev = pair(pfm).all(axis=1) & (pair(e["legPfIdx"])[:, 0] == pair(e["legPfIdx"])[:, 1])
     shared = np.repeat(shared_ev, 2)
-    count.update({"PF-matched (dR<0.2)": int(pfm.sum()), "same sign": int(same.sum()),
+    count.update({("PF-matched (%s)" % args.variant if hitvar else "PF-matched (dR<0.2)"): int(pfm.sum()), "same sign": int(same.sum()),
                   "opposite sign": int((pfm & ~same).sum()), ">= 2 PF muons within 0.2": int((legs & (e["legPfN02"] >= 2)).sum()),
                   "shared PF muon (legs)": int(shared.sum())})
     if vertex and not hitvar:
