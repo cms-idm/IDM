@@ -15,6 +15,11 @@ approximate (the two legs of an event can be correlated). plot reads only the RO
 legs = the two fitted hf components; dR = station-2 position dR to PF muons propagated from (vertex, momentum) with
 propagatorSt2; PF muons failing propagation are excluded and counted; reference-point nearest as a numbers-only
 cross-check; every PF muon of a selected event counted once vs PF pT for the propagation-failure fraction.
+--variant (Part 3; inputs also need pfHitMatch=True), PF muons = slimmedMuons isPFMuon: prox01/prox02 = nearest PF muon
+by position dR at the leg's innermost hit (PF inner track propagated to its 3D PCA to the hit), matched at dR < 0.1/0.2;
+seg = PF muon sharing the largest fraction of the leg object's DT/CSC segment fingerprints, matched at >= 2/3;
+or01/or02 = prox OR seg, PF muon = the proximity one if it passes, else the segment one. The dR distribution is the
+nearest-PF hit dR for every variant. st2 (default) = Part 2.
 """
 import argparse
 from array import array
@@ -41,6 +46,10 @@ PFPT_EDGES = np.round(np.arange(0, 20.001, 0.5), 1)
 HF_SCALAR = ("hfStatus", "hfChi2", "hfNdof", "hfTypeA", "hfTypeB")
 HF_LEG = ("hfVertexValid", "hfVertexEta", "hfVertexPhi", "hfLegPt", "hfLegQ", "hfLegPfIdx", "hfLegPfDR", "hfLegPfN02",
           "hfLegPfPt", "hfLegPfQ", "hfLegPfRefIdx", "hfLegPfRefDR", "hfLegPfRefQ")
+HIT_LEG = ("hfLegHitOk", "hfLegHitPfIdx", "hfLegHitDR", "hfLegHitPfPt", "hfLegHitPfQ", "hfLegHitN01", "hfLegHitN02",
+           "hfLegHitNFail", "hfLegNSeg", "hfLegSegPfIdx", "hfLegSegFrac", "hfLegSegPfPt", "hfLegSegPfQ", "hfLegNSegArb",
+           "hfLegSegFracArb")
+TWO_THIRDS = 2 / 3 - 1e-12
 VERTEX_KEYS = {"legPt": "hfLegPt", "legQ": "hfLegQ", "legPfN02": "hfLegPfN02", "legPfIdx": "hfLegPfIdx",
                "legPfDR": "hfLegPfDR", "legPfPt": "hfLegPfPt", "legPfQ": "hfLegPfQ", "refIdx": "hfLegPfRefIdx",
                "refDR": "hfLegPfRefDR", "refQ": "hfLegPfRefQ"}
@@ -64,6 +73,8 @@ def load(args):
             if str(f[prefix + "hierarchyOrder"].member("fTitle")) != "global>inner>outer(DSA)":
                 raise RuntimeError("Unexpected hierarchy order: " + name)
             flags = ("vertexDirections", "pfStation2") if args.population == "vertex" else ("pfNearest",)
+            hit = args.population == "vertex" and args.variant != "st2"
+            flags += ("pfHitMatch",) if hit else ()
             for flag in flags:
                 if str(f[prefix + flag].member("fTitle")) == "disabled":
                     raise RuntimeError("%s was disabled: %s" % (flag, name))
@@ -71,9 +82,9 @@ def load(args):
             check_report(Path(args.report_dir), name, t.num_entries)
             n_events += t.num_entries
             if args.population == "vertex":
-                a = t.arrays(list(SCALAR + HF_SCALAR + HF_LEG + ("sigQ", "sigPt", "sigLxy", "sigD0", "pfMuPt", "pfMuSt2Ok")),
-                             library="ak")
-                legs.append(vertex_legs(a, ak, name, si))
+                a = t.arrays(list(SCALAR + HF_SCALAR + HF_LEG + ("sigQ", "sigPt", "sigLxy", "sigD0", "pfMuPt", "pfMuSt2Ok") +
+                                  ((HIT_LEG + ("pfMuN", "pfSlimN", "pfSlimLinked", "segDropped")) if hit else ())), library="ak")
+                legs.append(vertex_legs(a, ak, name, si, args.variant))
                 continue
             a = t.arrays(list(SCALAR + VECTOR), library="ak")
         two = np.asarray(a["twoAcc"]).astype(bool)
@@ -95,20 +106,21 @@ def load(args):
     if args.population == "vertex":
         pfmu = tuple(np.concatenate([v["pfmu"][i] for v in legs]) for i in range(3))
         counts = tuple(sum(v["counts"][i] for v in legs) for i in range(2))
-        e = {k: np.concatenate([v[k] for v in legs]) for k in legs[0] if k not in ("pfmu", "counts")}
-        e["pfmu"], e["counts"] = pfmu, counts
+        hitcount = {k: sum(v["hitcount"][k] for v in legs) for k in legs[0]["hitcount"]}
+        e = {k: np.concatenate([v[k] for v in legs]) for k in legs[0] if k not in ("pfmu", "counts", "hitcount")}
+        e["pfmu"], e["counts"], e["hitcount"] = pfmu, counts, hitcount
     else:
         e = {k: np.concatenate([v[k] for v in legs]) for k in legs[0]}
     return names, e, revisions.pop(), n_events
 
 
-def vertex_legs(a, ak, name, si):
+def vertex_legs(a, ak, name, si, variant="st2"):
     """Selected hf vertices of one sample: two legs per vertex (gen-index order) and the event's PF muons."""
     two = np.asarray(a["twoAcc"]).astype(bool)
     fit = np.asarray(a["hfStatus"]) == 3
     if np.any(fit & ~two):
         raise RuntimeError("Valid hf fit outside twoAcc in " + name)
-    for k in HF_LEG:
+    for k in HF_LEG + (HIT_LEG if variant != "st2" else ()):
         num = np.asarray(ak.num(a[k]))
         if np.any(num[fit] != 2) or np.any(num[~fit] != 0):
             raise RuntimeError("Unexpected %s length in %s" % (k, name))
@@ -141,6 +153,34 @@ def vertex_legs(a, ak, name, si):
     v["pfmu"] = (ak.to_numpy(ak.flatten(a["pfMuPt"][sel])), ak.to_numpy(ak.flatten(a["pfMuSt2Ok"][sel])).astype(bool),
                  np.repeat(np.full(int(sel.sum()), si, dtype=np.int32), npf))
     v["counts"] = (int(good.sum()), int(sel.sum()))
+    v["hitcount"] = {}
+    if variant != "st2":
+        h = {k: ak.to_numpy(a[k][sel]).ravel() for k in HIT_LEG}
+        cut = 0.1 if variant.endswith("01") else 0.2
+        prox = (h["hfLegHitPfIdx"] >= 0) & (h["hfLegHitDR"] >= 0) & (h["hfLegHitDR"] < cut)
+        seg = h["hfLegSegFrac"] >= TWO_THIRDS
+        matched = prox if variant.startswith("prox") else seg if variant == "seg" else prox | seg
+        use_seg = seg & ~prox if variant.startswith("or") else np.full(len(seg), variant == "seg")
+        pick = lambda hk, sk: np.where(use_seg, h[sk], h[hk])
+        v["legPfIdx"] = np.where(matched, pick("hfLegHitPfIdx", "hfLegSegPfIdx"), -1)
+        v["legPfPt"], v["legPfQ"] = pick("hfLegHitPfPt", "hfLegSegPfPt"), pick("hfLegHitPfQ", "hfLegSegPfQ")
+        v["pfMatched"] = matched
+        v["hitDR"] = np.where(h["hfLegHitPfIdx"] >= 0, h["hfLegHitDR"], -999.0)
+        v["legPfN02"] = np.where(h["hfLegHitN02"] >= 0, h["hfLegHitN02"], 0)
+        ev = lambda k: np.repeat(np.asarray(a[k])[sel], 2)
+        c = v["hitcount"]
+        c["legs without innermost hit"] = int((h["hfLegHitOk"] != 1).sum())
+        c["legs with hit, no propagated PF muon"] = int(((h["hfLegHitOk"] == 1) & (h["hfLegHitPfIdx"] < 0)).sum())
+        c["legs without DT/CSC segments"] = int((h["hfLegNSeg"] == 0).sum())
+        c["proximity and segment pass, different PF muons"] = int((prox & seg & (h["hfLegHitPfIdx"] != h["hfLegSegPfIdx"])).sum())
+        c["selected events with pfSlimN != pfMuN or unlinked"] = int(((ev("pfSlimN") != ev("pfMuN")) |
+                                                                     (ev("pfSlimLinked") != ev("pfSlimN"))).sum() // 2)
+        c["segment fingerprints dropped (selected events)"] = int(np.asarray(a["segDropped"])[sel].sum())
+        for tag, tt in (("all", None), ("global", 2), ("inner", 0), ("dsa", 1)):
+            m = np.ones(len(seg), bool) if tt is None else v["matchType"] == tt
+            c["arbitrated segment >= 2/3, %s" % tag] = int((m & (h["hfLegSegFracArb"] >= TWO_THIRDS)).sum())
+            c["proximity <%g, %s" % (cut, tag)] = int((m & prox).sum())
+            c["segment >= 2/3, %s" % tag] = int((m & seg).sum())
     return v
 
 
@@ -159,20 +199,31 @@ def analyze(args):
     count = {"matched legs": int(matched.sum())}
     legs = matched
     has_pf = legs & (e["legPfIdx"] >= 0)
+    hitvar = vertex and args.variant != "st2"
     if vertex:
         count = {"complete hf vertices": e["counts"][0], "selected vertices": e["counts"][1],
                  "selected legs": int(legs.sum()),
-                 "no PF muon in event": int((legs & (e["nPF"] == 0)).sum()),
-                 "PF muons present, all failed station 2": int((legs & (e["nPF"] > 0) & (e["nPFok"] == 0)).sum())}
-        if np.any(has_pf != (legs & (e["nPFok"] > 0))):
-            raise RuntimeError("Nearest PF index disagrees with the propagated PF count")
+                 "no PF muon in event": int((legs & (e["nPF"] == 0)).sum())}
+        if hitvar:
+            count.update(e["hitcount"])
+        else:
+            count["PF muons present, all failed station 2"] = int((legs & (e["nPF"] > 0) & (e["nPFok"] == 0)).sum())
+            if np.any(has_pf != (legs & (e["nPFok"] > 0))):
+                raise RuntimeError("Nearest PF index disagrees with the propagated PF count")
     else:
         count["no PF muon in event"] = int((legs & ~has_pf).sum())
-    if np.any(has_pf & ~(np.isfinite(e["legPfDR"]) & (e["legPfDR"] >= 0))):
-        raise RuntimeError("Valid PF index with invalid dR")
-    pfm = has_pf & (e["legPfDR"] < 0.2)
-    if np.any(pfm != (legs & (e["legPfN02"] > 0))):
-        raise RuntimeError("legPfN02 disagrees with the nearest dR")
+    if hitvar:  # matching decided per variant; the dR distribution is the nearest-PF hit dR
+        pfm = legs & e["pfMatched"]
+        if np.any(pfm != (e["legPfIdx"] >= 0)):
+            raise RuntimeError("Variant match flag disagrees with the chosen PF index")
+        e["legPfDR"] = e["hitDR"]
+        has_pf = legs & (e["hitDR"] >= 0)
+    else:
+        if np.any(has_pf & ~(np.isfinite(e["legPfDR"]) & (e["legPfDR"] >= 0))):
+            raise RuntimeError("Valid PF index with invalid dR")
+        pfm = has_pf & (e["legPfDR"] < 0.2)
+        if np.any(pfm != (legs & (e["legPfN02"] > 0))):
+            raise RuntimeError("legPfN02 disagrees with the nearest dR")
     bad_pfpt = pfm & ~np.isfinite(e["legPfPt"])
     if bad_pfpt.any():
         raise RuntimeError("PF-matched leg with non-finite PF pT")
@@ -188,7 +239,7 @@ def analyze(args):
     count.update({"PF-matched (dR<0.2)": int(pfm.sum()), "same sign": int(same.sum()),
                   "opposite sign": int((pfm & ~same).sum()), ">= 2 PF muons within 0.2": int((legs & (e["legPfN02"] >= 2)).sum()),
                   "shared PF muon (legs)": int(shared.sum())})
-    if vertex:
+    if vertex and not hitvar:
         pt, ok, _ = e["pfmu"]
         count.update({"PF muons in selected events": len(pt), "PF muons failing station 2": int((~ok).sum())})
         # Cross-check, numbers only: reference-point nearest (Part 1 definition) for the same legs.
@@ -212,6 +263,7 @@ def analyze(args):
     root = ROOT.TFile.Open(str(args.output), "CREATE")
     ROOT.TNamed("definitions", __doc__).Write()
     ROOT.TNamed("population", args.population).Write()
+    ROOT.TNamed("variant", args.variant).Write()
     ROOT.TNamed("inputRevision", revision).Write()
     ROOT.TNamed("analysisRevision", args.revision).Write()
     ROOT.TNamed("samples", "\n".join(names)).Write()
@@ -237,7 +289,7 @@ def analyze(args):
             hist("r_%s" % tag, "%s PF-matched legs;%s;Legs" % (label, DIST_TITLES["r"]), DIST_EDGES["r"], r[sel & rok])
             hist("n02_%s" % tag, "%s matched legs;%s;Legs" % (label, DIST_TITLES["n02"]), DIST_EDGES["n02"],
                  e["legPfN02"][sel & legs])
-        if vertex:  # every PF muon of a selected event once, vs its packed pT
+        if vertex and not hitvar:  # every PF muon of a selected event once, vs its packed pT
             pt, ok, smp = e["pfmu"]
             pm = np.isin(smp, np.unique(e["sample"][gm])) if group != "overall" else np.ones(len(pt), bool)
             hist("pfmu_all_pt", "PF muons in selected events;PF muon p_{T} [GeV];PF muons", PFPT_EDGES, pt[pm])
@@ -291,9 +343,24 @@ def plot(args):
     names = str(f.Get("samples").GetTitle()).split("\n")
     vertex = bool(f.Get("population")) and f.Get("population").GetTitle() == "vertex"
     what = "Selected-vertex legs" if vertex else "Matched legs"
+    variant = f.Get("variant").GetTitle() if f.Get("variant") else "st2"
+    hitvar = vertex and variant != "st2"
     if vertex:
         DIST_TITLES["dr"] = "#DeltaR at station 2 (leg, nearest PF muon)"
     dr_zoom = np.round(np.arange(0, 0.1001, 0.001), 3) if vertex else np.round(np.arange(0, 0.02001, 0.0002), 4)
+    match_title = "Fraction with a PF muon within #DeltaR < 0.2"
+    dr_cut = 0.2
+    if hitvar:
+        DIST_TITLES["dr"] = "#DeltaR at the leg's innermost hit (leg, nearest PF muon)"
+        dr_zoom = np.round(np.arange(0, 0.05001, 0.0005), 4)
+        dr_cut = 0.1 if variant.endswith("01") else 0.2 if variant.endswith("02") else None
+        match_title = {"prox01": "Fraction with a PF muon within #DeltaR_{hit} < 0.1",
+                       "prox02": "Fraction with a PF muon within #DeltaR_{hit} < 0.2",
+                       "seg": "Fraction with a PF muon sharing #geq 2/3 segments",
+                       "or01": "Fraction PF-associated (#DeltaR_{hit} < 0.1 or segments)",
+                       "or02": "Fraction PF-associated (#DeltaR_{hit} < 0.2 or segments)"}[variant]
+        what = {"prox01": "Proximity < 0.1", "prox02": "Proximity < 0.2", "seg": "Segment match",
+                "or01": "Proximity < 0.1 or segment", "or02": "Proximity < 0.2 or segment"}[variant] + ": selected-vertex legs"
     palette = ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9", "#000000", "#F0E442"]
     color = lambda i: ROOT.TColor.GetColor(palette[i % len(palette)])
     style = lambda i: 1 + (i // len(palette))
@@ -358,7 +425,7 @@ def plot(args):
     pretty = lambda g: (g.split("/")[1].replace("_dMchi-", ", #Deltam = ").replace("Mchi-", "m_{#chi} = ").replace("p", ".") + " GeV"
                         if g.startswith("mass/") else "c#tau = " + g.split("-")[1].replace("p", ".") + " mm")
     figures = [("overall", [("overall", tag, label) for tag, label, _ in TYPES], what + ", all samples")]
-    for tag, label, _ in TYPES:
+    for tag, label, _ in ([] if args.overall_only else TYPES):
         figures.append(("ctau_" + tag, [("ctau/" + c, tag, pretty("ctau/" + c)) for c in ctaus],
                         label + (" selected-vertex" if vertex else "") + " legs, pooled over masses"))
         figures.append(("mass_" + tag, [("mass/" + m, tag, pretty("mass/" + m)) for m in masses],
@@ -390,7 +457,7 @@ def plot(args):
         out_note = "Legs beyond the x range not shown"
         # Fractions vs x: PF-match among matched legs; same sign among PF-matched legs.
         for var in X_EDGES:
-            for metric, num, den, ytitle in (("pfmatch", "pf", "den", "Fraction with a PF muon within #DeltaR < 0.2"),
+            for metric, num, den, ytitle in (("pfmatch", "pf", "den", match_title),
                                              ("samesign", "ss", "pf", "Same-sign fraction of PF-matched legs")):
                 c = canvas("c_%s_%s_%s" % (fname, metric, var))
                 fr = ROOT.TH1D("fr_%s_%s_%s" % (fname, metric, var), "", 1, X_EDGES[var][0], X_EDGES[var][-1]); keep.append(fr)
@@ -482,11 +549,11 @@ def plot(args):
                 for h, label, tot in hs:
                     leg.AddEntry(h, "%s (%d)" % (label, tot), "l")
                 leg.Draw()
-                if dist == "dr" and edges[-1] > 0.2:
-                    ln = ROOT.TLine(0.2, 0, 0.2, headroom(0, top, bottom)); ln.SetLineStyle(3); ln.SetLineColor(ROOT.kGray + 2); ln.Draw(); keep.append(ln)
+                if dist == "dr" and dr_cut is not None and edges[-1] > dr_cut:
+                    ln = ROOT.TLine(dr_cut, 0, dr_cut, headroom(0, top, bottom)); ln.SetLineStyle(3); ln.SetLineColor(ROOT.kGray + 2); ln.Draw(); keep.append(ln)
                 labels(c, lines)
                 save(c, fr, "%s_%s%s%s" % (fname, dist, view, "_unitarea" if norm else ""), log=(0.5 * low, top, bottom))
-    if vertex:  # station-2 propagation failures of PF muons in selected events, vs PF pT
+    if vertex and not hitvar:  # station-2 propagation failures of PF muons in selected events, vs PF pT
         allh, fail = get("overall", "pfmu_all_pt"), get("overall", "pfmu_fail_pt")
         xt = "PF muon p_{T} [GeV]"
         lines = ["PF muons in selected events, all samples", "Not drawn: p_{T} #geq %g GeV" % PFPT_EDGES[-1]]
@@ -526,9 +593,12 @@ def main():
     a.add_argument("--input-dir", required=True); a.add_argument("--report-dir", required=True)
     a.add_argument("--output", required=True); a.add_argument("--revision", required=True)
     a.add_argument("--population", choices=("matched", "vertex"), default="matched")
+    a.add_argument("--variant", choices=("st2", "prox01", "prox02", "seg", "or01", "or02"), default="st2",
+                   help="PF association for --population vertex (Part 3 variants need pfHitMatch inputs)")
     a.add_argument("--expected-samples", type=int, default=72); a.add_argument("--expected-events", type=int, default=720000)
     b = sub.add_parser("plot")
     b.add_argument("--output", required=True); b.add_argument("--plot-dir", required=True)
+    b.add_argument("--overall-only", action="store_true", help="only the overall figures (types overlaid)")
     b.add_argument("--log", action="store_true", help="log copies of the distributions (fractions and medians stay linear)")
     args = p.parse_args()
     {"analyze": analyze, "plot": plot}[args.cmd](args)
