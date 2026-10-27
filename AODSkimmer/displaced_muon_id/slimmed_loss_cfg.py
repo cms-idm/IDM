@@ -1,8 +1,8 @@
 """Hierarchy matching with and without the MiniAOD displaced-muon filter (study note: kb/studies/slimmed-displaced-muon-loss.md).
 cmsRun slimmed_loss_cfg.py flist=<original-list|root> sample=<name> outFile=<new.root> revision=<sha> [nEvents=N]
 Case A = preselected_vertexing_cfg.py unchanged (displacedMuons -> cleanedDisplacedMuons -> preselectedVertexing).
-Case B = displacedMuons -> filteredDisplacedMuons (SlimmedDisplacedFilterCheck: replica of CMSSW DisplacedMuonFilterProducer
-with its cfi defaults, validated per event against stored slimmedDisplacedMuons) -> cleanedFilteredDisplacedMuons ->
+Case B = displacedMuons -> filteredDisplacedMuons (SlimmedDisplacedFilterCheck: the raw muons with an exact partner in the stored
+slimmedDisplacedMuons, i.e. what the MiniAOD filter kept; cuts replicated only as diagnostics) -> cleanedFilteredDisplacedMuons ->
 preselectedVertexingB (same matching parameters).
 """
 import os

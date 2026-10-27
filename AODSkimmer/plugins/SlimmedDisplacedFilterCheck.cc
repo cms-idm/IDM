@@ -1,16 +1,16 @@
-// Replicated MiniAOD displaced-muon filter for the slimmedDisplacedMuons loss study
+// Raw displacedMuons kept in slimmedDisplacedMuons, for the slimmedDisplacedMuons loss study
 // (kb/studies/slimmed-displaced-muon-loss.md).
-// Produces copies (TrackRefs unchanged) of the raw displacedMuons that pass the selection of CMSSW_13_0_13
-// DisplacedMuonFilterProducer (the input of patDisplacedMuons -> slimmedDisplacedMuons), in raw order. The producer
-// counts valid DT+CSC rechits of the STA track via its TrackExtra, which signal MINIAOD does not store; here the count
-// is hitPattern().numberOfValidMuonDTHits() + numberOfValidMuonCSCHits() of the STA track.
-// Validation: stored slimmedDisplacedMuons must correspond one-to-one, by originalObjectRef key (index in the
-// production-time filtered collection, raw order), to this collection, with exactly equal charge, muon type flags,
-// component presence, component pT/eta/phi/charge and the outer-track DSA-ID inputs (valid CSC/DT hits, normalized
-// chi2, ptError). Tree "events" (one row per event, same order as PreselectedVertexing): filterCode per raw muon
-// (0 kept; 1 STA+inner both pT < min; 2 STA-only pT < minPtSTA; 3 STA-only < minMatches valid DT+CSC hits;
-// 4 no-STA inner pT < minPtTK; 5 no-STA not isTrackerMuon; 6 no STA and no inner track), rawToFiltered per raw muon
-// (-1 if removed), and the mismatch counts.
+// Produces copies (TrackRefs unchanged) of the raw displacedMuons that have an exact partner in the stored
+// slimmedDisplacedMuons, in raw order. Partner: equal charge, muon type flags (global/tracker/standalone), component
+// presence, and exactly equal pT/eta/phi/charge of the inner, outer and global tracks (PAT embeds exact copies), plus
+// equal outer-track DSA-ID inputs (valid CSC/DT hits, normalized chi2, ptError). Every slimmed muon must have exactly
+// one raw partner, no raw muon may be claimed twice, and partners must be in increasing raw index in
+// originalObjectRef-key order (the production filter keeps raw order); violations are counted per event.
+// Diagnostic only: filterCode per raw muon replicates CMSSW_13_0_13 DisplacedMuonFilterProducer cuts that can be
+// evaluated on MINIAOD (0 passes; 1 STA+inner both pT < min; 2 STA-only pT < minPtSTA; 3 STA-only < minMatches valid
+// DT+CSC hits in hitPattern; 4 no-STA inner pT < minPtTK; 5 no-STA not isTrackerMuon; 6 neither STA nor inner track).
+// The producer's STA-only count uses TrackExtra rechits, not stored in MINIAOD, so code 0 does not imply kept.
+#include <algorithm>
 #include <memory>
 #include <vector>
 
@@ -43,10 +43,10 @@ public:
     tree_->Branch("filterCode", &filterCode_);
     tree_->Branch("rawToFiltered", &rawToFiltered_);
     tree_->Branch("nRaw", &nRaw_);
-    tree_->Branch("nFiltered", &nFiltered_);
     tree_->Branch("nSlimmed", &nSlimmed_);
-    tree_->Branch("badSlimKey", &badSlimKey_);  // size mismatch, null, out-of-range or repeated originalObjectRef key
-    tree_->Branch("badSlimObj", &badSlimObj_);  // slimmed objects differing from their filtered partner
+    tree_->Branch("badNoPartner", &badNoPartner_);  // slimmed muons with no raw partner
+    tree_->Branch("badAmbig", &badAmbig_);          // slimmed muons with > 1 raw partner, or raw claimed twice
+    tree_->Branch("badOrder", &badOrder_);          // partners not increasing in originalObjectRef-key order
   }
 
   void produce(edm::Event& ev, const edm::EventSetup&) override {
@@ -55,62 +55,65 @@ public:
     event_ = ev.id().event();
     const auto& raw = ev.get(raw_);
     const auto& slimmed = ev.get(slimmed_);
-    auto filtered = std::make_unique<std::vector<reco::Muon>>();
-    filterCode_.assign(raw.size(), 0);
-    rawToFiltered_.assign(raw.size(), -1);
-    badSlimKey_ = badSlimObj_ = 0;
-
-    // Same branch order as DisplacedMuonFilterProducer::produce.
-    for (unsigned int i = 0; i < raw.size(); ++i) {
-      const reco::Muon& mu = raw[i];
-      int code = 0;
-      if (mu.isStandAloneMuon()) {
-        if (mu.innerTrack().isNonnull()) {
-          if (mu.innerTrack()->pt() < minPtTK_ && mu.standAloneMuon()->pt() < minPtSTA_)
-            code = 1;
-        } else if (mu.standAloneMuon()->pt() < minPtSTA_) {
-          code = 2;
-        } else {
-          const auto& hp = mu.standAloneMuon()->hitPattern();
-          if (hp.numberOfValidMuonDTHits() + hp.numberOfValidMuonCSCHits() < minMatches_)
-            code = 3;
-        }
-      } else if (mu.innerTrack().isNonnull()) {
-        if (mu.innerTrack()->pt() < minPtTK_)
-          code = 4;
-        else if (!mu.isTrackerMuon())
-          code = 5;
-      } else {
-        code = 6;
-      }
-      filterCode_[i] = code;
-      if (code == 0) {
-        rawToFiltered_[i] = filtered->size();
-        filtered->push_back(mu);
-      }
-    }
-
     nRaw_ = raw.size();
-    nFiltered_ = filtered->size();
     nSlimmed_ = slimmed.size();
-    if (slimmed.size() != filtered->size())
-      ++badSlimKey_;
-    std::vector<bool> used(filtered->size(), false);
+    badNoPartner_ = badAmbig_ = badOrder_ = 0;
+    filterCode_.resize(raw.size());
+    for (unsigned int i = 0; i < raw.size(); ++i)
+      filterCode_[i] = code(raw[i]);
+
+    // Exact partner of each slimmed muon among the raw muons.
+    std::vector<bool> kept(raw.size(), false);
+    std::vector<std::pair<unsigned int, int>> keyToRaw;  // (originalObjectRef key, raw index)
     for (const pat::Muon& s : slimmed) {
-      const auto orig = s.originalObjectRef();
-      if (orig.isNull() || orig.key() >= filtered->size() || used[orig.key()]) {
-        ++badSlimKey_;
+      int partner = -1, n = 0;
+      for (unsigned int i = 0; i < raw.size(); ++i)
+        if (sameMuon(raw[i], s)) {
+          partner = i;
+          ++n;
+        }
+      if (n == 0) {
+        ++badNoPartner_;
         continue;
       }
-      used[orig.key()] = true;
-      if (!sameMuon((*filtered)[orig.key()], s))
-        ++badSlimObj_;
+      if (n > 1 || kept[partner]) {
+        ++badAmbig_;
+        continue;
+      }
+      kept[partner] = true;
+      keyToRaw.emplace_back(s.originalObjectRef().key(), partner);
     }
+    std::sort(keyToRaw.begin(), keyToRaw.end());
+    for (unsigned int k = 1; k < keyToRaw.size(); ++k)
+      if (keyToRaw[k].first == keyToRaw[k - 1].first || keyToRaw[k].second <= keyToRaw[k - 1].second)
+        ++badOrder_;
+
+    auto filtered = std::make_unique<std::vector<reco::Muon>>();
+    rawToFiltered_.assign(raw.size(), -1);
+    for (unsigned int i = 0; i < raw.size(); ++i)
+      if (kept[i]) {
+        rawToFiltered_[i] = filtered->size();
+        filtered->push_back(raw[i]);
+      }
     tree_->Fill();
     ev.put(std::move(filtered));
   }
 
 private:
+  int code(const reco::Muon& mu) const {
+    if (mu.isStandAloneMuon()) {
+      if (mu.innerTrack().isNonnull())
+        return mu.innerTrack()->pt() < minPtTK_ && mu.standAloneMuon()->pt() < minPtSTA_ ? 1 : 0;
+      if (mu.standAloneMuon()->pt() < minPtSTA_)
+        return 2;
+      const auto& hp = mu.standAloneMuon()->hitPattern();
+      return hp.numberOfValidMuonDTHits() + hp.numberOfValidMuonCSCHits() < minMatches_ ? 3 : 0;
+    }
+    if (mu.innerTrack().isNonnull())
+      return mu.innerTrack()->pt() < minPtTK_ ? 4 : (!mu.isTrackerMuon() ? 5 : 0);
+    return 6;
+  }
+
   // Exact equality of the track quantities the matching and the component IDs use (embedded copies are exact).
   static bool sameTrack(const reco::TrackRef& a, const reco::TrackRef& b, bool dsaId) {
     if (a.isNull() || b.isNull())
@@ -126,11 +129,11 @@ private:
            a->normalizedChi2() == b->normalizedChi2() && a->ptError() == b->ptError();
   }
 
-  static bool sameMuon(const reco::Muon& f, const pat::Muon& s) {
-    return f.charge() == s.charge() && f.isGlobalMuon() == s.isGlobalMuon() &&
-           f.isTrackerMuon() == s.isTrackerMuon() && f.isStandAloneMuon() == s.isStandAloneMuon() &&
-           sameTrack(f.innerTrack(), s.innerTrack(), false) && sameTrack(f.outerTrack(), s.outerTrack(), true) &&
-           sameTrack(f.globalTrack(), s.globalTrack(), false);
+  static bool sameMuon(const reco::Muon& r, const pat::Muon& s) {
+    return r.charge() == s.charge() && r.isGlobalMuon() == s.isGlobalMuon() &&
+           r.isTrackerMuon() == s.isTrackerMuon() && r.isStandAloneMuon() == s.isStandAloneMuon() &&
+           sameTrack(r.innerTrack(), s.innerTrack(), false) && sameTrack(r.outerTrack(), s.outerTrack(), true) &&
+           sameTrack(r.globalTrack(), s.globalTrack(), false);
   }
 
   const edm::EDGetTokenT<std::vector<reco::Muon>> raw_;
@@ -140,7 +143,7 @@ private:
   unsigned int run_ = 0, lumi_ = 0;
   unsigned long long event_ = 0;
   std::vector<int> filterCode_, rawToFiltered_;
-  int nRaw_ = 0, nFiltered_ = 0, nSlimmed_ = 0, badSlimKey_ = 0, badSlimObj_ = 0;
+  int nRaw_ = 0, nSlimmed_ = 0, badNoPartner_ = 0, badAmbig_ = 0, badOrder_ = 0;
 };
 
 DEFINE_FWK_MODULE(SlimmedDisplacedFilterCheck);
