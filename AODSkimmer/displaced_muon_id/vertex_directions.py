@@ -528,11 +528,11 @@ def plot_dphi(args):
     keys = ("pf", "puppi", "gen", "chi")
     legend = dict(pf="PF p_{T}^{miss} (Type-1)", puppi="PUPPI p_{T}^{miss} (Type-1)", gen="Gen p_{T}^{miss}",
                   chi="Gen #chi_{1}#chi_{1} p_{T}")
-    xtitle = dict(pf="|#Delta#phi(PF #vec{p}_{T}^{miss}, #vec{p}_{T}^{#mu#mu})|",
-                  puppi="|#Delta#phi(PUPPI #vec{p}_{T}^{miss}, #vec{p}_{T}^{#mu#mu})|",
-                  gen="|#Delta#phi(gen #vec{p}_{T}^{miss}, #vec{p}_{T}^{#mu#mu})|",
-                  chi="|#Delta#phi(gen #vec{p}_{T}^{#chi_{1}#chi_{1}}, #vec{p}_{T}^{#mu#mu})|",
-                  overlay="|#Delta#phi(X, #vec{p}_{T}^{#mu#mu})|")
+    xtitle = dict(pf="|#Delta#phi(PF p_{T}^{miss}, p_{T}^{#mu#mu})|",
+                  puppi="|#Delta#phi(PUPPI p_{T}^{miss}, p_{T}^{#mu#mu})|",
+                  gen="|#Delta#phi(gen p_{T}^{miss}, p_{T}^{#mu#mu})|",
+                  chi="|#Delta#phi(gen p_{T}^{#chi_{1}#chi_{1}}, p_{T}^{#mu#mu})|",
+                  overlay="|#Delta#phi(X, p_{T}^{#mu#mu})|")
     color = dict(pf=ROOT.TColor.GetColor("#0072B2"), puppi=ROOT.TColor.GetColor("#E69F00"),
                  gen=ROOT.TColor.GetColor("#009E73"), chi=ROOT.TColor.GetColor("#CC79A7"))
     style = dict(pf=1, puppi=2, gen=1, chi=7)
@@ -575,8 +575,8 @@ def plot_dphi(args):
         cutline(scale * top)
         c.Modified(); c.SaveAs(str(out / (name + ".png")))
         if args.log:
-            c.SetLogy(1); hists[0].SetMinimum(bottom); hists[0].SetMaximum(top * 300)
-            keep[-1].SetY2(top * 300)
+            c.SetLogy(1); hists[0].SetMinimum(bottom); hists[0].SetMaximum(top * 50)
+            keep[-1].SetY2(top * 50)
             c.Modified(); c.SaveAs(str(out / (name + "_log.png"))); c.SetLogy(0)
 
     def canvas(name):
