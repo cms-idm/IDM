@@ -34,7 +34,9 @@
 #include "DataFormats/Math/interface/LorentzVector.h"
 #include "DataFormats/MuonReco/interface/Muon.h"
 #include "DataFormats/PatCandidates/interface/MET.h"
+#include "DataFormats/PatCandidates/interface/Muon.h"
 #include "DataFormats/PatCandidates/interface/PackedCandidate.h"
+#include "DataFormats/MuonDetId/interface/MuonSubdetId.h"
 #include "DataFormats/TrackReco/interface/Track.h"
 #include "DataFormats/VertexReco/interface/Vertex.h"
 #include "MagneticField/Engine/interface/MagneticField.h"
@@ -232,6 +234,44 @@ namespace {
     return f;
   }
 
+  // DT/CSC segment fingerprints of an object's ID chamber matches (refs are not stored in MINIAOD): chamber rawId,
+  // hasPhi/hasZed and local x, y. Non-finite x/y dropped (counted); de-duplicated; arb keeps only segments with
+  // BestInChamberByDR and BelongsToTrackByDR.
+  struct Seg {
+    unsigned int id = 0;
+    bool phi = false, zed = false;
+    float x = 0, y = 0;
+    bool same(const Seg& o) const {
+      return id == o.id && phi == o.phi && zed == o.zed && std::abs(x - o.x) < 1e-4f && std::abs(y - o.y) < 1e-4f;
+    }
+  };
+  std::vector<Seg> segments(const reco::Muon& mu, bool arb, int& dropped) {
+    std::vector<Seg> out;
+    for (const auto& ch : mu.matches()) {
+      if (ch.detector() != MuonSubdetId::DT && ch.detector() != MuonSubdetId::CSC) continue;
+      for (const auto& m : ch.segmentMatches) {
+        if (arb && !(m.isMask(reco::MuonSegmentMatch::BestInChamberByDR) &&
+                     m.isMask(reco::MuonSegmentMatch::BelongsToTrackByDR)))
+          continue;
+        if (!std::isfinite(m.x) || !std::isfinite(m.y)) {
+          ++dropped;
+          continue;
+        }
+        Seg g;
+        g.id = ch.id.rawId(); g.phi = m.hasPhi(); g.zed = m.hasZed(); g.x = m.x; g.y = m.y;
+        if (std::none_of(out.begin(), out.end(), [&](const Seg& o) { return o.same(g); })) out.push_back(g);
+      }
+    }
+    return out;
+  }
+  // Fraction of the reference segments whose fingerprint appears in the other list; -1 if the reference list is empty.
+  double sharedFraction(const std::vector<Seg>& ref, const std::vector<Seg>& other) {
+    if (ref.empty()) return -1;
+    int n = 0;
+    for (const auto& r : ref) n += std::any_of(other.begin(), other.end(), [&](const Seg& o) { return o.same(r); });
+    return static_cast<double>(n) / ref.size();
+  }
+
   // Track keys of all non-null components of an object, for the direct-sharing guard.
   std::set<std::pair<unsigned int, unsigned int>> keys(const reco::Muon& mu) {
     std::set<std::pair<unsigned int, unsigned int>> s;
@@ -252,12 +292,14 @@ public:
         puppiMet_(consumes<std::vector<pat::MET>>(ps.getParameter<edm::InputTag>("puppiMet"))),
         genMet_(consumes<std::vector<reco::GenMET>>(ps.getParameter<edm::InputTag>("genMet"))),
         packed_(consumes<std::vector<pat::PackedCandidate>>(ps.getParameter<edm::InputTag>("packedCandidates"))),
+        slimmed_(consumes<std::vector<pat::Muon>>(ps.getUntrackedParameter<edm::InputTag>("slimmedMuons", edm::InputTag("slimmedMuons")))),
         field_(esConsumes()),
         ttb_(esConsumes(edm::ESInputTag("", "TransientTrackBuilder"))),
         vertexPropagator_(esConsumes(edm::ESInputTag("", "SteppingHelixPropagatorAny"))),
         vertexDirections_(ps.getUntrackedParameter<bool>("vertexDirections", false)),
         pfNearest_(ps.getUntrackedParameter<bool>("pfNearest", false)),
         pfStation2_(ps.getUntrackedParameter<bool>("pfStation2", false)),
+        pfHitMatch_(ps.getUntrackedParameter<bool>("pfHitMatch", false)),
         setup_(ps.getParameter<edm::ParameterSet>("propagatorSt2"), consumesCollector()) {
     usesResource(TFileService::kSharedResource);
     const auto order = ps.getParameter<std::vector<int>>("hierarchyOrder");
@@ -282,6 +324,20 @@ public:
       "point: legPt/Eta/Phi/Q, -999/0 if unmatched. Nearest packedPFCandidates abs(pdgId)13 by dR(track eta/phi, "
       "candidate eta/phi), no cut: legPfIdx (event-local packed index, -1 if unmatched leg or no PF muon), legPfDR/Pt/Eta/Phi "
       "(-999), legPfQ (0); legPfN02 = PF muons with dR<0.2 (-1 if unmatched leg). Non-finite dR skipped."
+      : "disabled");
+    fs->make<TNamed>("pfHitMatch", pfHitMatch_ ?
+      "Valid hf fit only, vectors in gen-index order over the two fitted hf legs. PF muons = slimmedMuons isPFMuon (index "
+      "into slimmedMuons); pfSlimN, pfSlimLinked = packed abs(pdgId)13 candidates with exactly one unused slimmed PF partner "
+      "(dR<1e-3, |dpT|<=1e-3 pT+0.02, same charge). Leg hit = innerPosition() of the leg component track (hfLegHitOk 0 if the "
+      "extra is unavailable or non-finite; hfLegHitRho/Z). PF point: slimmed inner track initialFreeState, "
+      "SteppingHelixPropagatorAny to 3D PCA to the hit; dR of the two positions' eta/phi. Nearest (ties: lower index): "
+      "hfLegHitPfIdx (-1), hfLegHitDR/PfPt (-999), hfLegHitPfQ (0), hfLegHitStatus/Path/Miss of that propagation; "
+      "hfLegHitN01/N02 = PF muons with dR<0.1/<0.2; hfLegHitNFail = PF muons without inner track or failed propagation. "
+      "Segments: DT/CSC segmentMatches of the leg's displacedMuons object and of each PF muon, fingerprint rawId, "
+      "hasPhi/hasZed, |dx|,|dy|<1e-4 cm, non-finite dropped (segDropped), de-duplicated. hfLegNSeg; best PF by shared "
+      "fraction, then smaller hit dR (unavailable last), then lower index: hfLegSegPfIdx (-1), hfLegSegFrac (-1), "
+      "hfLegSegPfPt/PfDR (-999), hfLegSegPfQ (0). Arbitrated (BestInChamberByDR and BelongsToTrackByDR, both lists): "
+      "hfLegNSegArb, hfLegSegFracArb."
       : "disabled");
     fs->make<TNamed>("pfStation2", pfStation2_ ?
       "Valid hf fit only, vectors in gen-index order over the two fitted hf legs. hfLegPt/Q at the track reference point; "
@@ -335,6 +391,10 @@ public:
     E(legPfPhi); E(legPfQ);
     E(hfLegPt); E(hfLegQ); E(hfLegEta2); E(hfLegPhi2); E(hfLegPfIdx); E(hfLegPfDR); E(hfLegPfN02); E(hfLegPfPt);
     E(hfLegPfQ); E(hfLegPfRefIdx); E(hfLegPfRefDR); E(hfLegPfRefPt); E(hfLegPfRefQ); E(pfMuPt); E(pfMuSt2Ok);
+    E(pfSlimN); E(pfSlimLinked); E(segDropped); E(hfLegHitOk); E(hfLegHitRho); E(hfLegHitZ); E(hfLegHitPfIdx);
+    E(hfLegHitDR); E(hfLegHitPfPt); E(hfLegHitPfQ); E(hfLegHitStatus); E(hfLegHitPath); E(hfLegHitMiss); E(hfLegHitN01);
+    E(hfLegHitN02); E(hfLegHitNFail); E(hfLegNSeg); E(hfLegSegPfIdx); E(hfLegSegFrac); E(hfLegSegPfPt); E(hfLegSegPfQ);
+    E(hfLegSegPfDR); E(hfLegNSegArb); E(hfLegSegFracArb);
     E(anyNPairs); E(anyNValid);
 #undef E
 #define P(x) pair_->Branch(#x, &x##_)
@@ -669,6 +729,115 @@ public:
                 hfLegPfRefQ_.push_back(refQ);
               }
             }
+            // AN-style association of each hf leg with slimmedMuons PF muons: proximity at the leg's innermost hit and
+            // shared segment fingerprints.
+            if (h.status == kValid && pfHitMatch_) {
+              const auto* prop = dynamic_cast<const SteppingHelixPropagator*>(&es.getData(vertexPropagator_));
+              if (!prop) throw cms::Exception("PreselectedVertexing") << "Expected SteppingHelixPropagatorAny";
+              const auto& slim = ev.get(slimmed_);
+              std::vector<int> pfs;
+              for (size_t j = 0; j < slim.size(); ++j)
+                if (slim[j].isPFMuon()) pfs.push_back(static_cast<int>(j));
+              pfSlimN_ = static_cast<int>(pfs.size());
+              std::vector<bool> used(pfs.size(), false);
+              for (const int k : pfMuIdx) {
+                const auto& p = packed[k];
+                int n = 0, first = -1;
+                for (size_t j = 0; j < pfs.size(); ++j) {
+                  const auto& m = slim[pfs[j]];
+                  if (!used[j] && reco::deltaR(p.eta(), p.phi(), m.eta(), m.phi()) < 1e-3 &&
+                      std::abs(p.pt() - m.pt()) <= 1e-3 * m.pt() + 0.02 && p.charge() == m.charge()) {
+                    ++n;
+                    if (first < 0) first = static_cast<int>(j);
+                  }
+                }
+                if (n == 1) {
+                  ++pfSlimLinked_;
+                  used[first] = true;
+                }
+              }
+              std::vector<std::vector<Seg>> pfSeg, pfSegArb;
+              for (const int j : pfs) {
+                pfSeg.push_back(segments(slim[j], false, segDropped_));
+                int arbDropped = 0;  // the arbitrated list is a subset: its drops are already counted
+                pfSegArb.push_back(segments(slim[j], true, arbDropped));
+              }
+              for (const int c : {c0, c1}) {
+                const auto& k = comps[c];
+                const auto& t = *k.ref;
+                const auto& obj = muons[std::lower_bound(indices.begin(), indices.end(), k.obj) - indices.begin()];
+                bool hitOk = false;
+                GlobalPoint hit;
+                if (t.extra().isNonnull() && t.extra().isAvailable()) {
+                  const auto& ip = t.innerPosition();
+                  hit = GlobalPoint(ip.x(), ip.y(), ip.z());
+                  hitOk = std::isfinite(hit.eta()) && std::isfinite(hit.phi()) && std::isfinite(hit.z());
+                }
+                std::vector<double> dHit(pfs.size(), -1);  // -1: unavailable
+                int idx = -1, n01 = 0, n02 = 0, nFail = 0, status = -1;
+                float path = -999, miss = -999;
+                for (size_t j = 0; hitOk && j < pfs.size(); ++j) {
+                  const auto& in = slim[pfs[j]].innerTrack();
+                  if (in.isNull() || !in.isAvailable()) {
+                    ++nFail;
+                    continue;
+                  }
+                  SteppingHelixStateInfo end;
+                  prop->propagate(SteppingHelixStateInfo(trajectoryStateTransform::initialFreeState(*in, field)), hit, end);
+                  const auto pos = end.isValid() ? end.position() : GlobalPoint();
+                  const double d = end.isValid() ? std::hypot(static_cast<double>(hit.eta()) - pos.eta(),
+                                                              reco::deltaPhi(static_cast<double>(hit.phi()), static_cast<double>(pos.phi())))
+                                                 : -1;
+                  if (!end.isValid() || !std::isfinite(pos.eta()) || !std::isfinite(pos.phi()) || !std::isfinite(d)) {
+                    ++nFail;
+                    continue;
+                  }
+                  dHit[j] = d;
+                  if (d < 0.1) ++n01;
+                  if (d < 0.2) ++n02;
+                  if (idx < 0 || d < dHit[idx]) {
+                    idx = static_cast<int>(j);
+                    status = static_cast<int>(end.status());
+                    path = end.path();
+                    miss = (pos - hit).mag();
+                  }
+                }
+                int segDummy = 0;
+                const auto legSeg = segments(obj, false, segDropped_), legSegArb = segments(obj, true, segDummy);
+                int best = -1;
+                double bestFrac = -1, bestFracArb = -1;
+                for (size_t j = 0; j < pfs.size(); ++j) {
+                  const double f = sharedFraction(legSeg, pfSeg[j]);
+                  const auto better = [&](size_t a, size_t b) {  // a beats current best b: smaller dR, unavailable last
+                    if (dHit[a] < 0) return false;
+                    return dHit[b] < 0 || dHit[a] < dHit[b];
+                  };
+                  if (f >= 0 && (best < 0 || f > bestFrac || (f == bestFrac && better(j, best)))) {
+                    best = static_cast<int>(j);
+                    bestFrac = f;
+                  }
+                  bestFracArb = std::max(bestFracArb, sharedFraction(legSegArb, pfSegArb[j]));
+                }
+                hfLegHitOk_.push_back(hitOk);
+                hfLegHitRho_.push_back(hitOk ? hit.perp() : -999.f);
+                hfLegHitZ_.push_back(hitOk ? hit.z() : -999.f);
+                hfLegHitPfIdx_.push_back(idx >= 0 ? pfs[idx] : -1);
+                hfLegHitDR_.push_back(idx >= 0 ? dHit[idx] : -999.);
+                hfLegHitPfPt_.push_back(idx >= 0 ? slim[pfs[idx]].pt() : -999.f);
+                hfLegHitPfQ_.push_back(idx >= 0 ? slim[pfs[idx]].charge() : 0);
+                hfLegHitStatus_.push_back(status); hfLegHitPath_.push_back(path); hfLegHitMiss_.push_back(miss);
+                hfLegHitN01_.push_back(hitOk ? n01 : -1); hfLegHitN02_.push_back(hitOk ? n02 : -1);
+                hfLegHitNFail_.push_back(hitOk ? nFail : -1);
+                hfLegNSeg_.push_back(static_cast<int>(legSeg.size()));
+                hfLegSegPfIdx_.push_back(best >= 0 ? pfs[best] : -1);
+                hfLegSegFrac_.push_back(bestFrac);
+                hfLegSegPfPt_.push_back(best >= 0 ? slim[pfs[best]].pt() : -999.f);
+                hfLegSegPfQ_.push_back(best >= 0 ? slim[pfs[best]].charge() : 0);
+                hfLegSegPfDR_.push_back(best >= 0 && dHit[best] >= 0 ? dHit[best] : -999.);
+                hfLegNSegArb_.push_back(static_cast<int>(legSegArb.size()));
+                hfLegSegFracArb_.push_back(bestFracArb);
+              }
+            }
           }
           if (h.status == kValid || h.status == kShared) break;
         }
@@ -719,6 +888,11 @@ private:
     for (auto* v : {&hfLegQ_, &hfLegPfIdx_, &hfLegPfN02_, &hfLegPfQ_, &hfLegPfRefIdx_, &hfLegPfRefQ_, &pfMuSt2Ok_}) v->clear();
     for (auto* v : {&hfLegPt_, &hfLegEta2_, &hfLegPhi2_, &hfLegPfPt_, &hfLegPfRefPt_, &pfMuPt_}) v->clear();
     hfLegPfDR_.clear(); hfLegPfRefDR_.clear();
+    for (auto* v : {&hfLegHitOk_, &hfLegHitPfIdx_, &hfLegHitPfQ_, &hfLegHitStatus_, &hfLegHitN01_, &hfLegHitN02_,
+                    &hfLegHitNFail_, &hfLegNSeg_, &hfLegSegPfIdx_, &hfLegSegPfQ_, &hfLegNSegArb_}) v->clear();
+    for (auto* v : {&hfLegHitRho_, &hfLegHitZ_, &hfLegHitPfPt_, &hfLegHitPath_, &hfLegHitMiss_, &hfLegSegPfPt_}) v->clear();
+    for (auto* v : {&hfLegHitDR_, &hfLegSegFrac_, &hfLegSegPfDR_, &hfLegSegFracArb_}) v->clear();
+    pfSlimN_ = pfSlimLinked_ = segDropped_ = 0;
     for (auto* v : {&hfVertexPath_, &hfVertexDistance_, &hfRefEta_, &hfRefPhi_, &hfVertexEta_, &hfVertexPhi_, &hfVertexPt_}) v->clear();
     nSig_ = 0; twoAcc_ = false; nObj_ = nElig_ = 0;
     for (auto* v : {&sigIndex_, &sigQ_, &sigAcc_, &sigProp_, &cObj_, &cType_, &cQ_, &cIdPass_, &cInEta_, &cProp_,
@@ -745,10 +919,11 @@ private:
   const edm::EDGetTokenT<std::vector<pat::MET>> met_, puppiMet_;
   const edm::EDGetTokenT<std::vector<reco::GenMET>> genMet_;
   const edm::EDGetTokenT<std::vector<pat::PackedCandidate>> packed_;
+  const edm::EDGetTokenT<std::vector<pat::Muon>> slimmed_;
   const edm::ESGetToken<MagneticField, IdealMagneticFieldRecord> field_;
   const edm::ESGetToken<TransientTrackBuilder, TransientTrackRecord> ttb_;
   const edm::ESGetToken<Propagator, TrackingComponentsRecord> vertexPropagator_;
-  const bool vertexDirections_, pfNearest_, pfStation2_;
+  const bool vertexDirections_, pfNearest_, pfStation2_, pfHitMatch_;
   const PropagateToMuonSetup setup_;
   std::array<int, 3> order_{{2, 0, 1}}, rank_{{0, 0, 0}};  // types best first; rank_[type]
   TTree *evt_ = nullptr, *pair_ = nullptr, *combo_ = nullptr;
@@ -769,6 +944,11 @@ private:
   std::vector<int> hfLegQ_, hfLegPfIdx_, hfLegPfN02_, hfLegPfQ_, hfLegPfRefIdx_, hfLegPfRefQ_, pfMuSt2Ok_;
   std::vector<float> hfLegPt_, hfLegEta2_, hfLegPhi2_, hfLegPfPt_, hfLegPfRefPt_, pfMuPt_;
   std::vector<double> hfLegPfDR_, hfLegPfRefDR_;
+  std::vector<int> hfLegHitOk_, hfLegHitPfIdx_, hfLegHitPfQ_, hfLegHitStatus_, hfLegHitN01_, hfLegHitN02_, hfLegHitNFail_,
+      hfLegNSeg_, hfLegSegPfIdx_, hfLegSegPfQ_, hfLegNSegArb_;
+  std::vector<float> hfLegHitRho_, hfLegHitZ_, hfLegHitPfPt_, hfLegHitPath_, hfLegHitMiss_, hfLegSegPfPt_;
+  std::vector<double> hfLegHitDR_, hfLegSegFrac_, hfLegSegPfDR_, hfLegSegFracArb_;
+  int pfSlimN_ = 0, pfSlimLinked_ = 0, segDropped_ = 0;
   std::vector<int> indObj_, indObjNoEta_;
   int kEvent_ = 0, kTypeA_ = 0, kTypeB_ = 0, kStatus_ = 0;
   float kChi2_ = 0, kNdof_ = 0, kProb_ = 0, kVx_ = 0, kVy_ = 0, kVz_ = 0, kLxyBS_ = 0, kMass_ = 0, kRecoDR_ = 0,
