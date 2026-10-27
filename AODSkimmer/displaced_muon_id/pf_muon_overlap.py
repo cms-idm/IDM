@@ -347,7 +347,7 @@ def plot(args):
     hitvar = vertex and variant != "st2"
     if vertex:
         DIST_TITLES["dr"] = "#DeltaR at station 2 (leg, nearest PF muon)"
-    dr_zoom = np.round(np.arange(0, 0.1001, 0.001), 3) if vertex else np.round(np.arange(0, 0.02001, 0.0002), 4)
+    dr_zoom = np.round(np.arange(0, 0.01001, 0.0001), 4) if vertex else np.round(np.arange(0, 0.02001, 0.0002), 4)
     match_title = "Fraction with a PF muon within #DeltaR < 0.2"
     dr_cut = 0.2
     if hitvar:
