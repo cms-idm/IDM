@@ -3,7 +3,7 @@
 // components of the same two objects, tried in hierarchy order until a fit is valid) and (c) every pair of distinct
 // pre-selected objects (Any pair). The hierarchy order is the hierarchyOrder parameter (types, best first).
 // Study notes: kb/studies/preselected-vertexing-efficiency.md, kb/studies/met-proxy-residual.md (hf*, pfMu*, chi*),
-// kb/studies/vertex-fit-field.md (sigV*, sigB*, bbSigmaLxy, bbB*).
+// kb/studies/vertex-fit-field.md (sigV*, sigB*, bbSigmaLxy, bbB*), kb/studies/displaced-pf-muon-overlap.md (leg*).
 // All original events are read; nothing is filtered. Components: 0 inner, 1 outer (embedded DSA), 2 global.
 // Eligible component = passes its ID AND own track |eta|<2.4. A second hierarchy match without the
 // reco-eta gate is stored only as a cross-check against the component-matching study.
@@ -256,6 +256,7 @@ public:
         ttb_(esConsumes(edm::ESInputTag("", "TransientTrackBuilder"))),
         vertexPropagator_(esConsumes(edm::ESInputTag("", "SteppingHelixPropagatorAny"))),
         vertexDirections_(ps.getUntrackedParameter<bool>("vertexDirections", false)),
+        pfNearest_(ps.getUntrackedParameter<bool>("pfNearest", false)),
         setup_(ps.getParameter<edm::ParameterSet>("propagatorSt2"), consumesCollector()) {
     usesResource(TFileService::kSharedResource);
     const auto order = ps.getParameter<std::vector<int>>("hierarchyOrder");
@@ -274,6 +275,12 @@ public:
       "hfVertexStatus = SteppingHelixStateInfo::Result; hfVertexPath signed cm; hfVertexDistance 3D miss distance cm. "
       "hfRefEta/Phi at stored original-track reference; hfVertexEta/Phi/Pt from propagated momentum; -999 on failure. "
       "Material/field settings are those of SteppingHelixPropagatorAny loaded by the cfg. No rematching or fallback on propagation failure."
+      : "disabled");
+    fs->make<TNamed>("pfNearest", pfNearest_ ?
+      "twoAcc events, vectors in gen-index order. leg = hierarchy-matched component (matchComp) track at its reference "
+      "point: legPt/Eta/Phi/Q, -999/0 if unmatched. Nearest packedPFCandidates abs(pdgId)13 by dR(track eta/phi, "
+      "candidate eta/phi), no cut: legPfIdx (event-local packed index, -1 if unmatched leg or no PF muon), legPfDR/Pt/Eta/Phi "
+      "(-999), legPfQ (0); legPfN02 = PF muons with dR<0.2 (-1 if unmatched leg). Non-finite dR skipped."
       : "disabled");
     const char* typeName[3] = {"inner", "outer(DSA)", "global"};
     fs->make<TNamed>("hierarchyOrder", (std::string(typeName[order_[0]]) + ">" + typeName[order_[1]] + ">" +
@@ -315,6 +322,8 @@ public:
     E(hfVertexValid); E(hfVertexStatus); E(hfVertexPath); E(hfVertexDistance);
     E(hfRefEta); E(hfRefPhi); E(hfVertexEta); E(hfVertexPhi); E(hfVertexPt);
     E(pfMuN); E(pfMuPx); E(pfMuPy); E(nChi); E(chiOK); E(chiPx); E(chiPy);
+    E(legPt); E(legEta); E(legPhi); E(legQ); E(legPfN02); E(legPfIdx); E(legPfDR); E(legPfPt); E(legPfEta);
+    E(legPfPhi); E(legPfQ);
     E(anyNPairs); E(anyNValid);
 #undef E
 #define P(x) pair_->Branch(#x, &x##_)
@@ -422,8 +431,11 @@ public:
       genMetPt_ = gmets[0].pt();
       genMetPhi_ = gmets[0].phi();
     }
-    for (const auto& c : ev.get(packed_)) {
+    const auto& packed = ev.get(packed_);
+    std::vector<int> pfMuIdx;
+    for (const auto& c : packed) {
       if (std::abs(c.pdgId()) != 13) continue;
+      pfMuIdx.push_back(static_cast<int>(&c - &packed[0]));
       ++pfMuN_;
       pfMuPx_ += c.px();
       pfMuPy_ += c.py();
@@ -464,6 +476,29 @@ public:
         matchDR_.push_back(m.dr[g]);
         matchCompNoEta_.push_back(mn.comp[g]); matchTypeNoEta_.push_back(mn.type[g]);
         matchObjNoEta_.push_back(mn.obj[g]);
+      }
+      // Nearest PF muon to each hierarchy-matched leg (track direction at its reference point).
+      for (int g = 0; pfNearest_ && g < 2; ++g) {
+        int n02 = -1, idx = -1, q = 0, pfQ = 0;
+        float pt = -999, eta = -999, phi = -999, pfPt = -999, pfEta = -999, pfPhi = -999;
+        double dr = -999;  // double, as the 0.2 cut, so the stored dR and legPfN02 agree
+        if (m.comp[g] >= 0) {
+          const auto& t = *comps[m.comp[g]].ref;
+          pt = t.pt(); eta = t.eta(); phi = t.phi(); q = t.charge();
+          n02 = 0;
+          for (const int i : pfMuIdx) {
+            const double d = reco::deltaR(t.eta(), t.phi(), packed[i].eta(), packed[i].phi());
+            if (!std::isfinite(d)) continue;
+            if (d < 0.2) ++n02;
+            if (idx < 0 || d < dr) {
+              idx = i; dr = d; pfPt = packed[i].pt(); pfEta = packed[i].eta(); pfPhi = packed[i].phi();
+              pfQ = packed[i].charge();
+            }
+          }
+        }
+        legPt_.push_back(pt); legEta_.push_back(eta); legPhi_.push_back(phi); legQ_.push_back(q);
+        legPfN02_.push_back(n02); legPfIdx_.push_back(idx); legPfDR_.push_back(dr); legPfPt_.push_back(pfPt);
+        legPfEta_.push_back(pfEta); legPfPhi_.push_back(pfPhi); legPfQ_.push_back(pfQ);
       }
       // Independent per-type matches (gated and, for validation, ungated), objects reported by original index.
       std::array<std::array<int, 2>, 3> ind, indn;
@@ -627,6 +662,9 @@ public:
 private:
   void reset() {
     hfVertexValid_.clear(); hfVertexStatus_.clear();
+    for (auto* v : {&legQ_, &legPfN02_, &legPfIdx_, &legPfQ_}) v->clear();
+    for (auto* v : {&legPt_, &legEta_, &legPhi_, &legPfPt_, &legPfEta_, &legPfPhi_}) v->clear();
+    legPfDR_.clear();
     for (auto* v : {&hfVertexPath_, &hfVertexDistance_, &hfRefEta_, &hfRefPhi_, &hfVertexEta_, &hfVertexPhi_, &hfVertexPt_}) v->clear();
     nSig_ = 0; twoAcc_ = false; nObj_ = nElig_ = 0;
     for (auto* v : {&sigIndex_, &sigQ_, &sigAcc_, &sigProp_, &cObj_, &cType_, &cQ_, &cIdPass_, &cInEta_, &cProp_,
@@ -656,7 +694,7 @@ private:
   const edm::ESGetToken<MagneticField, IdealMagneticFieldRecord> field_;
   const edm::ESGetToken<TransientTrackBuilder, TransientTrackRecord> ttb_;
   const edm::ESGetToken<Propagator, TrackingComponentsRecord> vertexPropagator_;
-  const bool vertexDirections_;
+  const bool vertexDirections_, pfNearest_;
   const PropagateToMuonSetup setup_;
   std::array<int, 3> order_{{2, 0, 1}}, rank_{{0, 0, 0}};  // types best first; rank_[type]
   TTree *evt_ = nullptr, *pair_ = nullptr, *combo_ = nullptr;
@@ -671,6 +709,9 @@ private:
   std::vector<float> sigVx_, sigVy_, sigVz_, sigBx_, sigBy_, sigBz_;
   std::vector<int> hfVertexValid_, hfVertexStatus_;
   std::vector<float> hfVertexPath_, hfVertexDistance_, hfRefEta_, hfRefPhi_, hfVertexEta_, hfVertexPhi_, hfVertexPt_;
+  std::vector<int> legQ_, legPfN02_, legPfIdx_, legPfQ_;
+  std::vector<float> legPt_, legEta_, legPhi_, legPfPt_, legPfEta_, legPfPhi_;
+  std::vector<double> legPfDR_;
   std::vector<int> indObj_, indObjNoEta_;
   int kEvent_ = 0, kTypeA_ = 0, kTypeB_ = 0, kStatus_ = 0;
   float kChi2_ = 0, kNdof_ = 0, kProb_ = 0, kVx_ = 0, kVy_ = 0, kVz_ = 0, kLxyBS_ = 0, kMass_ = 0, kRecoDR_ = 0,

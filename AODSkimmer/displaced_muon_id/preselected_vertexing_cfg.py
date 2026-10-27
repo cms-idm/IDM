@@ -13,6 +13,8 @@ for key, default in (("flist", ""), ("sample", ""), ("outFile", "component_input
 options.register("nEvents", -1, VarParsing.multiplicity.singleton, VarParsing.varType.int, "events")
 options.register("vertexDirections", False, VarParsing.multiplicity.singleton, VarParsing.varType.bool,
                  "propagate original hf tracks to 3D closest approach to fitted vertex, in either direction")
+options.register("pfNearest", False, VarParsing.multiplicity.singleton, VarParsing.varType.bool,
+                 "nearest packed PF muon to each hierarchy-matched leg (kb/studies/displaced-pf-muon-overlap.md)")
 options.parseArguments()
 if not options.flist or not options.sample:
     raise ValueError("flist and sample are required")
@@ -40,7 +42,7 @@ process.TFileService = cms.Service("TFileService", fileName=cms.string(options.o
 process.cleanedDisplacedMuons = cms.EDProducer("DisplacedMuonDuplicateCleaner",
     muons=cms.InputTag("displacedMuons", "", "RECO"), validate=cms.bool(True))
 process.preselectedVertexing = cms.EDAnalyzer("PreselectedVertexing",
-    vertexDirections=cms.untracked.bool(options.vertexDirections),
+    vertexDirections=cms.untracked.bool(options.vertexDirections), pfNearest=cms.untracked.bool(options.pfNearest),
     genParticles=cms.InputTag("prunedGenParticles"), muons=cms.InputTag("cleanedDisplacedMuons"),
     originalIndex=cms.InputTag("cleanedDisplacedMuons", "originalIndex"), beamspot=cms.InputTag("offlineBeamSpot"),
     met=cms.InputTag("slimmedMETs"), puppiMet=cms.InputTag("slimmedMETsPuppi"), genMet=cms.InputTag("genMetTrue"), packedCandidates=cms.InputTag("packedPFCandidates"),
