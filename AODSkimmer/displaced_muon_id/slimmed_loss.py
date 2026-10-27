@@ -63,7 +63,8 @@ def analyze_sample(path, ref_dir, log_dir, flist_dir):
     # Coverage: every listed input file opened and closed once (cmsRun log).
     files = [l.strip() for l in (flist_dir / (sample + "_flist.txt")).read_text().splitlines()
              if l.strip() and not l.lstrip().startswith("#")]
-    closed = re.findall(r"Closed file (\S+)", (log_dir / (sample + ".log")).read_text())
+    # Complete paths only: interleaved log streams can cut a path and glue the next timestamp onto it.
+    closed = re.findall(r"Closed file (\S+\.root)(?!\S)", (log_dir / (sample + ".log")).read_text())
     canon = lambda s: s[s.find("/store/"):]
     if sorted(map(canon, closed)) != sorted(map(canon, files)):
         raise RuntimeError("%s: input coverage mismatch (%d listed, %d closed)" % (sample, len(files), len(closed)))
