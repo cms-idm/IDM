@@ -257,7 +257,7 @@ def plot(args):
     # Series sets: "overall" compares types; mass and ctau overlays compare points, one figure per type.
     masses = sorted({s.rsplit("_ctau-", 1)[0] for s in names}, key=lambda s: float(s.split("_")[0][5:].replace("p", ".")))
     ctaus = sorted({"ctau-" + s.rsplit("_ctau-", 1)[1] for s in names}, key=lambda s: float(s[5:].replace("p", ".")))
-    pretty = lambda g: (g.split("/")[1].replace("Mchi-", "m_{#chi} = ").replace("_dMchi-", ", #Deltam = ").replace("p", ".") + " GeV"
+    pretty = lambda g: (g.split("/")[1].replace("_dMchi-", ", #Deltam = ").replace("Mchi-", "m_{#chi} = ").replace("p", ".") + " GeV"
                         if g.startswith("mass/") else "c#tau = " + g.split("-")[1].replace("p", ".") + " mm")
     figures = [("overall", [("overall", tag, label) for tag, label, _ in TYPES], "Matched legs, all samples")]
     for tag, label, _ in TYPES:
