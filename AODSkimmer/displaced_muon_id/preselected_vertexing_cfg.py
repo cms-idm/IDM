@@ -15,6 +15,8 @@ options.register("vertexDirections", False, VarParsing.multiplicity.singleton, V
                  "propagate original hf tracks to 3D closest approach to fitted vertex, in either direction")
 options.register("pfNearest", False, VarParsing.multiplicity.singleton, VarParsing.varType.bool,
                  "nearest packed PF muon to each hierarchy-matched leg (kb/studies/displaced-pf-muon-overlap.md)")
+options.register("pfStation2", False, VarParsing.multiplicity.singleton, VarParsing.varType.bool,
+                 "nearest packed PF muon to each valid-hf leg at station 2 (kb/studies/displaced-pf-muon-overlap.md Part 2)")
 options.parseArguments()
 if not options.flist or not options.sample:
     raise ValueError("flist and sample are required")
@@ -43,6 +45,7 @@ process.cleanedDisplacedMuons = cms.EDProducer("DisplacedMuonDuplicateCleaner",
     muons=cms.InputTag("displacedMuons", "", "RECO"), validate=cms.bool(True))
 process.preselectedVertexing = cms.EDAnalyzer("PreselectedVertexing",
     vertexDirections=cms.untracked.bool(options.vertexDirections), pfNearest=cms.untracked.bool(options.pfNearest),
+    pfStation2=cms.untracked.bool(options.pfStation2),
     genParticles=cms.InputTag("prunedGenParticles"), muons=cms.InputTag("cleanedDisplacedMuons"),
     originalIndex=cms.InputTag("cleanedDisplacedMuons", "originalIndex"), beamspot=cms.InputTag("offlineBeamSpot"),
     met=cms.InputTag("slimmedMETs"), puppiMet=cms.InputTag("slimmedMETsPuppi"), genMet=cms.InputTag("genMetTrue"), packedCandidates=cms.InputTag("packedPFCandidates"),
