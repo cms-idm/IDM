@@ -352,7 +352,7 @@ def plot(args):
     dr_cut = 0.2
     if hitvar:
         DIST_TITLES["dr"] = "#DeltaR at the leg's innermost hit (leg, nearest PF muon)"
-        dr_zoom = np.round(np.arange(0, 0.05001, 0.0005), 4)
+        dr_zoom = np.round(np.arange(0, 0.30001, 0.003), 3)
         dr_cut = 0.1 if variant.endswith("01") else 0.2 if variant.endswith("02") else None
         match_title = {"prox01": "Fraction with a PF muon within #DeltaR_{hit} < 0.1",
                        "prox02": "Fraction with a PF muon within #DeltaR_{hit} < 0.2",
@@ -543,6 +543,7 @@ def plot(args):
                 fr = hs[0][0]
                 width = edges[1] - edges[0]
                 frame(fr, DIST_TITLES[dist], ("Fraction of legs / %g" if norm else "Legs / %g") % width)
+                fr.GetXaxis().SetNdivisions(505)
                 fr.SetMinimum(0); fr.SetMaximum(headroom(0, top, bottom))
                 fr.Draw("hist")
                 for h, _, _ in hs[1:]: h.Draw("hist same")
