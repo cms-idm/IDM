@@ -1,37 +1,39 @@
-// Per-event bookkeeping for the slimmedDisplacedMuons loss study (kb/studies/slimmed-displaced-muon-loss.md).
-// (a) Replicates DisplacedMuonFilterProducer (CMSSW_13_0_13 PhysicsTools/PatAlgos) on raw displacedMuons and checks that
-//     the kept raw indices map, in order, onto the in-job filtered collection with identical inner/outer/global
-//     TrackRefs (ProductID + key).
-// (b) Checks that stored slimmedDisplacedMuons correspond one-to-one, by originalObjectRef key, to the filtered
-//     collection, with exactly equal charge, muon type flags, component presence, component pT/eta/phi and the
-//     outer-track DSA-ID inputs (valid CSC/DT hits, normalized chi2, ptError).
-// Tree "events" (one row per event, same order as PreselectedVertexing): filterCode per raw muon (0 kept; 1 STA+inner
-// both pT < minPt; 2 STA-only pT < minPtSTA; 3 STA-only < minMatches valid DT+CSC hits; 4 no-STA inner pT < minPtTK;
-// 5 no-STA not isTrackerMuon), rawToFiltered per raw muon (-1 if removed), and the mismatch counts of (a) and (b).
-#include <algorithm>
+// Replicated MiniAOD displaced-muon filter for the slimmedDisplacedMuons loss study
+// (kb/studies/slimmed-displaced-muon-loss.md).
+// Produces copies (TrackRefs unchanged) of the raw displacedMuons that pass the selection of CMSSW_13_0_13
+// DisplacedMuonFilterProducer (the input of patDisplacedMuons -> slimmedDisplacedMuons), in raw order. The producer
+// counts valid DT+CSC rechits of the STA track via its TrackExtra, which signal MINIAOD does not store; here the count
+// is hitPattern().numberOfValidMuonDTHits() + numberOfValidMuonCSCHits() of the STA track.
+// Validation: stored slimmedDisplacedMuons must correspond one-to-one, by originalObjectRef key (index in the
+// production-time filtered collection, raw order), to this collection, with exactly equal charge, muon type flags,
+// component presence, component pT/eta/phi/charge and the outer-track DSA-ID inputs (valid CSC/DT hits, normalized
+// chi2, ptError). Tree "events" (one row per event, same order as PreselectedVertexing): filterCode per raw muon
+// (0 kept; 1 STA+inner both pT < min; 2 STA-only pT < minPtSTA; 3 STA-only < minMatches valid DT+CSC hits;
+// 4 no-STA inner pT < minPtTK; 5 no-STA not isTrackerMuon; 6 no STA and no inner track), rawToFiltered per raw muon
+// (-1 if removed), and the mismatch counts.
+#include <memory>
 #include <vector>
 
-#include "DataFormats/MuonDetId/interface/MuonSubdetId.h"
+#include "CommonTools/UtilAlgos/interface/TFileService.h"
 #include "DataFormats/MuonReco/interface/Muon.h"
 #include "DataFormats/PatCandidates/interface/Muon.h"
 #include "DataFormats/TrackReco/interface/Track.h"
 #include "FWCore/Framework/interface/Event.h"
 #include "FWCore/Framework/interface/MakerMacros.h"
-#include "FWCore/Framework/interface/one/EDAnalyzer.h"
+#include "FWCore/Framework/interface/one/EDProducer.h"
 #include "FWCore/ParameterSet/interface/ParameterSet.h"
 #include "FWCore/ServiceRegistry/interface/Service.h"
-#include "CommonTools/UtilAlgos/interface/TFileService.h"
 #include "TTree.h"
 
-class SlimmedDisplacedFilterCheck : public edm::one::EDAnalyzer<edm::one::SharedResources> {
+class SlimmedDisplacedFilterCheck : public edm::one::EDProducer<edm::one::SharedResources> {
 public:
   explicit SlimmedDisplacedFilterCheck(const edm::ParameterSet& ps)
       : raw_(consumes<std::vector<reco::Muon>>(ps.getParameter<edm::InputTag>("raw"))),
-        filtered_(consumes<std::vector<reco::Muon>>(ps.getParameter<edm::InputTag>("filtered"))),
         slimmed_(consumes<std::vector<pat::Muon>>(ps.getParameter<edm::InputTag>("slimmed"))),
         minPtSTA_(ps.getParameter<double>("minPtSTA")),
         minPtTK_(ps.getParameter<double>("minPtTK")),
         minMatches_(ps.getParameter<double>("minMatches")) {
+    produces<std::vector<reco::Muon>>();
     usesResource("TFileService");
     edm::Service<TFileService> fs;
     tree_ = fs->make<TTree>("events", "One row per event");
@@ -43,27 +45,22 @@ public:
     tree_->Branch("nRaw", &nRaw_);
     tree_->Branch("nFiltered", &nFiltered_);
     tree_->Branch("nSlimmed", &nSlimmed_);
-    tree_->Branch("badFilter", &badFilter_);    // (a) size or TrackRef mismatches
-    tree_->Branch("badSlimKey", &badSlimKey_);  // (b) size mismatch, out-of-range or repeated originalObjectRef key
-    tree_->Branch("badSlimObj", &badSlimObj_);  // (b) slimmed objects differing from their filtered partner
+    tree_->Branch("badSlimKey", &badSlimKey_);  // size mismatch, null, out-of-range or repeated originalObjectRef key
+    tree_->Branch("badSlimObj", &badSlimObj_);  // slimmed objects differing from their filtered partner
   }
 
-  void analyze(const edm::Event& ev, const edm::EventSetup&) override {
+  void produce(edm::Event& ev, const edm::EventSetup&) override {
     run_ = ev.id().run();
     lumi_ = ev.id().luminosityBlock();
     event_ = ev.id().event();
     const auto& raw = ev.get(raw_);
-    const auto& filtered = ev.get(filtered_);
     const auto& slimmed = ev.get(slimmed_);
-    nRaw_ = raw.size();
-    nFiltered_ = filtered.size();
-    nSlimmed_ = slimmed.size();
+    auto filtered = std::make_unique<std::vector<reco::Muon>>();
     filterCode_.assign(raw.size(), 0);
     rawToFiltered_.assign(raw.size(), -1);
-    badFilter_ = badSlimKey_ = badSlimObj_ = 0;
+    badSlimKey_ = badSlimObj_ = 0;
 
-    // (a) Replicated filter decision, same branch order as DisplacedMuonFilterProducer::produce.
-    std::vector<int> kept;
+    // Same branch order as DisplacedMuonFilterProducer::produce.
     for (unsigned int i = 0; i < raw.size(); ++i) {
       const reco::Muon& mu = raw[i];
       int code = 0;
@@ -74,15 +71,8 @@ public:
         } else if (mu.standAloneMuon()->pt() < minPtSTA_) {
           code = 2;
         } else {
-          unsigned int nseg = 0;
-          for (auto hit = mu.standAloneMuon()->recHitsBegin(); hit != mu.standAloneMuon()->recHitsEnd(); ++hit) {
-            if (!(*hit)->isValid())
-              continue;
-            const DetId id = (*hit)->geographicalId();
-            if (id.det() == DetId::Muon && (id.subdetId() == MuonSubdetId::DT || id.subdetId() == MuonSubdetId::CSC))
-              ++nseg;
-          }
-          if (nseg < minMatches_)
+          const auto& hp = mu.standAloneMuon()->hitPattern();
+          if (hp.numberOfValidMuonDTHits() + hp.numberOfValidMuonCSCHits() < minMatches_)
             code = 3;
         }
       } else if (mu.innerTrack().isNonnull()) {
@@ -91,48 +81,36 @@ public:
         else if (!mu.isTrackerMuon())
           code = 5;
       } else {
-        code = 6;  // neither STA nor inner track; the producer drops it with a warning
+        code = 6;
       }
       filterCode_[i] = code;
       if (code == 0) {
-        rawToFiltered_[i] = kept.size();
-        kept.push_back(i);
+        rawToFiltered_[i] = filtered->size();
+        filtered->push_back(mu);
       }
     }
-    if (kept.size() != filtered.size())
-      ++badFilter_;
-    for (unsigned int k = 0; k < std::min(kept.size(), filtered.size()); ++k) {
-      const reco::Muon& a = raw[kept[k]];
-      const reco::Muon& b = filtered[k];
-      if (!sameRef(a.innerTrack(), b.innerTrack()) || !sameRef(a.outerTrack(), b.outerTrack()) ||
-          !sameRef(a.globalTrack(), b.globalTrack()))
-        ++badFilter_;
-    }
 
-    // (b) Slimmed <-> filtered by originalObjectRef key.
-    if (slimmed.size() != filtered.size())
+    nRaw_ = raw.size();
+    nFiltered_ = filtered->size();
+    nSlimmed_ = slimmed.size();
+    if (slimmed.size() != filtered->size())
       ++badSlimKey_;
-    std::vector<bool> used(filtered.size(), false);
+    std::vector<bool> used(filtered->size(), false);
     for (const pat::Muon& s : slimmed) {
       const auto orig = s.originalObjectRef();
-      if (orig.isNull() || orig.key() >= filtered.size() || used[orig.key()]) {
+      if (orig.isNull() || orig.key() >= filtered->size() || used[orig.key()]) {
         ++badSlimKey_;
         continue;
       }
       used[orig.key()] = true;
-      if (!sameMuon(filtered[orig.key()], s))
+      if (!sameMuon((*filtered)[orig.key()], s))
         ++badSlimObj_;
     }
     tree_->Fill();
+    ev.put(std::move(filtered));
   }
 
 private:
-  static bool sameRef(const reco::TrackRef& a, const reco::TrackRef& b) {
-    if (a.isNull() || b.isNull())
-      return a.isNull() == b.isNull();
-    return a.id() == b.id() && a.key() == b.key();
-  }
-
   // Exact equality of the track quantities the matching and the component IDs use (embedded copies are exact).
   static bool sameTrack(const reco::TrackRef& a, const reco::TrackRef& b, bool dsaId) {
     if (a.isNull() || b.isNull())
@@ -155,14 +133,14 @@ private:
            sameTrack(f.globalTrack(), s.globalTrack(), false);
   }
 
-  const edm::EDGetTokenT<std::vector<reco::Muon>> raw_, filtered_;
+  const edm::EDGetTokenT<std::vector<reco::Muon>> raw_;
   const edm::EDGetTokenT<std::vector<pat::Muon>> slimmed_;
   const double minPtSTA_, minPtTK_, minMatches_;
   TTree* tree_;
   unsigned int run_ = 0, lumi_ = 0;
   unsigned long long event_ = 0;
   std::vector<int> filterCode_, rawToFiltered_;
-  int nRaw_ = 0, nFiltered_ = 0, nSlimmed_ = 0, badFilter_ = 0, badSlimKey_ = 0, badSlimObj_ = 0;
+  int nRaw_ = 0, nFiltered_ = 0, nSlimmed_ = 0, badSlimKey_ = 0, badSlimObj_ = 0;
 };
 
 DEFINE_FWK_MODULE(SlimmedDisplacedFilterCheck);
