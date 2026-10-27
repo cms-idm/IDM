@@ -41,6 +41,8 @@ def analyze_sample(path, ref_dir, log_dir, flist_dir):
     import uproot
     f = uproot.open(path)
     sample = str(f["preselectedVertexing/sample"].member("fTitle"))
+    if sample != path.stem:
+        raise RuntimeError("%s: file holds sample %s" % (path, sample))
     rev = str(f["preselectedVertexing/revision"].member("fTitle"))
     br = ["run", "lumi", "event", "twoAcc", "sigPt", "sigD0", "sigLxy", "sigQ", "matchObj", "matchType", "cObj", "cType"]
     a = f["preselectedVertexing/events"].arrays(br, library="np")
@@ -78,13 +80,13 @@ def analyze_sample(path, ref_dir, log_dir, flist_dir):
     lost, gained = mA & ~mB, ~mA & mB
 
     # Reference: A must reproduce the existing G > I > DSA run on the same events.
-    ref_mis = 0
-    if ref_dir is not None:
-        r = uproot.open(ref_dir / (sample + ".root"))["preselectedVertexing/events"].arrays(
-            ["event", "twoAcc", "matchObj", "matchType"], library="np")
-        if not np.array_equal(r["event"], a["event"]) or not np.array_equal(r["twoAcc"], a["twoAcc"]):
-            raise RuntimeError("%s: reference events differ" % sample)
-        ref_mis = int(((per_gen(r["matchObj"], two) != objA) | (per_gen(r["matchType"], two) != typA)).sum())
+    r = uproot.open(ref_dir / (sample + ".root"))["preselectedVertexing/events"].arrays(
+        ["run", "lumi", "event", "twoAcc", "matchObj", "matchType"], library="np")
+    if any(not np.array_equal(r[k], a[k]) for k in ("run", "lumi", "event", "twoAcc")):
+        raise RuntimeError("%s: reference events differ" % sample)
+    ref_mis = int(((per_gen(r["matchObj"], two) != objA) | (per_gen(r["matchType"], two) != typA)).sum())
+    if ref_mis:
+        raise RuntimeError("%s: case A differs from the reference matching for %d gen" % (sample, ref_mis))
 
     fate = np.full(len(objA), -1)
     for i in np.flatnonzero(lost):
@@ -118,7 +120,13 @@ def analyze(args):
     if len(paths) != args.expected_samples:
         raise RuntimeError("Expected %d sample files, found %d" % (args.expected_samples, len(paths)))
     flist_dir = Path(__file__).resolve().parents[1] / "fileLists/signal/2022EE/iDMmu"
-    ref = Path(args.reference_dir) if args.reference_dir else None
+    expected = sorted(f.name[:-len("_flist.txt")] for f in flist_dir.glob("*_flist.txt"))
+    if [p.stem for p in paths] != expected:
+        raise RuntimeError("Input samples differ from the signal file lists: missing %s, extra %s" % (
+            sorted(set(expected) - {p.stem for p in paths}), sorted({p.stem for p in paths} - set(expected))))
+    if not args.reference_dir:
+        raise RuntimeError("analyze needs --reference-dir (case A must reproduce the reference matching)")
+    ref = Path(args.reference_dir)
     results, revs = [], set()
     for p in paths:
         s, rev, counts, hists = analyze_sample(p, ref, Path(args.log_dir), flist_dir)
