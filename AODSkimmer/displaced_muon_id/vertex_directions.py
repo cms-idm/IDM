@@ -575,8 +575,8 @@ def plot_dphi(args):
         cutline(scale * top)
         c.Modified(); c.SaveAs(str(out / (name + ".png")))
         if args.log:
-            c.SetLogy(1); hists[0].SetMinimum(bottom); hists[0].SetMaximum(top * 50)
-            keep[-1].SetY2(top * 50)
+            c.SetLogy(1); hists[0].SetMinimum(bottom); hists[0].SetMaximum(top * 150)
+            keep[-1].SetY2(top * 150)
             c.Modified(); c.SaveAs(str(out / (name + "_log.png"))); c.SetLogy(0)
 
     def canvas(name):
