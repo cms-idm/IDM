@@ -108,7 +108,12 @@ elif options.year == "2018":
     recoEgammaTools_era = "2018-UL"
 
 elif options.year in ["2022", "2022EE"]:
-    globaltag = "130X_dataRun3_v2" if options.data else "130X_mcRun3_2022_realistic_v5"
+    if options.data:
+        globaltag = "130X_dataRun3_v2"
+    elif options.year == "2022EE":
+        globaltag = "130X_mcRun3_2022_realistic_postEE_v6"
+    else:
+        globaltag = "130X_mcRun3_2022_realistic_v5"
     era = Run3
     recoEgammaTools_era = "2022-Prompt"
 
