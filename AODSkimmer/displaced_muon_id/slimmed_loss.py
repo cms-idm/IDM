@@ -147,7 +147,8 @@ def analyze(args):
     ROOT.TNamed("revision", revs.pop()).Write()
     ROOT.TNamed("definitions", __doc__.split("\n\n", 1)[1]).Write()
     for gname, rs in groups.items():
-        out.mkdir("groups/" + gname).cd()
+        out.mkdir("groups/" + gname)  # returns the top directory ("groups"), so cd by path
+        out.cd("groups/" + gname)
         hc = ROOT.TH1D("counts", "raw unweighted counts", len(COUNTS), 0, len(COUNTS))
         for i, (k, label) in enumerate(COUNTS):
             hc.GetXaxis().SetBinLabel(i + 1, label)
