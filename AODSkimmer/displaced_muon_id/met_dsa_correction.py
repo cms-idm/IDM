@@ -29,7 +29,7 @@ VARIANTS = ("or01", "prox01")
 XS = ("pf", "or01", "prox01", "chi")
 XLAB = {"pf": "PF p_{T}^{miss}", "or01": "PF p_{T}^{miss} + DSA (hit < 0.1 or seg.)",
         "prox01": "PF p_{T}^{miss} + DSA (hit < 0.1)", "chi": "p_{T}(#chi_{1}#chi_{1})"}
-EXTRA = ("hfVertexPt", "pfMetPt", "pfMetPhi", "chiOK", "chiPx", "chiPy", "sigD0")
+EXTRA = ("hfVertexPt", "hfLegSegPfDR", "pfMetPt", "pfMetPhi", "chiOK", "chiPx", "chiPy", "sigD0")
 DPHI_EDGES = np.round(np.arange(0, 3.1501, 0.05), 2)
 RES_EDGES = np.round(np.arange(-3.15, 3.1501, 0.05), 2)
 MET_EDGES = np.arange(0, 400.1, 5.0)
@@ -49,7 +49,7 @@ def sample_events(a, ak, name, si):
     rows = v["or01"]["evrow"][::2]
     if not np.array_equal(v["prox01"]["evrow"], v["or01"]["evrow"]):
         raise RuntimeError("Variant selections differ in " + name)
-    for k in ("hfVertexPt", "sigD0", "hfLegSegFrac", "hfLegQ", "hfLegHitPfPt", "hfLegSegPfPt", "hfLegHitPfQ",
+    for k in ("hfVertexPt", "hfLegSegPfDR", "sigD0", "hfLegSegFrac", "hfLegQ", "hfLegHitPfPt", "hfLegSegPfPt", "hfLegHitPfQ",
               "hfLegSegPfQ", "sigPt"):
         if np.any(np.asarray(ak.num(a[k]))[rows] != 2):
             raise RuntimeError("Non-pair %s in a selected event of %s" % (k, name))
@@ -80,7 +80,9 @@ def sample_events(a, ak, name, si):
         hitdr = v[var]["hitDR"].reshape(-1, 2)
         dsa = typ == DSA
         shared = dsa.all(1) & assoc.all(1) & (idx[:, 0] == idx[:, 1])
-        hd = np.where(hitdr >= 0, hitdr, np.inf)
+        use_seg = (var == "or01") & ~((hitdr >= 0) & (hitdr < 0.1))  # as vertex_legs: proximity PF first
+        adr = np.where(use_seg, pick("hfLegSegPfDR"), hitdr)  # hit dR of the associated PF muon itself
+        hd = np.where(adr >= 0, adr, np.inf)
         # loser = leg 1 unless leg 1 is strictly better (smaller hit dR, then higher segment fraction)
         b1 = (hd[:, 1] < hd[:, 0]) | ((hd[:, 1] == hd[:, 0]) & (segfrac[:, 1] > segfrac[:, 0]))
         assoc[shared & ~b1, 1] = False
@@ -90,7 +92,6 @@ def sample_events(a, ak, name, si):
         e["nCorr_" + var] = corr.sum(1).astype(np.int32)
         e[var + "Px"] = e["pfPx"] - np.where(corr, lpx, 0).sum(1)
         e[var + "Py"] = e["pfPy"] - np.where(corr, lpy, 0).sum(1)
-        use_seg = (var == "or01") & ~((hitdr >= 0) & (hitdr < 0.1))  # as vertex_legs: proximity PF first
         pfpt = np.where(use_seg, pick("hfLegSegPfPt"), pick("hfLegHitPfPt")).astype(float)
         pfq = np.where(use_seg, pick("hfLegSegPfQ"), pick("hfLegHitPfQ"))
         if np.any(~np.isclose(pfpt[assoc], v[var]["legPfPt"].reshape(-1, 2)[assoc])):
