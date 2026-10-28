@@ -27,8 +27,8 @@ from pf_muon_overlap import HF_LEG, HF_SCALAR, HIT_LEG, SCALAR, vertex_legs
 DSA = 1
 VARIANTS = ("or01", "prox01")
 XS = ("pf", "or01", "prox01", "chi")
-XLAB = {"pf": "PF p_{T}^{miss}", "or01": "PF p_{T}^{miss} + DSA (hit < 0.1 or seg.)",
-        "prox01": "PF p_{T}^{miss} + DSA (hit < 0.1)", "chi": "p_{T}(#chi_{1}#chi_{1})"}
+XLAB = {"pf": "PF p_{T}^{miss}", "or01": "PF p_{T}^{miss} #minus DSA w/o PF (hit/seg.)",
+        "prox01": "PF p_{T}^{miss} #minus DSA w/o PF (hit)", "chi": "p_{T}(#chi_{1}#chi_{1})"}
 EXTRA = ("hfVertexPt", "hfLegSegPfDR", "pfMetPt", "pfMetPhi", "chiOK", "chiPx", "chiPy", "sigD0")
 DPHI_EDGES = np.round(np.arange(0, 3.1501, 0.05), 2)
 RES_EDGES = np.round(np.arange(-3.15, 3.1501, 0.05), 2)
