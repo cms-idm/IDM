@@ -418,12 +418,12 @@ def plot_dr_cms(args):
         top = max(h.GetBinContent(h.GetMaximumBin()) for h in hists)  # GetMaximum() would return a SetMaximum value
         hists[0].SetMinimum(0); hists[0].SetMaximum(1.45 * top)
         if cutline:
-            ln = ROOT.TLine(DR_CUT, 0, DR_CUT, 1.45 * top); keep.append(ln)
+            ln = ROOT.TLine(DR_CUT, 0, DR_CUT, 1.2 * top); keep.append(ln)  # stops below the in-frame text
             ln.SetLineStyle(2); ln.SetLineWidth(2); ln.SetLineColor(ROOT.kGray + 2); ln.Draw()
         c.Modified(); c.SaveAs(str(out / (name + ".png")))
         if args.log:
             c.SetLogy(1); hists[0].SetMinimum(bottom); hists[0].SetMaximum(top * 60)
-            if cutline: ln.SetY1(bottom); ln.SetY2(top * 60)
+            if cutline: ln.SetY1(bottom); ln.SetY2(top * 5)
             c.Modified(); c.SaveAs(str(out / (name + "_log.png"))); c.SetLogy(0)
 
     def canvas(name):
