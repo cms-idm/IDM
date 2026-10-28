@@ -192,8 +192,9 @@ def plot(args):
         return x[ok], r[ok], (r - lo)[ok], (hi - r)[ok]
 
     def save(fig, path):
-        fig.text(0.01, 0.005, foot, fontsize=6, color="0.35")
-        fig.tight_layout(rect=(0, 0.03, 1, 1))
+        import textwrap
+        fig.text(0.01, 0.005, textwrap.fill(foot, int(fig.get_figwidth() * 22)), fontsize=6, color="0.35")
+        fig.tight_layout(rect=(0, 0.06, 1, 1))
         fig.savefig(path, dpi=110)
         if args.log:
             for ax in fig.axes:
