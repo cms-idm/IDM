@@ -414,12 +414,16 @@ def plot_dr_cms(args):
         t.SetTextSize(0.033); t.SetTextAlign(13)
         for i, line in enumerate(lines): t.DrawLatex(0.21, 0.88 - 0.045 * i, line)
 
-    def save(c, hists, name, bottom=0.5):
+    def save(c, hists, name, bottom=0.5, cutline=False):
         top = max(h.GetBinContent(h.GetMaximumBin()) for h in hists)  # GetMaximum() would return a SetMaximum value
         hists[0].SetMinimum(0); hists[0].SetMaximum(1.45 * top)
+        if cutline:
+            ln = ROOT.TLine(DR_CUT, 0, DR_CUT, 1.45 * top); keep.append(ln)
+            ln.SetLineStyle(2); ln.SetLineWidth(2); ln.SetLineColor(ROOT.kGray + 2); ln.Draw()
         c.Modified(); c.SaveAs(str(out / (name + ".png")))
         if args.log:
             c.SetLogy(1); hists[0].SetMinimum(bottom); hists[0].SetMaximum(top * 60)
+            if cutline: ln.SetY1(bottom); ln.SetY2(top * 60)
             c.Modified(); c.SaveAs(str(out / (name + "_log.png"))); c.SetLogy(0)
 
     def canvas(name):
@@ -428,13 +432,16 @@ def plot_dr_cms(args):
         keep.append(c)
         return c
 
+    DR_CUT = 0.9
     count = 0
     for tag, mask, label in (("all", complete, "All vertex types"), ("dsadsa", complete & (ev["pair"] == oo), "DSA#minusDSA vertex")):
         n, nfb = int(mask.sum()), int((mask & (ev["fallback"] == 1)).sum())
-        head = "%s%s: %d pairs (%d via fit fallback)" % (label, cut, n, nfb)
+        head = "%s%s: %d pairs" % (label, cut, n)
         x = {s: ev[s + "_dr"][mask] for s in ("gen", "reco")}
         x["residual"] = x["reco"] - x["gen"]
-        g9, r9 = x["gen"] < 0.9, x["reco"] < 0.9
+        g9, r9 = x["gen"] < DR_CUT, x["reco"] < DR_CUT
+        npass = dict(gen=int(g9.sum()), reco=int(r9.sum()))
+        passtext = "%d pairs with #DeltaR < %g"
         print("%s dR<0.9 of N=%d: gen %d reco %d both %d gen_only %d reco_only %d" %
               (tag, n, g9.sum(), r9.sum(), (g9 & r9).sum(), (g9 & ~r9).sum(), (~g9 & r9).sum()))
         h = {s: th1("h_%s_%s" % (s, tag), x[s], redges if s == "residual" else edges) for s in x}
@@ -442,12 +449,11 @@ def plot_dr_cms(args):
             c = canvas("c_%s_%s" % (s, tag))
             hs = h[s]; hs.SetLineColor(color[s]); hs.SetLineWidth(3)
             frame(hs, "Pairs / %g" % (redges[1] - redges[0] if s == "residual" else 0.05))
+            if s == "residual": hs.GetXaxis().SetRangeUser(-0.6, 0.6)  # display only; stored bins and flows unchanged
             hs.Draw("hist")
-            under, over = int(hs.GetBinContent(0)), int(hs.GetBinContent(hs.GetNbinsX() + 1))
-            flow = ("Underflow %d, overflow %d" % (under, over) if s == "residual"
-                    else "Overflow at #DeltaR #geq 3.15: %d" % over)
-            labels(c, [head, legend[s] if s != "residual" else "Reco at PCA minus gen, per pair", flow])
-            save(c, [hs], "%s_dr_%s" % (s, tag)); count += 1
+            labels(c, [head, "Reco at PCA minus gen, per pair"] if s == "residual"
+                   else [head, legend[s], passtext % (npass[s], DR_CUT)])
+            save(c, [hs], "%s_dr_%s" % (s, tag), cutline=s != "residual"); count += 1
         for norm in (False, True):
             c = canvas("c_overlay_%s_%d" % (tag, norm))
             hs = [h[s].Clone("o_%s_%s_%d" % (s, tag, norm)) for s in ("gen", "reco")]
@@ -456,15 +462,13 @@ def plot_dr_cms(args):
                 if norm: hh.Scale(1.0 / n)  # n includes overflow: drawn bins sum to 1 - overflow fraction
             frame(hs[0], "Fraction of pairs / 0.05" if norm else "Pairs / 0.05")
             hs[0].Draw("hist"); hs[1].Draw("hist same")
-            leg = ROOT.TLegend(0.52, 0.60, 0.94, 0.72); keep.append(leg)
+            leg = ROOT.TLegend(0.50, 0.56, 0.94, 0.76); keep.append(leg)
             leg.SetBorderSize(0); leg.SetFillStyle(0); leg.SetTextSize(0.033)
             for s, hh in zip(("gen", "reco"), hs):
-                leg.AddEntry(hh, "%s" % legend[s], "l")
+                leg.AddEntry(hh, "#splitline{%s}{%s}" % (legend[s], passtext % (npass[s], DR_CUT)), "l")
             leg.Draw()
-            over = [int(h[s].GetBinContent(h[s].GetNbinsX() + 1)) for s in ("gen", "reco")]
-            labels(c, [head, "Overflow at #DeltaR #geq 3.15: gen %d, reco %d" % tuple(over)] +
-                   (["Unit area incl. overflow"] if norm else []))
-            save(c, hs, "overlay_dr_%s%s" % (tag, "_unitarea" if norm else ""), 0.5 / n if norm else 0.5); count += 1
+            labels(c, [head] + (["Unit area incl. overflow"] if norm else []))
+            save(c, hs, "overlay_dr_%s%s" % (tag, "_unitarea" if norm else ""), 0.5 / n if norm else 0.5, cutline=True); count += 1
         print("%s N=%d fallback=%d gen_over=%d reco_over=%d residual_under=%d residual_over=%d" %
               (tag, n, nfb, h["gen"].GetBinContent(64), h["reco"].GetBinContent(64),
                h["residual"].GetBinContent(0), h["residual"].GetBinContent(101)))
