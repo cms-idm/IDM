@@ -33,9 +33,17 @@ f = ROOT.TFile.Open(sys.argv[1])
 if not f or f.IsZombie():
     raise SystemExit("Cannot reopen output")
 t = f.Get("Events")
-if not t or t.GetEntries() != 100:
-    raise SystemExit("Expected exactly 100 test events")
-print("PASS: reopened output with 100 test events:", sys.argv[1])
+n = t.GetEntries() if t else 0
+if n < 1:
+    raise SystemExit("Expected at least 1 test event")
+if len(sys.argv) > 2:
+    r = ROOT.TFile.Open(sys.argv[2])
+    if not r or r.IsZombie() or not r.Get("Events"):
+        raise SystemExit("Cannot reopen previous output")
+    if r.Get("Events").GetEntries() != n:
+        raise SystemExit("Event count differs from previous stage")
+    r.Close()
+print("PASS: reopened output with", n, "test events:", sys.argv[1])
 f.Close()
 ''')
 q = shlex.quote
@@ -66,9 +74,8 @@ for i, step in enumerate(steps):
                   'cp ../../fragment.py Configuration/GenProduction/python/wjets_fragment.py',
                   'scram b -j 2']
         args += ['Configuration/GenProduction/python/wjets_fragment.py',
-                 '--number', '2000', '--number_out', '100',
-                 # One stream: an in-flight event on a second stream can be written past --number_out.
-                 '--nStreams', '1',
+                 # No --number_out: ExternalLHEProducer fails at end of run unless all LHE events are used.
+                 '--number', '2000',
                  '--customise_commands',
                  'process.externalLHEProducer.nEvents=cms.untracked.uint32(2000); '
                  'process.RandomNumberGeneratorService.externalLHEProducer.initialSeed=cms.untracked.uint32(29102026)']
@@ -90,7 +97,7 @@ for i, step in enumerate(steps):
               shlex.join(args) + ' > logs/' + step + '_cmsDriver.log 2>&1',
               'echo ' + q('cmsRun -j ' + step + '_FrameworkJobReport.xml ' + step + '.py') + ' >> logs/commands.log',
               '/usr/bin/time -v cmsRun -j ' + q(step + '_FrameworkJobReport.xml') + ' ' + q(step + '.py') + ' > logs/' + step + '_cmsRun.log 2>&1',
-              'python3 check_output.py ' + q(step + '.root')]
+              'python3 check_output.py ' + q(step + '.root') + ('' if previous is None else ' ' + q(previous + '.root'))]
     if i == len(steps) - 1:
         lines += ['edmDumpEventContent ' + q(step + '.root') + ' > logs/MiniAOD_content.log',
                   'grep -F \'"displacedMuons"\' logs/MiniAOD_content.log',
