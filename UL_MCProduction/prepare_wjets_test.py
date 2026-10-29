@@ -3,6 +3,8 @@
 
 Preparation only: does not submit jobs, execute CMSSW, or write to EOS.
 Run on LPC in a new directory; inputs are explicit snapshots.
+With --job N it prepares production job N instead: lumi section N+1 and
+reproducible job-specific seeds for every GEN-SIM and DIGIPremix engine.
 """
 import argparse
 import json
@@ -15,7 +17,19 @@ p.add_argument('--chain', required=True)
 p.add_argument('--fragment', required=True)
 p.add_argument('--pileup-list', required=True)
 p.add_argument('--output', required=True)
+p.add_argument('--job', type=int)
 a = p.parse_args()
+if a.job is not None and not 0 <= a.job < 1000:
+    raise SystemExit('--job must be in [0, 1000)')
+
+
+def job_seeds(i):
+    # RandomNumberServiceHelper.populate() uses SystemRandom; seed every engine reproducibly instead.
+    # cmsDriver exec()s this inside a method, so no comprehension scope: bind the generator as a default.
+    return ('from IOMC.RandomEngine.RandomServiceHelper import RandomNumberServiceHelper; import random; '
+            'h = RandomNumberServiceHelper(process.RandomNumberGeneratorService); '
+            'h.insertSeeds(*map(lambda _, g=random.Random(%d): g.randint(1, 900000000), range(h.countSeeds())))'
+            % (29102026000 + 10 * a.job + i))
 chain = json.loads(Path(a.chain).read_text())
 steps = chain['STEPS']
 if steps != ['Run3Summer22EEGENSIM', 'Run3Summer22EEDIGIPremix',
@@ -73,14 +87,19 @@ for i, step in enumerate(steps):
         lines += ['mkdir -p Configuration/GenProduction/python',
                   'cp ../../fragment.py Configuration/GenProduction/python/wjets_fragment.py',
                   'scram b -j 2']
+        custom = ('process.externalLHEProducer.nEvents=cms.untracked.uint32(2000); '
+                  'process.RandomNumberGeneratorService.externalLHEProducer.initialSeed=cms.untracked.uint32(29102026)')
+        if a.job is not None:
+            custom += ('; process.source.firstLuminosityBlock=cms.untracked.uint32(%d); ' % (a.job + 1)
+                       + job_seeds(i))
         args += ['Configuration/GenProduction/python/wjets_fragment.py',
                  # No --number_out: ExternalLHEProducer fails at end of run unless all LHE events are used.
                  '--number', '2000',
-                 '--customise_commands',
-                 'process.externalLHEProducer.nEvents=cms.untracked.uint32(2000); '
-                 'process.RandomNumberGeneratorService.externalLHEProducer.initialSeed=cms.untracked.uint32(29102026)']
+                 '--customise_commands', custom]
     else:
         args += [step, '--number', '-1', '--filein', 'file:' + str(out / (previous + '.root'))]
+        if a.job is not None and step == 'Run3Summer22EEDIGIPremix':
+            args += ['--customise_commands', job_seeds(i)]
     args += ['--nThreads', '2', '--no_exec', '--fileout', 'file:' + str(out / (step + '.root')),
              '--python_filename', str(out / (step + '.py'))]
     for key, value in opts.items():
