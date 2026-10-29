@@ -67,6 +67,8 @@ for i, step in enumerate(steps):
                   'scram b -j 2']
         args += ['Configuration/GenProduction/python/wjets_fragment.py',
                  '--number', '2000', '--number_out', '100',
+                 # One stream: an in-flight event on a second stream can be written past --number_out.
+                 '--nStreams', '1',
                  '--customise_commands',
                  'process.externalLHEProducer.nEvents=cms.untracked.uint32(2000); '
                  'process.RandomNumberGeneratorService.externalLHEProducer.initialSeed=cms.untracked.uint32(29102026)']

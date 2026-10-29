@@ -26,6 +26,8 @@ export SCRAM_ARCH=el8_amd64_gcc11
 cd /cvmfs/cms.cern.ch/el8_amd64_gcc11/cms/cmssw/CMSSW_13_0_13/src
 eval "$(scram runtime -sh)"
 set -u
+# Worker /etc/grid-security can lack the CMS VOMS LSC files, so voms-proxy-info fails on a valid proxy.
+export X509_VOMS_DIR=/cvmfs/grid.cern.ch/etc/grid-security/vomsdir
 cd "$workdir"
 python3 prepare_wjets_test.py --chain WJets_2022EE_test_chain.json \
   --fragment WJets_2022EE_official_fragment.py --pileup-list pileup.txt \
