@@ -1,0 +1,91 @@
+{
+  "STEPS": [
+    "Run3Summer22EEGENSIM",
+    "Run3Summer22EEDIGIPremix",
+    "Run3Summer22EERECO",
+    "Run3Summer22EEMiniAOD"
+  ],
+  "KEEPS": [
+    "Run3Summer22EEMiniAOD"
+  ],
+  "WORKFLOWS": {
+    "Run3Summer22EEGENSIM": {
+      "SCRAM_ARCH": "el8_amd64_gcc10",
+      "CMSSW_VERSION": "CMSSW_12_4_14_patch3",
+      "OPTIONS": {
+        "eventcontent": "RAWSIM,LHE",
+        "datatier": "GEN-SIM,LHE",
+        "conditions": "124X_mcRun3_2022_realistic_postEE_v1",
+        "beamspot": "Realistic25ns13p6TeVEarly2022Collision",
+        "step": "LHE,GEN,SIM",
+        "geometry": "DB:Extended",
+        "era": "Run3",
+        "mc": null
+      },
+      "CUSTOMIZES": {
+        "files": [],
+        "pre-cmsRun": [],
+        "post-cmsRun": []
+      }
+    },
+    "Run3Summer22EEDIGIPremix": {
+      "SCRAM_ARCH": "el8_amd64_gcc10",
+      "CMSSW_VERSION": "CMSSW_12_4_14_patch3",
+      "OPTIONS": {
+        "eventcontent": "PREMIXRAW",
+        "datatier": "GEN-SIM-RAW",
+        "conditions": "124X_mcRun3_2022_realistic_postEE_v1",
+        "step": "DIGI,DATAMIX,L1,DIGI2RAW,HLT:2022v14",
+        "procModifiers": "premix_stage2,siPixelQualityRawToDigi",
+        "geometry": "DB:Extended",
+        "datamix": "PreMix",
+        "era": "Run3",
+        "pileup_input": "dbs\\:/Neutrino_E-10_gun/Run3Summer21PrePremix-Summer22_124X_mcRun3_2022_realistic_v11-v2/PREMIX",
+        "mc": null
+      },
+      "CUSTOMIZES": {
+        "files": [],
+        "pre-cmsRun": [],
+        "post-cmsRun": []
+      }
+    },
+    "Run3Summer22EERECO": {
+      "SCRAM_ARCH": "el8_amd64_gcc10",
+      "CMSSW_VERSION": "CMSSW_12_4_14_patch3",
+      "OPTIONS": {
+        "eventcontent": "AODSIM",
+        "datatier": "AODSIM",
+        "conditions": "124X_mcRun3_2022_realistic_postEE_v1",
+        "step": "RAW2DIGI,L1Reco,RECO,RECOSIM",
+        "procModifiers": "siPixelQualityRawToDigi",
+        "geometry": "DB:Extended",
+        "era": "Run3",
+        "mc": null
+      },
+      "CUSTOMIZES": {
+        "files": [],
+        "pre-cmsRun": [],
+        "post-cmsRun": []
+      }
+    },
+    "Run3Summer22EEMiniAOD": {
+      "SCRAM_ARCH": "el8_amd64_gcc11",
+      "CMSSW_VERSION": "CMSSW_13_0_13",
+      "OPTIONS": {
+        "eventcontent": "MINIAODSIM",
+        "datatier": "MINIAODSIM",
+        "conditions": "130X_mcRun3_2022_realistic_postEE_v6",
+        "step": "PAT",
+        "geometry": "DB:Extended",
+        "era": "Run3,run3_miniAOD_12X",
+        "customise_commands": "'process.MINIAODSIMoutput.outputCommands.extend([\"keep recoMuons_displacedMuons_*_*\",\"keep recoMuons_muons_*_*\",\"keep recoTracks_standAloneMuons_*_*\",\"keep recoTrackExtras_standAloneMuons_*_*\",\"keep recoTracks_displacedStandAloneMuons_*_*\",\"keep recoTrackExtras_displacedStandAloneMuons_*_*\",\"keep recoTracks_displacedGlobalMuons_*_*\",\"keep recoTrackExtras_displacedGlobalMuons_*_*\",\"keep recoTracks_displacedTracks_*_*\",\"keep recoTrackExtras_displacedTracks_*_*\",\"keep recoTracks_globalMuons_*_*\",\"keep recoTrackExtras_globalMuons_*_*\",\"keep recoMuonTimeExtraedmValueMap_displacedMuons_*_*\",\"keep *_displacedMuons__RECO\",\"keep *_displacedTracks__RECO\",\"keep *_displacedGlobalMuons__RECO\",\"keep *_displacedStandAloneMuons__RECO\",\"keep *_displacedMuonReducedTrackExtras__RECO\",\"keep *_displacedMuons_combined_RECO\",\"keep *_displacedMuons_dt_RECO\",\"keep *_displacedMuons_csc_RECO\",\"keep *_dt4DSegments__RECO\",\"keep *_cscSegments__RECO\",\"keep *_rpcRecHits__RECO\",\"keep *_gemSegments__RECO\",\"keep *_gemRecHits__RECO\",\"keep *_muons__RECO\",\"keep *_globalMuons__RECO\",\"keep *_standAloneMuons__RECO\",\"keep *_refittedStandAloneMuons__RECO\",\"keep *_muonReducedTrackExtras__RECO\",\"keep *_muons_combined_RECO\",\"keep *_muons_dt_RECO\",\"keep *_muons_csc_RECO\",\"keep *_muonsFromCosmics__RECO\",\"keep *_muonsFromCosmics1Leg__RECO\",\"keep *_muons_cosmicsVeto_RECO\",\"keep *_dt4DCosmicSegments__RECO\",\"keep *_particleFlow_muons_RECO\",\"keep *_particleFlowTmp_CleanedCosmicsMuons_RECO\",\"keep *_particleFlowTmp_CleanedFakeMuons_RECO\",\"keep *_particleFlowTmp_CleanedPunchThroughMuons_RECO\",\"keep *_particleFlowTmp_CleanedTrackerAndGlobalMuons_RECO\",\"keep *_ak4PFJets__RECO\",\"keep *_ak4PFJetsCHS__RECO\",\"keep *_ak4PFJetsPuppi__RECO\",\"keep *_pfMet__RECO\",\"keep *_pfMetPuppi__RECO\",\"keep *_pfChMet__RECO\",\"keep *_caloMet__RECO\",\"keep *_offlineBeamSpot__RECO\",\"keep *_offlinePrimaryVertices__RECO\",\"keep *_offlinePrimaryVerticesWithBS__RECO\",\"keep *_TriggerResults__HLT\",\"keep *_hltTriggerSummaryAOD__HLT\",\"keep *_gmtStage2Digis_Muon_RECO\"]); process.patUnfilteredDisplacedMuons = process.patDisplacedMuons.clone(muonSource=cms.InputTag(\"displacedMuons\"), sourceMuonTimeExtra=cms.InputTag(\"displacedMuons\", \"combined\"), computeSoftMuonMVA=True); process.patTask.add(process.patUnfilteredDisplacedMuons); process.MINIAODSIMoutput.outputCommands.append(\"keep *_patUnfilteredDisplacedMuons_*_*\")'",
+        "mc": null
+      },
+      "CUSTOMIZES": {
+        "files": [],
+        "pre-cmsRun": [],
+        "post-cmsRun": []
+      }
+    }
+  }
+}
