@@ -1,5 +1,6 @@
-# Private 2022EE background production, one sample per submission:
-#   condor_submit private_production.jdl sample=<sample> index=<sample index> nevents=<generated events per job> jobs="0 1"
+# Private 2022EE background production, one sample per submission (logs/<sample>/ must exist; Condor writes the
+# event log there on the submit host):
+#   mkdir -p logs/<sample> && condor_submit private_production.jdl sample=<sample> index=<sample index> nevents=<generated events per job> jobs="0 1"
 # (chains/<sample>_chain.json and chains/<sample>_fragment.py from make_bkg_private_chains.py).
 # Resubmit failed jobs with their original indices only after the originals left the queue and EOS was listed.
 universe = vanilla
