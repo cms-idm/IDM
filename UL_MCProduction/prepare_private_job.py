@@ -2,11 +2,12 @@
 """Prepare one job of the private 2022EE background production (prepare_wjets_test.py generalized).
 
 Preparation only: writes run_test.sh and inputs into a new directory; does not run CMSSW or write to EOS.
-Job N of sample index I: lumi section N+1 (one lumi per job, run 1), --nevents generated events, every GEN-SIM and
-DIGIPremix engine reseeded from random.Random(seed_base + 10*N + step), seed_base = 30102026000 + 10000*I. For LHE
-samples the externalLHEProducer seed is set to lhe_seed(I, N) = 500000000 + 100000*I + 10*N: with 2 threads and
-generateConcurrently=True the gridpack runs use lhe_seed + thread (CMSSW ExternalLHEProducer), so each job owns the
-block [lhe_seed, lhe_seed + 10).
+Job N of sample index I: lumi section N+1 (one lumi per job, run 1), --nevents generated events. Seeds are assigned,
+not drawn (random draws over ~1000 jobs x 2 steps x 33 engines collide): GEN-SIM (step 0) and DIGIPremix (step 1)
+engines get consecutive seeds from block_start(I, N, step) = 100000000 + 64*((1000*I + N)*2 + step), at most 64
+engines. For LHE samples the externalLHEProducer seed is then set to lhe_seed(I, N) = 500000000 + 100000*I + 10*N:
+with 2 threads and generateConcurrently=True the gridpack runs use lhe_seed + thread (CMSSW ExternalLHEProducer), so
+each job owns the block [lhe_seed, lhe_seed + 10).
 """
 import argparse
 import json
@@ -26,17 +27,19 @@ p.add_argument('--nevents', type=int, required=True)
 a = p.parse_args()
 if not 0 <= a.job < 1000 or not 0 <= a.sample_index < 1000 or not 0 < a.nevents < 100000:
     raise SystemExit('--job, --sample-index or --nevents out of range')
-seed_base = 30102026000 + 10000 * a.sample_index
 lhe_seed = 500000000 + 100000 * a.sample_index + 10 * a.job
+
+
+def block_start(i):
+    return 100000000 + 64 * ((1000 * a.sample_index + a.job) * 2 + i)
 
 
 def job_seeds(i):
     # RandomNumberServiceHelper.populate() uses SystemRandom; seed every engine reproducibly instead.
-    # cmsDriver exec()s this inside a method, so no comprehension scope: bind the generator as a default.
-    return ('from IOMC.RandomEngine.RandomServiceHelper import RandomNumberServiceHelper; import random; '
+    return ('from IOMC.RandomEngine.RandomServiceHelper import RandomNumberServiceHelper; '
             'h = RandomNumberServiceHelper(process.RandomNumberGeneratorService); '
-            'h.insertSeeds(*map(lambda _, g=random.Random(%d): g.randint(1, 900000000), range(h.countSeeds())))'
-            % (seed_base + 10 * a.job + i))
+            'assert h.countSeeds() <= 64, "more than 64 engines"; '
+            'h.insertSeeds(*range(%d, %d + h.countSeeds()))' % (block_start(i), block_start(i)))
 chain = json.loads(Path(a.chain).read_text())
 steps = chain['STEPS']
 if steps != ['Run3Summer22EEGENSIM', 'Run3Summer22EEDIGIPremix',
@@ -79,8 +82,8 @@ lines = ['#!/usr/bin/env bash', 'set -eo pipefail',
          'source /cvmfs/cms.cern.ch/cmsset_default.sh',
          'trap \'s=$?; echo "TEST_EXIT=$s"; exit "$s"\' EXIT',
          'date -u', 'hostname', 'cat /etc/redhat-release',
-         'echo ' + q('JOB=%d SAMPLE_INDEX=%d NEVENTS=%d LHE=%d SEED_BASE=%d LHE_SEED=%d'
-                     % (a.job, a.sample_index, a.nevents, lhe, seed_base, lhe_seed))]
+         'echo ' + q('JOB=%d SAMPLE_INDEX=%d NEVENTS=%d LHE=%d SEED_BLOCKS=%d,%d LHE_SEED=%d'
+                     % (a.job, a.sample_index, a.nevents, lhe, block_start(0), block_start(1), lhe_seed))]
 previous = None
 for i, step in enumerate(steps):
     wf = chain['WORKFLOWS'][step]
