@@ -1,3 +1,4 @@
+// recoOnly mode: all events, fixed eligible components, OS pairs, no fit fallback; original-track PCA observables.
 // Hierarchy matching of the two accepted signal muons to pre-selected cleanedDisplacedMuons and
 // KalmanVertexFitter(refit=true) of (a) the two matched legs (best-best), (b) the hierarchy fallback (hf*: other matched
 // components of the same two objects, tried in hierarchy order until a fit is valid) and (c) every pair of distinct
@@ -296,6 +297,7 @@ public:
         field_(esConsumes()),
         ttb_(esConsumes(edm::ESInputTag("", "TransientTrackBuilder"))),
         vertexPropagator_(esConsumes(edm::ESInputTag("", "SteppingHelixPropagatorAny"))),
+        recoOnly_(ps.getUntrackedParameter<bool>("recoOnly", false)),
         vertexDirections_(ps.getUntrackedParameter<bool>("vertexDirections", false)),
         pfNearest_(ps.getUntrackedParameter<bool>("pfNearest", false)),
         pfStation2_(ps.getUntrackedParameter<bool>("pfStation2", false)),
@@ -312,6 +314,7 @@ public:
     edm::Service<TFileService> fs;
     fs->make<TNamed>("sample", ps.getParameter<std::string>("sample").c_str());
     fs->make<TNamed>("revision", ps.getParameter<std::string>("revision").c_str());
+    fs->make<TNamed>("recoOnly", recoOnly_ ? "all events; fixed eligible G>I>DSA legs; OS before fit; no fallback; PCA momenta" : "disabled");
     fs->make<TNamed>("vertexDirections", vertexDirections_ ?
       "Original hf tracks, no vertex constraint; SteppingHelixPropagatorAny to 3D PCA to fitted vertex. "
       "Vectors in gen-index order. hfVertexValid per leg: 0 failure,1 valid; empty if no valid hf fit. "
@@ -356,7 +359,7 @@ public:
       "Comp types 0 inner,1 outer(DSA),2 global; eligible = own ID and own |eta|<2.4. Hierarchy order = TNamed hierarchyOrder (matching stages and per-object best component), "
       "station-2 position eta/phi, dR<0.06 (I,G) <0.10 (O), same charge, whole-object claim, no fallback. "
       "Best-best = fit of the hierarchy-matched components' tracks (one set). Typed combos: independent per-type matching, ordered (gen0 type a, gen1 type b), types 0 I,1 O,2 G; "
-      "Pairs = all unordered pairs of distinct eligible-object best components (global>outer>inner) in twoAcc events. "
+      "Pairs = all unordered pairs of distinct eligible-object best components in configured hierarchy order. Legacy mode: twoAcc only. recoOnly mode: all events, fixed component charges, OS before fit, no fit fallback; legacy best-best/typed/hf fits disabled. pIsBB/pMatchedLegs label objects via staged truth matching independently of reco selection; the labeling component may differ from the fitted component. pPcaOK/DR/MuMuPt/MuMuPhi use original-track momentum at 3D PCA to the fitted vertex; -999 on failure. "
       "KalmanVertexFitter(refit), status 0 not fitted,1 shared,2 failed,3 valid. *NoEta = cross-check without reco-eta gate. "
       "Reco dR/pT from track reference-point momenta. dPhi = phi(MET)-phi(mumu) wrapped. "
       "puppiMet* = slimmedMETsPuppi[0] corPt/corPhi(Type1); -999 if the collection is empty. "
@@ -369,7 +372,7 @@ public:
       "bbSigmaLxy = sqrt(g^T C g), C = fitted vertex 3x3 covariance, g = (dx,dy,-dxdz*dx-dydz*dy)/Lxy, dx,dy = vertex - "
       "beamspot(vz), beamspot fixed; -999 if Lxy=0 or the variance is non-finite or not positive (valid fits only).");
     evt_ = fs->make<TTree>("events", "One row per event");
-    pair_ = fs->make<TTree>("pairs", "Any-pair fits in twoAcc events; event = entry in events");
+    pair_ = fs->make<TTree>("pairs", "Any-pair fits; recoOnly includes all events; pEvent = entry in events");
     combo_ = fs->make<TTree>("combos", "Typed ordered fits (gen0 type a, gen1 type b); one row per existing combo; event = entry in events");
 #define E(x) evt_->Branch(#x, &x##_)
     E(run); E(lumi); E(event); E(nSig); E(twoAcc); E(nObj); E(nElig);
@@ -399,6 +402,7 @@ public:
 #undef E
 #define P(x) pair_->Branch(#x, &x##_)
     P(pEvent); P(pObjA); P(pObjB); P(pTypeA); P(pTypeB); P(pCat); P(pIsBB); P(pStatus); P(pChi2); P(pNdof); P(pProb);
+    P(pQA); P(pQB); P(pMatchedLegs); P(pPcaOK); P(pPcaDR); P(pPcaMuMuPt); P(pPcaMuMuPhi);
     P(pVx); P(pVy); P(pVz); P(pLxyBS); P(pMass); P(pRecoDR); P(pRecoMuMuPt); P(pRecoMuMuPhi);
 #undef P
 #define K(x) combo_->Branch(#x, &x##_)
@@ -533,7 +537,11 @@ public:
 
     KalmanVertexFitter kvf(true);
     int eventRow = tree_entries_;
-    if (twoAcc_) {
+    // Truth labels never control reco-only component selection or pair enumeration.
+    Match labels;
+    if (sig.size() == 2 && sig[0].q * sig[1].q < 0)
+      labels = hierarchy(std::array<Gen, 2>{{sig[0], sig[1]}}, comps, true, order_);
+    if (twoAcc_ && !recoOnly_) {
       const std::array<Gen, 2> gen{{sig[0], sig[1]}};
       const double sx = gen[0].px + gen[1].px, sy = gen[0].py + gen[1].py;
       genMuMuPt_ = std::hypot(sx, sy);
@@ -604,9 +612,7 @@ public:
           combo_->Fill();
         }
       const bool both = m.comp[0] >= 0 && m.comp[1] >= 0;
-      std::array<int, 2> bbPos{{-1, -1}};  // best-best legs by component index
       if (both) {
-        bbPos = m.comp;
         const auto& a = comps[m.comp[0]];
         const auto& b = comps[m.comp[1]];
         const auto ka = keys(muons[std::lower_bound(indices.begin(), indices.end(), a.obj) - indices.begin()]);
@@ -843,6 +849,10 @@ public:
         }
       }
 
+    }
+    if (twoAcc_ || recoOnly_) {
+      // All events in recoOnly mode; no gen-dependent pair selection or component retry.
+      // Legacy mode retains its original truth-accepted Any-pair population.
       // Any pairs: distinct eligible objects, each at its best component.
       std::vector<int> best;
       for (size_t i = 0; i < objBest.size(); ++i)
@@ -858,15 +868,48 @@ public:
           Fit f;
           if (shared)
             f.status = kShared;
-          else
+          else if (!recoOnly_ || a.q * b.q < 0)
             f = fitLegs(a.ref, b.ref, ttb, kvf, bs, *field);
           ++anyNPairs_;
           if (f.status == kValid) ++anyNValid_;
           const double rx = a.ref->px() + b.ref->px(), ry = a.ref->py() + b.ref->py();
           pEvent_ = eventRow; pObjA_ = a.obj; pObjB_ = b.obj; pTypeA_ = a.type; pTypeB_ = b.type;
           pCat_ = categoryOf(a.type, b.type);
-          pIsBB_ = both && ((a.obj == comps[bbPos[0]].obj && b.obj == comps[bbPos[1]].obj) ||
-                            (a.obj == comps[bbPos[1]].obj && b.obj == comps[bbPos[0]].obj));  // same OBJECTS
+          pIsBB_ = labels.obj[0] >= 0 && labels.obj[1] >= 0 &&
+            ((a.obj == labels.obj[0] && b.obj == labels.obj[1]) ||
+             (a.obj == labels.obj[1] && b.obj == labels.obj[0]));  // same OBJECTS
+          pQA_ = a.q; pQB_ = b.q;
+          pMatchedLegs_ = (a.obj == labels.obj[0] || a.obj == labels.obj[1]) +
+                          (b.obj == labels.obj[0] || b.obj == labels.obj[1]);
+          pPcaOK_ = false;
+          pPcaDR_ = pPcaMuMuPt_ = pPcaMuMuPhi_ = -999.f;
+          if (recoOnly_ && f.status == kValid) {
+            const auto* prop = dynamic_cast<const SteppingHelixPropagator*>(&es.getData(vertexPropagator_));
+            if (!prop) throw cms::Exception("PreselectedVertexing") << "Expected SteppingHelixPropagatorAny";
+            const GlobalPoint target(f.vx, f.vy, f.vz);
+            std::array<GlobalVector, 2> momenta;
+            bool ok = true;
+            int leg = 0;
+            for (const auto& ref : {a.ref, b.ref}) {
+              const auto start = trajectoryStateTransform::initialFreeState(*ref, field);
+              SteppingHelixStateInfo end;
+              prop->propagate(SteppingHelixStateInfo(start), target, end);
+              if (!end.isValid()) { ok = false; break; }
+              const auto mom = end.momentum();
+              if (!std::isfinite(mom.eta()) || !std::isfinite(mom.phi()) || !(mom.perp() > 0) ||
+                  !std::isfinite(end.path()) || !std::isfinite((end.position() - target).mag())) {
+                ok = false; break;
+              }
+              momenta[leg++] = mom;
+            }
+            if (ok) {
+              const auto sum = momenta[0] + momenta[1];
+              pPcaDR_ = reco::deltaR(momenta[0].eta(), momenta[0].phi(), momenta[1].eta(), momenta[1].phi());
+              pPcaMuMuPt_ = sum.perp();
+              pPcaMuMuPhi_ = sum.phi();
+              pPcaOK_ = std::isfinite(pPcaDR_) && std::isfinite(pPcaMuMuPt_) && std::isfinite(pPcaMuMuPhi_);
+            }
+          }
           pStatus_ = f.status; pChi2_ = f.chi2; pNdof_ = f.ndof; pProb_ = f.prob; pVx_ = f.vx; pVy_ = f.vy;
           pVz_ = f.vz; pLxyBS_ = f.lxyBS; pMass_ = f.mass;
           pRecoDR_ = reco::deltaR(a.ref->eta(), a.ref->phi(), b.ref->eta(), b.ref->phi());
@@ -923,7 +966,7 @@ private:
   const edm::ESGetToken<MagneticField, IdealMagneticFieldRecord> field_;
   const edm::ESGetToken<TransientTrackBuilder, TransientTrackRecord> ttb_;
   const edm::ESGetToken<Propagator, TrackingComponentsRecord> vertexPropagator_;
-  const bool vertexDirections_, pfNearest_, pfStation2_, pfHitMatch_;
+  const bool recoOnly_, vertexDirections_, pfNearest_, pfStation2_, pfHitMatch_;
   const PropagateToMuonSetup setup_;
   std::array<int, 3> order_{{2, 0, 1}}, rank_{{0, 0, 0}};  // types best first; rank_[type]
   TTree *evt_ = nullptr, *pair_ = nullptr, *combo_ = nullptr;
@@ -967,6 +1010,9 @@ private:
         hfMass_ = -999, hfRecoDR_ = -999, hfRecoMuMuPt_ = -999, hfRecoMuMuPhi_ = -999;
   double pfMuPx_ = 0, pfMuPy_ = 0, chiPx_ = -999, chiPy_ = -999;
   int pEvent_ = 0, pObjA_ = 0, pObjB_ = 0, pTypeA_ = 0, pTypeB_ = 0, pCat_ = 0, pStatus_ = 0;
+  int pQA_ = 0, pQB_ = 0, pMatchedLegs_ = 0;
+  bool pPcaOK_ = false;
+  float pPcaDR_ = -999, pPcaMuMuPt_ = -999, pPcaMuMuPhi_ = -999;
   bool pIsBB_ = false;
   float pChi2_ = 0, pNdof_ = 0, pProb_ = 0, pVx_ = 0, pVy_ = 0, pVz_ = 0, pLxyBS_ = 0, pMass_ = 0, pRecoDR_ = 0,
         pRecoMuMuPt_ = 0, pRecoMuMuPhi_ = 0;

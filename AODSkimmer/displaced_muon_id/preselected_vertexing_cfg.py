@@ -11,6 +11,8 @@ for key, default in (("flist", ""), ("sample", ""), ("outFile", "component_input
                      ("hierarchyOrder", "2,0,1")):
     options.register(key, default, VarParsing.multiplicity.singleton, VarParsing.varType.string, key)
 options.register("nEvents", -1, VarParsing.multiplicity.singleton, VarParsing.varType.int, "events")
+options.register("recoOnly", False, VarParsing.multiplicity.singleton, VarParsing.varType.bool,
+                 "all-event reco-only fixed-component all-pairs vertexing, no fallback")
 options.register("vertexDirections", False, VarParsing.multiplicity.singleton, VarParsing.varType.bool,
                  "propagate original hf tracks to 3D closest approach to fitted vertex, in either direction")
 options.register("pfNearest", False, VarParsing.multiplicity.singleton, VarParsing.varType.bool,
@@ -46,7 +48,7 @@ process.TFileService = cms.Service("TFileService", fileName=cms.string(options.o
 process.cleanedDisplacedMuons = cms.EDProducer("DisplacedMuonDuplicateCleaner",
     muons=cms.InputTag("displacedMuons", "", "RECO"), validate=cms.bool(True))
 process.preselectedVertexing = cms.EDAnalyzer("PreselectedVertexing",
-    vertexDirections=cms.untracked.bool(options.vertexDirections), pfNearest=cms.untracked.bool(options.pfNearest),
+    recoOnly=cms.untracked.bool(options.recoOnly), vertexDirections=cms.untracked.bool(options.vertexDirections), pfNearest=cms.untracked.bool(options.pfNearest),
     pfStation2=cms.untracked.bool(options.pfStation2), pfHitMatch=cms.untracked.bool(options.pfHitMatch),
     genParticles=cms.InputTag("prunedGenParticles"), muons=cms.InputTag("cleanedDisplacedMuons"),
     originalIndex=cms.InputTag("cleanedDisplacedMuons", "originalIndex"), beamspot=cms.InputTag("offlineBeamSpot"),
