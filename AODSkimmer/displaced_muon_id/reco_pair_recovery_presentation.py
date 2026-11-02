@@ -206,7 +206,8 @@ def plot(args):
     with uproot.open(args.output) as source:
         groups = sorted({key.rsplit('/', 1)[0] for key in source.keys(recursive=True, cycle=False)
                          if key.endswith('/denominator__dimuon_pt')})
-        if args.group:
+        overlay_only = args.group in ('overlay_mass', 'overlay_lifetime')
+        if args.group and not overlay_only:
             if args.group not in groups:
                 raise ValueError('Unknown group: ' + args.group)
             groups = [args.group]
@@ -246,7 +247,7 @@ def plot(args):
             if variable.endswith('_abs_d0'):
                 footer += '\nGen |d0| = |vx sin(phi) - vy cos(phi)|, relative to origin.'
             fig.text(.08, .015, footer, fontsize=8)
-            bottom = .28 if many else .19 if len(groups_here) > 1 else .13
+            bottom = .28 if many else .24 if len(groups_here) > 1 else .13
             fig.subplots_adjust(left=.11, right=.97, bottom=bottom, top=.86)
             path = destination / view / tag / (variable + '.png')
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -258,9 +259,9 @@ def plot(args):
         for variable in LABELS:
             views = ('full',) if variable.endswith('_abs_eta') else ('full', 'focused')
             for view in views:
-                for group in groups:
+                for group in ([] if overlay_only else groups):
                     draw([group], variable, view, group)
-                for kind in (() if args.group else ('mass', 'lifetime')):
+                for kind in ((args.group.removeprefix('overlay_'),) if overlay_only else () if args.group else ('mass', 'lifetime')):
                     overlay = [group for group in groups if group.startswith(kind + '/')]
                     draw(overlay, variable, view, 'overlay_' + kind)
             print('PLOTTED', variable, flush=True)
@@ -278,7 +279,7 @@ def main():
     plot_parser = sub.add_parser('plot', help='Replot only from saved numerator/denominator ROOT histograms')
     plot_parser.add_argument('--output', required=True)
     plot_parser.add_argument('--plot-dir', required=True)
-    plot_parser.add_argument('--group', help='Plot one saved group, for a bounded render check or selective replot')
+    plot_parser.add_argument('--group', help='Plot one saved group, overlay_mass or overlay_lifetime')
     plot_parser.add_argument('--log', action='store_true', help='Add log-y copies; linear copies always retained')
     args = parser.parse_args()
     (build if args.mode == 'build' else plot)(args)
