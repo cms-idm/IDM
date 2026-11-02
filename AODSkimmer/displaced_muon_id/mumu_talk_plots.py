@@ -261,8 +261,9 @@ def plot(args):
                    note1, "Matched muons / muons in two-accepted events", pdf)
         eff_panels(s2(g), 2, S2_VIEWS, "Dimuon matching and vertexing efficiency: " + lab, out / sub / ("%s_s2_vertexing.png" % g),
                    note2, "Fraction of two-accepted events", pdf)
-        resid([(ids, "", "#0072B2" if ids is None else "#D55E00")], "Vertex radius residual: " + lab,
-              out / sub / ("%s_s2_residual.png" % g), pdf)
+        if sub != "sample":  # per-sample residuals dropped (user, 2026-11-02): too few fits per bin
+            resid([(ids, "", "#0072B2" if ids is None else "#D55E00")], "Vertex radius residual: " + lab,
+                  out / sub / ("%s_s2_residual.png" % g), pdf)
     # Overlays: all masses (pooled over lifetimes) and all lifetimes (pooled over masses), hierarchy / valid only.
     masses = sorted({g for g in gl if g.startswith("mass_")}, key=lambda g: float(g[10:].split("_")[0].replace("p", ".")))
     taus = sorted({g for g in gl if g.startswith("ctau_")}, key=lambda g: float(g[5:]))
@@ -284,8 +285,6 @@ def plot(args):
                     for s, m in zip(ss, TALK) for k in S2_NUMS], 2, S2_VIEWS,
                    "Dimuon matching and vertexing efficiency, ctau-" + tau, out / "talk" / ("ctau%s_s2_vertexing.png" % tau),
                    note2, "Fraction of two-accepted events", True)
-        resid([({sid[s]}, s, tcol[m]) for s, m in zip(ss, TALK)], "Vertex radius residual, ctau-" + tau,
-              out / "talk" / ("ctau%s_s2_residual.png" % tau), True)
     print("plots written to", out)
 
 
