@@ -14,7 +14,8 @@ Defaults (change per plot, or globally with setup(era=..., status=...)):
 * Efficiencies/fractions (eff_graph): raw counts, central Clopper-Pearson 68.3% bars, bins with den < 20 not drawn.
 * Distributions (hist_graph): points with stored errors, or step=True for an outline; norm=True draws a copy whose
   bin contents sum to 1 (over all normal bins, flow excluded, not divided by bin width: "Fraction of events / bin");
-  the stored histogram is never changed.
+  the stored histogram is never changed; plot() then adds the context line STYLE["norm_label"]
+  ("Normalized to unity").
 * 1D layouts: "frame" = legend inside the frame (top or bottom right), y max fitted so there is no empty space above
   the data; "band" = color key (groups) and style key (stages) above the frame, for group x stage overlays.
 * Linear PNG + PDF; log=True adds a _log.png copy (points <= 0 left out), never replacing the linear plot.
@@ -44,7 +45,8 @@ BLUE, ORANGE, GREEN, YELLOW, SKY, PURPLE, BLACK = "#0072B2", "#D55E00", "#009E73
 COLORS = (BLUE, ORANGE, GREEN, YELLOW, SKY, PURPLE, BLACK)
 OPEN_DASHED, FILLED_SOLID = (2, 24), (1, 20)  # (line style, marker style)
 MATCHED, VERTEXED = OPEN_DASHED, FILLED_SOLID
-STYLE = {"era": "2022EE (13.6 TeV)", "status": "Simulation Private Work", "min_den": 20, "level": 0.6827}
+STYLE = {"era": "2022EE (13.6 TeV)", "status": "Simulation Private Work", "min_den": 20, "level": 0.6827,
+         "norm_label": "Normalized to unity"}  # context line added automatically to plots with norm=True series
 LEG_DY = 0.05
 _keep = []    # PyROOT objects must outlive SaveAs
 _info = {}    # id(graph) -> (x range of its histogram, draw option, legend option, kind "eff" or "hist")
@@ -116,12 +118,12 @@ def hist_graph(h, color, line=1, marker=20, step=False, norm=False, errors=True)
         gr = ROOT.TGraphAsymmErrors()  # same interface as the other series (zero errors)
         for i in range(len(v)):
             gr.SetPoint(gr.GetN(), e[i], v[i]); gr.SetPoint(gr.GetN(), e[i + 1], v[i])
-        return _style(gr, color, line, marker, e, opt="L", legopt="l")
+        return _style(gr, color, line, marker, e, opt="L", legopt="l", kind="norm" if norm else "hist")
     gr = ROOT.TGraphAsymmErrors()
     for i in range(len(v)):
         w = 0.5 * (e[i + 1] - e[i])
         gr.SetPoint(i, e[i] + w, v[i]); gr.SetPointError(i, w, w, err[i], err[i])
-    return _style(gr, color, line, marker, e)
+    return _style(gr, color, line, marker, e, kind="norm" if norm else "hist")
 
 
 def canvas(name, band=False):
@@ -272,6 +274,8 @@ def plot(base, graphs, labels, xtitle, ytitle, lines=(), layout="frame", xlim=No
     band: groups/stages keys (labels unused); y max 1.05 for values in [0, 1.05], else fitted with 10% headroom.
     x range: the full binning unless xlim (display crop only). y min: 0, unless points go negative (then fitted)."""
     band = layout == "band"
+    if any(_info.get(id(g), (0, 0, 0, ""))[3] == "norm" for g in graphs) and STYLE["norm_label"] not in lines:
+        lines = list(lines) + [STYLE["norm_label"]]  # a normalized copy is always marked on the plot
     c = canvas("c_" + Path(base).name, band)
     if xlim is None:
         xlim = (min(_info[id(g)][0][0] for g in graphs), max(_info[id(g)][0][1] for g in graphs))
