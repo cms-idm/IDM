@@ -317,6 +317,10 @@ def plot_cms(args):
         a, b = re.fullmatch(r"Mchi-([\dp]+)_dMchi-([\dp]+)", m).groups()
         return "m_{#chi} = %s, #Deltam = %s GeV" % (a.replace("p", "."), b.replace("p", "."))
 
+    def short_mass(m):
+        a, b = re.fullmatch(r"Mchi-([\dp]+)_dMchi-([\dp]+)", m).groups()
+        return "%s / %s GeV" % (a.replace("p", "."), b.replace("p", "."))
+
     def canvas(name):
         c = ROOT.TCanvas(name, "", 800, 700)
         c.SetLeftMargin(0.15); c.SetRightMargin(0.04); c.SetTopMargin(0.08); c.SetBottomMargin(0.13)
@@ -341,9 +345,11 @@ def plot_cms(args):
         for i, line in enumerate(lines):
             t.DrawLatex(0.19, 0.88 - 0.045 * i, line)
 
-    def legend(entries, y2=0.89, x1=0.52):
-        leg = ROOT.TLegend(x1, y2 - LEG_DY * len(entries), 0.94, y2); keep.append(leg)
+    def legend(entries, y2=0.89, x1=0.52, header=None):
+        leg = ROOT.TLegend(x1, y2 - LEG_DY * (len(entries) + bool(header)), 0.94, y2); keep.append(leg)
         leg.SetBorderSize(0); leg.SetFillStyle(0); leg.SetTextSize(0.033)
+        if header:
+            leg.SetHeader(header)
         for o, lab, opt in entries:
             leg.AddEntry(o, lab, opt)
         leg.Draw()
@@ -399,18 +405,18 @@ def plot_cms(args):
             best = (ym, y2b)
         return max(0.1, np.ceil(best[0] * 20) / 20), best[1]
 
-    def eff_plot(name, series, slide, v, ytitle, lines=(), x1=0.52, d=None):
+    def eff_plot(name, series, slide, v, ytitle, lines=(), x1=0.52, d=None, header=None):
         c = canvas("c_" + name)
         edges = S1_VIEWS[v][1] if slide == 1 else S2_VIEWS[v][1]
         ent = []
         for g, k, lab, color, style, marker in series:
             gr, _ = eff_graph(g, slide, k, v, color, style, marker)
             ent.append((gr, lab, "lp"))
-        ymax, y2 = place([e[0] for e in ent], edges, len(ent), x1, lines)
+        ymax, y2 = place([e[0] for e in ent], edges, len(ent) + bool(header), x1, lines)
         frame(c, edges, 0, ymax, xt[v], ytitle)
         for gr, _, _ in ent:
             gr.Draw("P same")
-        labels(c, lines); legend(ent, y2=y2, x1=x1)
+        labels(c, lines); legend(ent, y2=y2, x1=x1, header=header)
         save(c, name, d=d)
 
     def resid_plot(name, cls, v, series, lines=()):
@@ -471,9 +477,9 @@ def plot_cms(args):
     tsty = {"10": (2, 24), "100": (1, 20)}
     for slide, k, ytitle, v in ((1, "h", "Muon matching efficiency", "lxy740"), (2, "valid", "Event efficiency", "lxy740")):
         eff_plot("ctau10_100_s%d_%s" % (slide, v),
-                 [("sample_%s_ctau-%s" % (m, tau), k, "%s, c#tau = %s mm" % (mass_label(m), tau), tcol[m], tsty[tau][0], tsty[tau][1])
+                 [("sample_%s_ctau-%s" % (m, tau), k, "%s, c#tau = %s mm" % (short_mass(m), tau), tcol[m], tsty[tau][0], tsty[tau][1])
                   for m in TALK for tau in TALK_CT], slide, v, ytitle,
-                 ["Matched and vertexed"] if slide == 2 else [], x1=0.36, d=ov)
+                 ["Matched and vertexed"] if slide == 2 else [], x1=0.50, d=ov, header="m_{#chi} / #Deltam")
     print("CMS-style plots written to", out)
 
 
