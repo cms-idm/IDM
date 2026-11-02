@@ -13,6 +13,7 @@ matched legs are their object's top eligible component (G > I > DSA). Residual: 
 dr = hypot(bbVx, bbVy) - gen Lxy (both from the origin); tracker = no DSA leg, anyDSA = at least one DSA leg.
 """
 import argparse
+from array import array
 from pathlib import Path
 import re
 import sys
@@ -483,6 +484,91 @@ def plot_cms(args):
     print("CMS-style plots written to", out)
 
 
+def plot_2d(args):
+    """Gen Lxy vs gen muon pT for the talk masses at ctau 100 mm (user, 2026-11-02), read from the saved inputs: muon
+    counts (signal muons in two-accepted events) and G > I > DSA matching efficiency per bin (bins with >= EFF_NMIN
+    muons). Raw TH2D numerator/denominator with flow are stored in --output; CMS-style PNG/PDF in --plot-dir.
+    Cross-check: totals including flow must equal the slide-1 totals of the same samples in --check (mumu_talk_v2.root)."""
+    import ROOT
+    import uproot
+    if Path(args.output).exists():
+        raise RuntimeError("Refusing to overwrite ROOT output")
+    ROOT.gROOT.SetBatch(True)
+    ROOT.gStyle.SetOptStat(0); ROOT.gStyle.SetOptTitle(0)
+    ROOT.gStyle.SetTextFont(42); ROOT.gStyle.SetLabelFont(42, "XYZ"); ROOT.gStyle.SetTitleFont(42, "XYZ")
+    ROOT.gStyle.SetPadTickX(1); ROOT.gStyle.SetPadTickY(1); ROOT.gStyle.SetPalette(ROOT.kViridis)
+    ROOT.TGaxis.SetMaxDigits(6)
+    out = Path(args.plot_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    xe, ye = np.arange(0, 500.01, 20.0), np.arange(0, 30.01, 1.0)
+    check = uproot.open(args.check)
+    root = ROOT.TFile.Open(str(args.output), "CREATE")
+    ROOT.TNamed("definitions", plot_2d.__doc__).Write()
+    ROOT.TNamed("analysisRevision", args.revision).Write()
+    keep, bad = [], 0
+    for m in TALK:
+        s = "%s_ctau-100" % m
+        with uproot.open(Path(args.input_dir) / (s + ".root")) as f:
+            if str(f["preselectedVertexing/sample"].member("fTitle")) != s or \
+                    not str(f["preselectedVertexing/revision"].member("fTitle")).startswith(INPUT_REV) or \
+                    str(f["preselectedVertexing/hierarchyOrder"].member("fTitle")) != INPUT_ORDER:
+                raise RuntimeError("unexpected input for " + s)
+            a = f["preselectedVertexing/events"].arrays(["twoAcc", "sigPt", "sigLxy", "matchObj"], library="np")
+        two = a["twoAcc"].astype(bool)
+        pt = np.concatenate([np.array([v[g] for v in a["sigPt"][two]]) for g in (0, 1)])
+        lxy = np.concatenate([np.array([v[0] for v in a["sigLxy"][two]])] * 2)
+        hm = np.concatenate([np.array([v[g] >= 0 for v in a["matchObj"][two]]) for g in (0, 1)])
+        hs = {}
+        for k, sel in (("den", np.ones(len(pt), bool)), ("h", hm)):
+            h = ROOT.TH2D("%s__%s" % (s, k), "%s;Gen L_{xy} [cm];Gen muon p_{T} [GeV]" % k, len(xe) - 1, array("d", xe),
+                          len(ye) - 1, array("d", ye))
+            h.Sumw2()
+            ix = np.searchsorted(xe, lxy[sel], side="right"); iy = np.searchsorted(ye, pt[sel], side="right")
+            cnt = np.zeros((len(xe) + 1, len(ye) + 1))
+            np.add.at(cnt, (ix, iy), 1)
+            for i in range(len(xe) + 1):
+                for j in range(len(ye) + 1):
+                    h.SetBinContent(i, j, cnt[i, j]); h.SetBinError(i, j, np.sqrt(cnt[i, j]))
+            h.SetEntries(float(sel.sum()))
+            h.Write(); hs[k] = h
+        for k, k1 in (("den", "den"), ("h", "h")):
+            ref = check["groups/sample_%s/s1__%s__pt30" % (s, k1)].values(flow=True).sum()
+            got = hs[k].GetSumOfWeights() + sum(hs[k].GetBinContent(i, j) for i in range(len(xe) + 1) for j in range(len(ye) + 1)
+                                               if i in (0, len(xe)) or j in (0, len(ye)))
+            print("%s %s: 2D total incl. flow %d, slide-1 total %d" % (s, k, got, ref))
+            bad += int(got) != int(ref)
+        den, num = hs["den"], hs["h"]
+        eff = den.Clone("%s__eff" % s); eff.Reset(); keep.append(eff)
+        for i in range(1, len(xe)):
+            for j in range(1, len(ye)):
+                d = den.GetBinContent(i, j)
+                eff.SetBinContent(i, j, num.GetBinContent(i, j) / d if d >= EFF_NMIN else -1)
+        for kind, h, ztitle in (("muons", den, "Muons / bin"), ("eff", eff, "Muon matching efficiency")):
+            c = ROOT.TCanvas("c_%s_%s" % (s, kind), "", 800, 700); keep.append(c)
+            c.SetLeftMargin(0.13); c.SetRightMargin(0.17); c.SetTopMargin(0.08); c.SetBottomMargin(0.13)
+            hd = h.Clone("draw_%s_%s" % (s, kind)); keep.append(hd)
+            hd.GetXaxis().SetTitle("Gen L_{xy} [cm]"); hd.GetYaxis().SetTitle("Gen muon p_{T} [GeV]"); hd.GetZaxis().SetTitle(ztitle)
+            for ax in (hd.GetXaxis(), hd.GetYaxis(), hd.GetZaxis()):
+                ax.SetTitleSize(0.045); ax.SetLabelSize(0.038)
+            hd.GetYaxis().SetTitleOffset(1.25); hd.GetZaxis().SetTitleOffset(1.35)
+            if kind == "eff":
+                hd.SetMinimum(0); hd.SetMaximum(1)
+            hd.Draw("COLZ0" if kind == "eff" else "COLZ")
+            t = ROOT.TLatex(); t.SetNDC(); keep.append(t)
+            t.SetTextFont(61); t.SetTextSize(0.05); t.SetTextAlign(11); t.DrawLatex(0.13, 0.94, "CMS")
+            t.SetTextFont(52); t.SetTextSize(0.038); t.DrawLatex(0.235, 0.94, "Simulation Private Work")
+            t.SetTextFont(42); t.SetTextAlign(31); t.DrawLatex(0.83, 0.94, "2022EE (13.6 TeV)")
+            t.SetTextSize(0.035); t.SetTextAlign(33); t.SetTextColor(ROOT.kWhite if kind == "muons" else ROOT.kBlack)
+            a_, b_ = re.fullmatch(r"Mchi-([\dp]+)_dMchi-([\dp]+)", m).groups()
+            t.DrawLatex(0.80, 0.89, "m_{#chi} = %s, #Deltam = %s GeV" % (a_.replace("p", "."), b_.replace("p", ".")))
+            t.DrawLatex(0.80, 0.845, "c#tau = 100 mm")
+            c.SaveAs(str(out / ("ctau100_%s_lxy_pt_%s.png" % (m, kind)))); c.SaveAs(str(out / ("ctau100_%s_lxy_pt_%s.pdf" % (m, kind))))
+    root.Close()
+    if bad:
+        raise SystemExit("2D totals do not match the slide-1 totals")
+    print("2D plots written to", out, "; totals cross-check passed")
+
+
 def validate(args):
     """Independent PyROOT loop with explicit gen-leg indexing; compares every bin (flow included) of the overall group
     and the four talk samples, and every residual row."""
@@ -604,7 +690,8 @@ def validate(args):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=("analyze", "plot", "plot-cms", "validate"))
+    ap.add_argument("mode", choices=("analyze", "plot", "plot-cms", "plot-2d", "validate"))
+    ap.add_argument("--check", help="plot-2d: validated slide ROOT file for the totals cross-check")
     ap.add_argument("--input-dir")
     ap.add_argument("--revision", default="unspecified")
     ap.add_argument("--output", required=True)
@@ -613,4 +700,4 @@ if __name__ == "__main__":
     ap.add_argument("--expected-events", type=int, default=720000)
     ap.add_argument("--log", action="store_true", help="add log-y copies of the efficiency plots")
     args = ap.parse_args()
-    {"analyze": analyze, "plot": plot, "plot-cms": plot_cms, "validate": validate}[args.mode](args)
+    {"analyze": analyze, "plot": plot, "plot-cms": plot_cms, "plot-2d": plot_2d, "validate": validate}[args.mode](args)
