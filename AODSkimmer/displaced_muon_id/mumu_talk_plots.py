@@ -542,7 +542,7 @@ def plot_2d(args):
         for i in range(1, len(xe)):
             for j in range(1, len(ye)):
                 d = den.GetBinContent(i, j)
-                eff.SetBinContent(i, j, num.GetBinContent(i, j) / d if d >= EFF_NMIN else -1)
+                eff.SetBinContent(i, j, max(num.GetBinContent(i, j) / d, 1e-9) if d >= EFF_NMIN else 0)  # 0 = not drawn
         for kind, h, ztitle in (("muons", den, "Muons / bin"), ("eff", eff, "Muon matching efficiency")):
             c = ROOT.TCanvas("c_%s_%s" % (s, kind), "", 800, 700); keep.append(c)
             c.SetLeftMargin(0.13); c.SetRightMargin(0.17); c.SetTopMargin(0.08); c.SetBottomMargin(0.13)
@@ -553,12 +553,12 @@ def plot_2d(args):
             hd.GetYaxis().SetTitleOffset(1.25); hd.GetZaxis().SetTitleOffset(1.35)
             if kind == "eff":
                 hd.SetMinimum(0); hd.SetMaximum(1)
-            hd.Draw("COLZ0" if kind == "eff" else "COLZ")
+            hd.Draw("COLZ")
             t = ROOT.TLatex(); t.SetNDC(); keep.append(t)
             t.SetTextFont(61); t.SetTextSize(0.05); t.SetTextAlign(11); t.DrawLatex(0.13, 0.94, "CMS")
             t.SetTextFont(52); t.SetTextSize(0.038); t.DrawLatex(0.235, 0.94, "Simulation Private Work")
             t.SetTextFont(42); t.SetTextAlign(31); t.DrawLatex(0.83, 0.94, "2022EE (13.6 TeV)")
-            t.SetTextSize(0.035); t.SetTextAlign(33); t.SetTextColor(ROOT.kWhite if kind == "muons" else ROOT.kBlack)
+            t.SetTextSize(0.035); t.SetTextAlign(33)
             a_, b_ = re.fullmatch(r"Mchi-([\dp]+)_dMchi-([\dp]+)", m).groups()
             t.DrawLatex(0.80, 0.89, "m_{#chi} = %s, #Deltam = %s GeV" % (a_.replace("p", "."), b_.replace("p", ".")))
             t.DrawLatex(0.80, 0.845, "c#tau = 100 mm")
