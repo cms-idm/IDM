@@ -45,7 +45,7 @@ vxy_range = {1:[0,20],10:[0,50],100:[0,50],1000:[0,50]}
 vxy_rebin = {1:5,10:20,100:20,1000:20}
 
 class Analyzer:
-    def __init__(self,fileList,histoList,cuts,model_json=None,systematics=None,max_samples=-1,max_files_per_samp=-1,newCoffea=False,nJet_isNominal=None,isSFstudies=False,good_vtx='v11',slimFileList=None,processSlim=True):
+    def __init__(self,fileList,histoList,cuts,model_json=None,systematics=None,max_samples=-1,max_files_per_samp=-1,newCoffea=False,nJet_isNominal=None,isSFstudies=False,good_vtx='v11',good_merged='v1_Oct2026',slimFileList=None,processSlim=True):
         # flag to see if we're using new coffea
         self.newCoffea = newCoffea
 
@@ -112,7 +112,8 @@ class Analyzer:
         self.model = model_json # BDT model for inference (if used in selections)
         self.nJet_isNom = nJet_isNominal # nomial njet range of NJet > 0 and NJet < 3
         self.good_vtx = good_vtx
-        
+        self.good_merged = good_merged
+
         self.loadFiles()
     
     def _resolveSampleFiles(self,sample):
@@ -216,7 +217,7 @@ class Analyzer:
     def process(self,treename='ntuples/outT',execr="iterative",workers=4,merging=False,dask_client=None,procType='default',**kwargs):
         fileset = self.sample_locs
         if procType == 'default':
-            proc = iDMeProcessor(self.sample_names,self.sample_info,self.sample_locs,self.histoFile,self.cuts,mode=self.mode,model_json=self.model,nJet_isNom=self.nJet_isNom,isSFstudies=self.isSFstudies,good_vtx=self.good_vtx,systematics=self.systematics,slimPairedNames=self.slimPairedNames,**kwargs)
+            proc = iDMeProcessor(self.sample_names,self.sample_info,self.sample_locs,self.histoFile,self.cuts,mode=self.mode,model_json=self.model,nJet_isNom=self.nJet_isNom,isSFstudies=self.isSFstudies,good_vtx=self.good_vtx,good_merged=self.good_merged,systematics=self.systematics,slimPairedNames=self.slimPairedNames,**kwargs)
         elif procType == 'gen':
             proc = genProcessor(self.sample_names,self.sample_info,self.sample_locs,self.histoFile,self.cuts,mode=self.mode,**kwargs)
         elif procType == 'trig':
@@ -270,7 +271,7 @@ class Analyzer:
         return accumulator
 
 class iDMeProcessor(processor.ProcessorABC):
-    def __init__(self,samples,sampleInfo,fileSet,histoFile,cutFile,mode='signal',model_json=None,nJet_isNom=None,isSFstudies=False,good_vtx='v11',systematics=None,slimPairedNames=None,**kwargs):
+    def __init__(self,samples,sampleInfo,fileSet,histoFile,cutFile,mode='signal',model_json=None,nJet_isNom=None,isSFstudies=False,good_vtx='v11',good_merged='v1_Oct2026',systematics=None,slimPairedNames=None,**kwargs):
         self.samples = samples
         self.sampleInfo = sampleInfo
         # bkg sample names with a slim counterpart, whether or not the slim ntuples
@@ -281,6 +282,7 @@ class iDMeProcessor(processor.ProcessorABC):
         self.model = model_json
         self.nJet_isNom = nJet_isNom
         self.good_vtx = good_vtx
+        self.good_merged = good_merged
         self.systematics = systematics
         print('Running with systematics: ', self.systematics)
         self.isSFstudies = isSFstudies
@@ -492,8 +494,8 @@ class iDMeProcessor(processor.ProcessorABC):
         #    vtx_matched_events = events[events.sel_vtx.isMatched]
         #    cutflow_vtx_matched['hasVtx'] += ak.sum(vtx_matched_events.genWgt)/ak.sum(events.genWgt)
 
-        # merged-electron categories/candidates (cat_merged, merged_vtx, merged, ...)
-        routines.computeMergedVars(events)
+        # merged-electron categories/candidates (cat_merged, merged_candidates, best_merged, ...)
+        routines.computeMergedVars(events,good_merged=self.good_merged)
 
         # computing any extra quantities specified in the histogram config file
         for subroutine in self.subroutines:
@@ -713,8 +715,8 @@ class genProcessor(iDMeProcessor):
         #cutflow_nevts['hasVtx'] += len(events)
         #cutDesc['hasVtx'] = 'Baseline Selection'
 
-        # merged-electron categories/candidates (cat_merged, merged_vtx, merged, ...)
-        routines.computeMergedVars(events)
+        # merged-electron categories/candidates (cat_merged, merged_candidates, best_merged, ...)
+        routines.computeMergedVars(events,good_merged=self.good_merged)
 
         # computing any extra quantities specified in the histogram config file
         for subroutine in self.subroutines:

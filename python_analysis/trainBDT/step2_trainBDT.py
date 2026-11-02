@@ -19,11 +19,12 @@ from sklearn.metrics import roc_auc_score
 # ---------------------------------------------------------------------------
 # Skims
 # ---------------------------------------------------------------------------
-suffix = "_TestRun2"
+suffix = "_TestOct28"
 cut_config = "../configs/cut_configs/anabrv_selection.py"
 last_cut = "cut4" # apply cuts in cut_config up to and including this one (e.g. "cut5"), None = all cuts
 cut_tag = f"_{last_cut}" if last_cut is not None else ""
-signal_json = "../configs/sample_configs/signal_2018_official_Preapproval_aEM.json"
+signal_json = "../configs/sample_configs/signal_2024_Jul2026noID_0p1_skimmed.json"
+#signal_json = "../configs/sample_configs/signal_2018_official_Preapproval_aEM.json"
 bkg_json = "../configs/sample_configs/bkg_2024_Aug2026_skimmed.json"
 
 # skim signal
@@ -43,7 +44,7 @@ feature_sets = ["AN"] # keys of FEATURE_SETS in feature_sets.py; one model is tr
 exclude_points = [{'m1': 0.05}]
 
 for fs in feature_sets:
-    name = f"{bdt_name}_{fs}"
+    name = f"{bdt_name}_{fs}{suffix}"
     variables = FEATURE_SETS[fs]
     print(f'\n===== Training {name}: {variables} =====')
 

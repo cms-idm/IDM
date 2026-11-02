@@ -1,5 +1,6 @@
 # Named versions of the BDT input features. Every feature listed here must be written to the h5 by
-# skimmerTools.makeBDTInputs; step1_makeh5.py checks this after each skim.
+# skimmerTools.makeBDTInputs; step1_makeh5.py checks this after each skim. For inference, each feature also needs a
+# definition in analysisSubroutines.BDT_VARIABLES (used by analysisSubroutines.makeBDTinputs).
 FEATURE_SETS = {
     # --- VERTEXED ---
     "AN": ['sel_vtx_refit_m', 'sel_vtx_refit_dR', 'sel_vtx_METdPhi', 'sel_vtx_minDxy_refit', 'vxy_corr', 'sel_vtx_prod_eta'],
@@ -14,9 +15,15 @@ FEATURE_SETS = {
     "merged1": [],
 }
 
-def all_features():
-    # union of all feature sets, in first-seen order
+# which feature sets belong to which kind of h5 (skimmerTools.Skimmer bdt_type)
+BDT_TYPE_SETS = {
+    "vertexed": ["AN", "comb11", "ABCD_comb4"],
+    "merged": ["merged1"],
+}
+
+def all_features(bdt_type="vertexed"):
+    # union of the feature sets for this bdt_type, in first-seen order
     feats = []
-    for fs in FEATURE_SETS.values():
-        feats += [f for f in fs if f not in feats]
+    for name in BDT_TYPE_SETS[bdt_type]:
+        feats += [f for f in FEATURE_SETS[name] if f not in feats]
     return feats
