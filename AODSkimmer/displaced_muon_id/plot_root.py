@@ -422,8 +422,21 @@ def render(args, histograms=None):
                 lo, hi = min(0.0, min(lows)), max(0.0, max(highs))
                 pad = 0.10 * (hi - lo or 1.0)
                 args.ylim = (lo - pad if lo < 0 else 0.0, hi + pad)
-        if args.log and args.ylim[1] <= max(1e-3, args.ylim[0]):
-            raise ValueError("Log-y display needs a positive upper limit above its lower limit")
+        log_floor = args.ylim[0]
+        if args.log:
+            positive_lows = []
+            for g in graphs:
+                for i in range(g.GetN()):
+                    y = g.GetPointY(i)
+                    if xmin <= g.GetPointX(i) <= xmax and y > 0:
+                        low = y - g.GetErrorYlow(i)
+                        positive_lows.append(low if low > 0 else y)
+            if not positive_lows:
+                raise ValueError("No positive points in the displayed range for a log-y copy")
+            if log_floor <= 0:
+                log_floor = min(positive_lows) / 2
+            if args.ylim[1] <= log_floor:
+                raise ValueError("Log-y display needs a positive upper limit above its lower limit")
         print("Input form: %s; error policy: %s; contents and normalization preserved" % (
             "ratio" if args.series else "TH1" if args.hist else "graph", args.errors))
 
@@ -478,7 +491,7 @@ def render(args, histograms=None):
                     if positive.GetPointY(i) <= 0:
                         positive.RemovePoint(i)
                 positive.Draw("LP same" if args.connect else "P same")
-            frame.SetMinimum(max(1e-3, args.ylim[0])); canvas.SetLogy(1); canvas.Modified()
+            frame.SetMinimum(log_floor); canvas.SetLogy(1); canvas.Modified()
             canvas.SaveAs(str(outputs[2]))
         # ROOT can log a SaveAs error without raising a Python exception.
         if any(not output.is_file() or output.stat().st_size == 0 for output in outputs):
