@@ -1,10 +1,34 @@
 #!/usr/bin/env python3
 """Render ROOT distributions, efficiency ratios and saved graphs in the CMS talk style.
 
-This is the portable rendering tool for a plotting skill. It depends only on
-Python >=3.9 and PyROOT (run after cmsenv); it does not import the muon study,
+This is the portable rendering tool for a plotting skill. It depends on
+Python >=3.9, NumPy and PyROOT (run after cmsenv); it does not import the muon study,
 read event trees, select physics objects, normalize, rebin, or modify ROOT files.
 The study-specific analysis remains in mumu_talk_plots.py.
+
+UHI interoperability (PlottableHistogram protocol 1.2):
+https://uhi.readthedocs.io/en/latest/plotting.html
+The histogram consumer uses only kind, axes, values() and variances(). It accepts
+one continuous, non-categorical COUNT axis. Profiles/MEAN, discrete axes and
+multiple dimensions are rejected explicitly. Flow bins are outside UHI's base
+plotting protocol; the ROOT-file adapter checks them but plots only normal bins.
+UHI counts() may be effective counts for weighted storage: NEVER substitute it
+for bin contents or binomial trials. Variances=None means no error bars, not zero
+uncertainty. Histograms/axes can be sliced with their provider's UHI indexing
+before passing them in; this plotter is a consumer, not an indexing implementation.
+
+Python API (no temporary ROOT file required, UHI need not be installed at runtime):
+    from plot_root import plot_histograms
+    plot_histograms(
+        {"signal": h},  # h: hist.Hist, boost_histogram.Histogram, uproot TH1, ...
+        [("signal", "Signal", "Selected", "#0072B2", 1, 20)],
+        output_base="/path/to/new/distribution", xlabel="p_{T} [GeV]",
+        ylabel="Weighted events / bin", status="Simulation Private Work")
+For ratios, use ratio=True and seven-field records (NUM, DEN, GROUP, STAGE,
+COLOR, LINE, MARKER), where NUM/DEN address the supplied histogram mapping.
+Keyword options match CLI destinations, e.g. xlim=(0, 100), errors="binomial",
+annotation=["..."]. No normalization, conversion of kind, or rebinning is done.
+from_root_histogram(th1) also exposes a ROOT TH1 as a UHI-compatible object.
 
 Choose one input form (repeat that option to overlay curves):
   --hist KEY GROUP_LABEL STAGE_LABEL COLOR LINE MARKER
@@ -72,6 +96,109 @@ import argparse
 import math
 from pathlib import Path
 import re
+from typing import TYPE_CHECKING, NamedTuple
+
+if TYPE_CHECKING:
+    from typing import Mapping, Sequence
+    from uhi.typing.plottable import PlottableHistogram
+
+
+class _Traits(NamedTuple):
+    circular: bool = False
+    discrete: bool = False
+
+
+class _ContinuousAxis(tuple):
+    """UHI axes are sequences of bin intervals, not backend-specific edge arrays."""
+    traits = _Traits()
+
+
+class RootHistogram:
+    """Read-only UHI view of a COUNT TH1; keeps unknown variances as None.
+
+    A missing Sumw2 cannot establish unweighted fills, so counts() is unknown
+    then. With Sumw2 it returns effective counts, as required by UHI, not sumw.
+    The snapshots include flow for ROOT-side checks; public UHI methods do not.
+    """
+    kind = "COUNT"
+
+    def __init__(self, histogram):
+        import numpy as np
+        if (not histogram or not histogram.InheritsFrom("TH1") or
+                histogram.GetDimension() != 1 or histogram.InheritsFrom("TProfile")):
+            raise ValueError("Expected a one-dimensional COUNT TH1")
+        n = histogram.GetNbinsX()
+        axis = histogram.GetXaxis()
+        labels = axis.GetLabels()
+        if labels and labels.GetSize():
+            raise ValueError("Labeled/categorical ROOT axes are unsupported by the continuous-axis template")
+        self.axes = (_ContinuousAxis((axis.GetBinLowEdge(i), axis.GetBinUpEdge(i)) for i in range(1, n + 1)),)
+        self._flow_values = np.array([histogram.GetBinContent(i) for i in range(n + 2)], dtype=float)
+        self._flow_variances = (np.array([histogram.GetSumw2().At(i) for i in range(n + 2)], dtype=float)
+                                if histogram.GetSumw2N() else None)
+        if not np.all(np.isfinite(self._flow_values)):
+            raise ValueError("Nonfinite TH1 content, including flow bins")
+        if self._flow_variances is not None and (not np.all(np.isfinite(self._flow_variances)) or
+                                                  np.any(self._flow_variances < 0)):
+            raise ValueError("Invalid TH1 variance, including flow bins")
+
+    def values(self):
+        return self._flow_values[1:-1].copy()
+
+    def variances(self):
+        return None if self._flow_variances is None else self._flow_variances[1:-1].copy()
+
+    def counts(self):
+        import numpy as np
+        values, variances = self.values(), self.variances()
+        if variances is None:
+            return None
+        return np.divide(values**2, variances, out=np.zeros_like(values), where=variances != 0)
+
+
+def from_root_histogram(histogram) -> "PlottableHistogram":
+    """Adapt TH1 without writing files; usable by other UHI-aware plotters too."""
+    return RootHistogram(histogram)
+
+
+def histogram_data(histogram: "PlottableHistogram", raw_counts=False):
+    """Read UHI protocol members only; counts() is intentionally not a numerator.
+
+    Only one continuous COUNT axis is supported. Variances are variances of the
+    values; do not divide by effective counts (that would be a MEAN operation).
+    """
+    import numpy as np
+    if histogram.kind != "COUNT":
+        raise ValueError("Only UHI kind COUNT is supported; profiles/MEAN need separate error semantics")
+    if len(histogram.axes) != 1 or histogram.axes[0].traits.discrete:
+        raise ValueError("Expected one continuous UHI axis; discrete and multidimensional inputs are unsupported")
+    bins = list(histogram.axes[0])
+    if not bins or any(len(interval) != 2 for interval in bins):
+        raise ValueError("UHI continuous axes must provide (lower, upper) intervals")
+    edges = np.array([bins[0][0]] + [interval[1] for interval in bins], dtype=float)
+    if (not np.all(np.isfinite(edges)) or np.any(np.diff(edges) <= 0) or
+            any(not math.isclose(a[1], b[0], rel_tol=1e-12, abs_tol=1e-12) for a, b in zip(bins, bins[1:]))):
+        raise ValueError("Expected finite, increasing, contiguous UHI bin intervals")
+    values = np.asarray(histogram.values(), dtype=float)
+    variance = histogram.variances()
+    variance = None if variance is None else np.asarray(variance, dtype=float)
+    if values.shape != (len(bins),) or not np.all(np.isfinite(values)):
+        raise ValueError("Invalid UHI values: need one finite value per bin")
+    if variance is not None and (variance.shape != values.shape or not np.all(np.isfinite(variance)) or np.any(variance < 0)):
+        raise ValueError("Invalid UHI variances: need nonnegative finite variance per bin, or None")
+    if raw_counts:
+        _check_raw_counts(values, variance)
+    errors = np.zeros_like(values) if variance is None else np.sqrt(variance)
+    return edges.tolist(), values.tolist(), errors.tolist()
+
+
+def _check_raw_counts(values, variances):
+    """Explicit binomial opt-in only; effective counts never prove raw trials."""
+    for i, value in enumerate(values):
+        if value < 0 or not math.isclose(value, round(value), abs_tol=1e-8, rel_tol=0):
+            raise ValueError("Binomial errors require raw nonnegative integer bin contents")
+        if variances is not None and not math.isclose(variances[i], value, rel_tol=1e-7, abs_tol=1e-8):
+            raise ValueError("Non-Poisson variances; cannot use --errors binomial")
 
 
 def parser():
@@ -105,29 +232,15 @@ def parser():
 
 
 def read_hist(root_file, key, raw_counts=False):
-    """Read finite TH1 contents and stored errors; raw-count checks are opt-in."""
-    h = root_file.Get(key)
-    if not h or not h.InheritsFrom("TH1") or h.GetDimension() != 1 or h.InheritsFrom("TProfile"):
-        raise ValueError("Expected a one-dimensional TH1: " + key)
-    edges = [h.GetXaxis().GetBinLowEdge(i) for i in range(1, h.GetNbinsX() + 2)]
-    if not all(math.isfinite(x) for x in edges) or any(a >= b for a, b in zip(edges, edges[1:])):
-        raise ValueError("Invalid histogram bin edges: " + key)
-    values, errors = [], []
-    for i in range(h.GetNbinsX() + 2):
-        value = h.GetBinContent(i)
-        if not math.isfinite(value):
-            raise ValueError("Nonfinite content in %s bin %d" % (key, i))
-        if raw_counts and (value < 0 or not math.isclose(value, round(value), abs_tol=1e-8, rel_tol=0)):
-            raise ValueError("Non-integer/negative/nonfinite count in %s bin %d" % (key, i))
-        error = h.GetBinError(i) if h.GetSumw2N() else 0.0
-        if not math.isfinite(error) or error < 0:
-            raise ValueError("Invalid stored uncertainty in %s bin %d" % (key, i))
-        if raw_counts and h.GetSumw2N() and not math.isclose(error**2, value, rel_tol=1e-7, abs_tol=1e-8):
-            raise ValueError("Non-Poisson Sumw2 in %s bin %d; cannot use --errors binomial" % (key, i))
-        values.append(int(round(value)) if raw_counts else value)
-        errors.append(error)
-    if not raw_counts and not h.GetSumw2N():
-        print("No stored Sumw2 in %s: no histogram error bars supplied" % key)
+    """ROOT I/O adapter; retain legacy flow checks, consume visible bins via UHI."""
+    h = from_root_histogram(root_file.Get(key))
+    edges, _, _ = histogram_data(h, raw_counts)
+    values = h._flow_values.tolist()
+    if raw_counts:
+        _check_raw_counts(values, h._flow_variances)
+        values = [int(round(value)) for value in values]
+    errors = ([0.0] * len(values) if h._flow_variances is None else
+              [math.sqrt(value) for value in h._flow_variances])
     return edges, values, errors
 
 
@@ -139,15 +252,34 @@ def build_ratio(ROOT, root_file, series, min_den, confidence, errors):
     den_edges, den, _ = read_hist(root_file, den_key, binomial)
     if edges != den_edges or (binomial and any(k > n for k, n in zip(num, den))):
         raise ValueError("Numerator/denominator binning mismatch or numerator exceeds denominator: " + num_key)
+    return _ratio_graph(ROOT, edges, num[1:-1], den[1:-1], min_den, confidence, errors)
+
+
+def ratio_graph(ROOT, numerator: "PlottableHistogram", denominator: "PlottableHistogram",
+                min_den=0, confidence=0.6827, errors="none"):
+    """Public UHI ratio adapter, using values(), not effective counts()."""
+    if errors not in ("none", "binomial"):
+        raise ValueError("Ratios require errors='none' or explicit raw-count errors='binomial'")
+    edges, num, _ = histogram_data(numerator, errors == "binomial")
+    den_edges, den, _ = histogram_data(denominator, errors == "binomial")
+    if edges != den_edges or (errors == "binomial" and any(k > n for k, n in zip(num, den))):
+        raise ValueError("Ratio binning mismatch or raw numerator exceeds denominator")
+    return _ratio_graph(ROOT, edges, num, den, min_den, confidence, errors)
+
+
+def _ratio_graph(ROOT, edges, num, den, min_den, confidence, errors):
+    if not math.isfinite(min_den) or min_den < 0 or not 0 < confidence < 1:
+        raise ValueError("Require finite min_den >= 0 and 0 < confidence < 1")
+    binomial = errors == "binomial"
     graph = ROOT.TGraphAsymmErrors()
-    for i, (k, n) in enumerate(zip(num[1:-1], den[1:-1])):
+    for i, (k, n) in enumerate(zip(num, den)):
         if n == 0 or (min_den > 0 and n < min_den):
             continue
         y = k / n
         if not math.isfinite(y):
-            raise ValueError("Nonfinite ratio in " + num_key)
-        lo = ROOT.TEfficiency.ClopperPearson(n, k, confidence, False) if binomial else y
-        hi = ROOT.TEfficiency.ClopperPearson(n, k, confidence, True) if binomial else y
+            raise ValueError("Nonfinite ratio")
+        lo = ROOT.TEfficiency.ClopperPearson(int(round(n)), int(round(k)), confidence, False) if binomial else y
+        hi = ROOT.TEfficiency.ClopperPearson(int(round(n)), int(round(k)), confidence, True) if binomial else y
         j = graph.GetN()
         graph.SetPoint(j, (edges[i] + edges[i + 1]) / 2, y)
         half_width = (edges[i + 1] - edges[i]) / 2
@@ -157,9 +289,16 @@ def build_ratio(ROOT, root_file, series, min_den, confidence, errors):
 
 def build_distribution(ROOT, root_file, series, errors):
     """Represent TH1 bins as points without changing weighted/normalized contents."""
-    edges, values, stored_errors = read_hist(root_file, series[0])
+    return histogram_graph(ROOT, from_root_histogram(root_file.Get(series[0])), errors)
+
+
+def histogram_graph(ROOT, histogram: "PlottableHistogram", errors="stored"):
+    """Public UHI distribution adapter; variances=None produces no error bars."""
+    if errors not in ("stored", "none"):
+        raise ValueError("Distributions require errors='stored' or 'none'")
+    edges, values, stored_errors = histogram_data(histogram)
     graph = ROOT.TGraphAsymmErrors()
-    for i, (value, error) in enumerate(zip(values[1:-1], stored_errors[1:-1])):
+    for i, (value, error) in enumerate(zip(values, stored_errors)):
         graph.SetPoint(i, (edges[i] + edges[i + 1]) / 2, value)
         half_width = (edges[i + 1] - edges[i]) / 2
         error = error if errors == "stored" else 0.0
@@ -191,7 +330,7 @@ def read_graph(ROOT, root_file, series, errors):
     return graph, extent
 
 
-def render(args):
+def render(args, histograms=None):
     """Render one explicit overlay; keep ROOT objects alive until all exports finish."""
     import ROOT
     ROOT.gROOT.SetBatch(True)
@@ -238,13 +377,18 @@ def render(args):
     if frame_top < 0.55:
         raise ValueError("Too many legend entries for this talk template; split the overlay into focused plots")
 
-    root_file = ROOT.TFile.Open(args.input, "READ")
-    if not root_file or root_file.IsZombie():
+    root_file = ROOT.TFile.Open(args.input, "READ") if histograms is None else None
+    if histograms is None and (not root_file or root_file.IsZombie()):
         raise ValueError("Cannot open ROOT input: " + args.input)
     try:
         graphs, coverage = [], []
         for record in records:
-            if args.series:
+            if histograms is not None and args.series:
+                graph, extent = ratio_graph(ROOT, histograms[record[0]], histograms[record[1]],
+                                            args.min_den, args.confidence, args.errors)
+            elif histograms is not None:
+                graph, extent = histogram_graph(ROOT, histograms[record[0]], args.errors)
+            elif args.series:
                 graph, extent = build_ratio(ROOT, root_file, record, args.min_den, args.confidence, args.errors)
             elif args.hist:
                 graph, extent = build_distribution(ROOT, root_file, record, args.errors)
@@ -342,27 +486,61 @@ def render(args):
         for output in outputs:
             print("Wrote", output)
     finally:
-        root_file.Close()
+        if root_file is not None:
+            root_file.Close()
+
+
+def _validate_args(args):
+    """Share CLI/API validation and explicit uncertainty defaults."""
+    for name in ("xlim", "ylim"):
+        limits = getattr(args, name)
+        if limits and (not all(math.isfinite(v) for v in limits) or limits[0] >= limits[1]):
+            raise ValueError("--%s needs finite MIN < MAX" % name)
+    if not math.isfinite(args.min_den) or args.min_den < 0 or not 0 < args.confidence < 1 or len(args.annotation) > 3:
+        raise ValueError("Require --min-den >= 0, 0 < --confidence < 1 and at most three annotations")
+    if args.errors is None:
+        args.errors = "none" if args.series else "stored"
+    if args.series and args.errors == "stored":
+        raise ValueError("Ratio inputs have no saved ratio uncertainty; use --graph or choose --errors none/binomial")
+    if not args.series and args.errors == "binomial":
+        raise ValueError("--errors binomial requires explicit numerator/denominator --series")
+    if not args.series and args.min_den:
+        raise ValueError("--min-den applies only to numerator/denominator --series")
+
+
+def plot_histograms(histograms: "Mapping[str, PlottableHistogram]", series: "Sequence[Sequence]", *,
+                    output_base, xlabel, ylabel, status, ratio=False, **options):
+    """Plot UHI objects directly with the same configuration and style as the CLI.
+
+    series contains six-field distribution or seven-field ratio records (see
+    module examples). A provider's own indexing/slicing may be applied before
+    this call; no backend-specific access is made to those histogram objects.
+    Files are never opened by this API. Missing mapping keys raise KeyError.
+    """
+    allowed = {"era", "annotation", "group_title", "stage_title", "xlim", "ylim", "errors", "min_den",
+               "confidence", "log", "connect"}
+    if set(options) - allowed:
+        raise ValueError("Unknown plotting options: " + ", ".join(sorted(set(options) - allowed)))
+    records = list(series)
+    if not records or any(len(record) != (7 if ratio else 6) for record in records):
+        raise ValueError("Need nonempty seven-field ratio or six-field distribution records")
+    p = parser()
+    settings = {name: p.get_default(name) for name in allowed}
+    settings.update(options)
+    if settings["errors"] not in (None, "stored", "none", "binomial"):
+        raise ValueError("Unknown uncertainty policy")
+    args = argparse.Namespace(**settings, input=None, output_base=Path(output_base), xlabel=xlabel,
+                              ylabel=ylabel, status=status, hist=None if ratio else records,
+                              series=records if ratio else None, graph=None)
+    _validate_args(args)
+    render(args, histograms=histograms)
 
 
 def main():
     p = parser()
     args = p.parse_args()
-    for name in ("xlim", "ylim"):
-        limits = getattr(args, name)
-        if limits and (not all(math.isfinite(v) for v in limits) or limits[0] >= limits[1]):
-            p.error("--%s needs finite MIN < MAX" % name)
-    if not math.isfinite(args.min_den) or args.min_den < 0 or not 0 < args.confidence < 1 or len(args.annotation) > 3:
-        p.error("Require --min-den >= 0, 0 < --confidence < 1 and at most three annotations")
-    if args.errors is None:
-        args.errors = "none" if args.series else "stored"
-    if args.series and args.errors == "stored":
-        p.error("Ratio inputs have no saved ratio uncertainty; use --graph or choose --errors none/binomial")
-    if not args.series and args.errors == "binomial":
-        p.error("--errors binomial requires explicit numerator/denominator --series")
-    if not args.series and args.min_den:
-        p.error("--min-den applies only to numerator/denominator --series")
     try:
+        _validate_args(args)
         render(args)
     except (ValueError, OSError) as error:
         p.error(str(error))
