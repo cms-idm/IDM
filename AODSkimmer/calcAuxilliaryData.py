@@ -94,7 +94,7 @@ def get_or_make_flist(key, subsample, dataset, year):
     print(f"Wrote {len(files)} files to {flist}")
     return flist
 
-def run_background(json_path, year=None, key=None, nfiles=DEFAULT_NFILES):
+def run_background(json_path, year=None, key=None, nfiles=DEFAULT_NFILES, print_only=False):
 
     year = year or parse_year_from_filename(json_path)
 
@@ -138,11 +138,15 @@ def run_background(json_path, year=None, key=None, nfiles=DEFAULT_NFILES):
             "xsec(pb)": col_xs, "filter_eff": col_eff}
     df = pd.DataFrame(data)
 
+    if print_only:
+        print(df.to_string(index=False))
+        return
+
     outname = os.path.splitext(os.path.basename(json_path))[0] + "_xsec_filtereff_table.csv"
     df.to_csv(outname, index=False)
     print(f"Saved {outname}")
 
-def run_signal(nfiles=DEFAULT_NFILES):
+def run_signal(nfiles=DEFAULT_NFILES, print_only=False):
 
     vers = 'Feb2026'
 
@@ -197,6 +201,10 @@ def run_signal(nfiles=DEFAULT_NFILES):
             "xsec(pb)": col_xs, "filter_eff": col_eff}
     df = pd.DataFrame(data)
 
+    if print_only:
+        print(df.to_string(index=False))
+        return
+
     # Save to CSV
     df.to_csv('signal_xsec_filtereff_table.csv', index=False)
 
@@ -213,14 +221,16 @@ def main():
     parser.add_argument("--nfiles", type=int, default=DEFAULT_NFILES,
                          help="Only run xsec/filter-eff calculations over the first N files of each "
                               "dataset's file list, instead of the full dataset (default: %(default)s)")
+    parser.add_argument("--print-only", action="store_true",
+                         help="Print the resulting xsec/filter-eff table instead of writing it to a CSV")
     args = parser.parse_args()
 
     if args.mode == "bkg":
         if not args.json:
             parser.error("--json is required for --mode background")
-        run_background(args.json, year=args.year, key=args.key, nfiles=args.nfiles)
+        run_background(args.json, year=args.year, key=args.key, nfiles=args.nfiles, print_only=args.print_only)
     else:
-        run_signal(nfiles=args.nfiles)
+        run_signal(nfiles=args.nfiles, print_only=args.print_only)
 
 if __name__ == "__main__":
     main()
