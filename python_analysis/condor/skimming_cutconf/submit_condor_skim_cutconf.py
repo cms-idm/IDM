@@ -120,6 +120,31 @@ def condor_submit(jobset_dir, queue_file, args):
     subprocess.run(cmd, cwd=jobset_dir, check=True)
 
 
+def update_skimmed_json(skimmed_json, new_entries, input_names, dry_run):
+    """Replace entries by name with new_entries (so -p keeps the others), and drop entries
+    whose sample is no longer in the input sample json."""
+    merged = {}
+    if os.path.exists(skimmed_json):
+        with open(skimmed_json) as f:
+            merged = {s["name"]: s for s in json.load(f)}
+    elif not new_entries:
+        return
+    stale = [n for n in merged if n not in input_names]
+    for n in stale:
+        del merged[n]
+    merged.update(new_entries)
+    if stale:
+        print(f"{'would drop' if dry_run else 'dropping'} entries no longer in the input sample json: {stale}")
+    if dry_run:
+        print(f"dry run: the skimmed sample json would be {skimmed_json}")
+        return
+    if not stale and not new_entries:
+        return
+    with open(skimmed_json, "w") as f:
+        json.dump(list(merged.values()), f, indent=4)
+    print(f"wrote {skimmed_json}")
+
+
 def resubmit(args):
     """Resubmit the jobs of a job set whose output file is not on EOS."""
     with open(os.path.join(args.resubmit, "manifest.json")) as f:
@@ -170,6 +195,7 @@ def main():
         samples = json.load(f)
     if len({s["type"] for s in samples}) > 1:
         sys.exit("the sample json mixes types (signal/bkg/data); split it up")
+    input_names = {s["name"] for s in samples} # before -p, so -p doesn't prune the other samples
     if args.particular:
         unknown = set(args.particular) - {s["name"] for s in samples}
         if unknown:
@@ -250,6 +276,8 @@ def main():
 
     if not jobnames:
         print("nothing to submit")
+        # still prune entries for samples removed from the input sample json
+        update_skimmed_json(skimmed_json, {}, input_names, args.dry_run)
         return
     with open(os.path.join(jobset_dir, "jobs.txt"), "w") as f:
         f.write("\n".join(jobnames) + "\n")
@@ -257,19 +285,11 @@ def main():
         json.dump(manifest, f, indent=2)
     print(f"{len(jobnames)} job(s) in {jobset_dir}")
 
+    # write/update the skimmed sample json
+    update_skimmed_json(skimmed_json, skimmed_entries, input_names, args.dry_run)
     if args.dry_run:
-        print(f"dry run: not submitting; the skimmed sample json would be {skimmed_json}")
+        print("dry run: not submitting")
         return
-
-    # write/update the skimmed sample json (entries are replaced by name, so -p keeps the others)
-    merged = {}
-    if os.path.exists(skimmed_json):
-        with open(skimmed_json) as f:
-            merged = {s["name"]: s for s in json.load(f)}
-    merged.update(skimmed_entries)
-    with open(skimmed_json, "w") as f:
-        json.dump(list(merged.values()), f, indent=4)
-    print(f"wrote {skimmed_json}")
 
     condor_submit(jobset_dir, "jobs.txt", args)
 

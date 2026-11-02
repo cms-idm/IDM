@@ -27,6 +27,11 @@ versname = args.name
 skimmed = args.skimmed
 ref_file = args.ref_file
 
+# bkg samples to leave out of the generated configs (comment a line out to re-enable it)
+skip_bkgs = [
+    "TT_TTJets", # Run2 13TeV UL18 sample, overlaps the TTto* samples
+]
+
 def stringfy_friendly(num):
     if isinstance(num, int):
         return str(num)
@@ -147,6 +152,9 @@ elif mode == "bkg":
                 info["name"] = subsample.replace("output_","")
             else:
                 info["name"] = f"{bkg}_{subsample}"
+            if info["name"] in skip_bkgs:
+                print(f"Skipping {info['name']}")
+                continue
             info["location"] = fileDirs[0] if len(fileDirs) == 1 else fileDirs
             info["type"] = "bkg"
             info["year"] = int(year)
