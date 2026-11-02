@@ -57,8 +57,43 @@ options.register('outfile',
         VarParsing.VarParsing.multiplicity.singleton,
         VarParsing.VarParsing.varType.string,
         "Output file name")
+options.register('selectionMode',
+        "hlt",
+        VarParsing.VarParsing.multiplicity.singleton,
+        VarParsing.VarParsing.varType.string,
+        "Criterion gating the full-event background stream; background only, must not be "
+        "set when signal=1. 'metThreshold': ptmiss >= metThreshold. 'hlt': OR of hltSelectionPaths.")
+options.register('metThreshold',
+        200.0,
+        VarParsing.VarParsing.multiplicity.singleton,
+        VarParsing.VarParsing.varType.float,
+        "ptmiss threshold (GeV) gating the full-event background stream, used when "
+        "selectionMode == 'metThreshold'; irrelevant for signal")
+options.register('hltSelectionPaths',
+        "",
+        VarParsing.VarParsing.multiplicity.list,
+        VarParsing.VarParsing.varType.string,
+        "Trigger paths ORed together when selectionMode == 'hlt'")
+# VarParsing.register() appends a list default as a single nested item rather than
+# extending, so the real default is set here via attribute assignment instead.
+options.hltSelectionPaths = ["HLT_PFMETNoMu120_PFMHTNoMu120_IDTight", "HLT_PFMETNoMu120_PFMHTNoMu120_IDTight_PFHT60"]
+options.register('slimOutfile',
+        "",
+        VarParsing.VarParsing.multiplicity.singleton,
+        VarParsing.VarParsing.varType.string,
+        "Output file for the slim, all-events background stream (background only). "
+        "If left empty, derived by inserting '_slim' before the '.root' extension of outfile.")
 
 options.parseArguments()
+
+# selectionMode (and its associated knobs, metThreshold/hltSelectionPaths) only gate the
+# full-readout background stream -- the plugin ignores it entirely for signal
+# (passesPtMiss = isSignal || passesBkgSelection in ElectronSkimmer.cc). Reject an explicit
+# override so a signal job doesn't silently carry a no-op selectionMode configuration.
+_explicitArgs = set(arg.split('=', 1)[0] for arg in sys.argv[1:])
+if options.signal and 'selectionMode' in _explicitArgs:
+    raise ValueError("selectionMode is a background-only option and has no effect on signal "
+                      "samples; remove it or set signal=0")
 
 # file list
 if ".txt" in options.flist:
@@ -267,8 +302,9 @@ process.maxEvents = cms.untracked.PSet(
 )
 process.source = cms.Source("PoolSource",
     fileNames = cms.untracked.vstring(options.inputFiles),
-    skipBadFiles = cms.untracked.bool(True),
-    cacheSize = cms.untracked.uint32(0)
+    #skipBadFiles = cms.untracked.bool(True),
+    #cacheSize = cms.untracked.uint32(0)
+    skipBadFiles = cms.untracked.bool(True)
 )
 process.TFileService = cms.Service("TFileService",
     fileName = cms.string(options.outfile),
@@ -284,6 +320,10 @@ process.ntuples = ElectronSkimmer.clone(
     isData = cms.bool(options.data),
     isSignal = cms.bool(options.signal),
     year = options.year,
+    selectionMode = cms.string(options.selectionMode),
+    metThreshold = cms.double(options.metThreshold),
+    hltSelectionPaths = cms.vstring(options.hltSelectionPaths),
+    slimOutfile = cms.string(options.slimOutfile),
     metFilters = cms.vstring(metFilters),
     triggerPaths = cms.vstring(triggerPaths),
     effAreasConfigFile = cms.FileInPath(effAreaInputPath),
