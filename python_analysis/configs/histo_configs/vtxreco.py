@@ -26,7 +26,7 @@ from analysisTools.analysisSubroutines import defineGoodVertices, defineGoodLptV
 #                merged candidate, good or not (AllLptElectron.isGenMerged: matched to
 #                both gen electrons, event in cat_merged)
 #   vtxreco_merged_<name>_num_genmatch_good : events with >= 1 gen-matched good merged
-#                candidate (merged_vtx from defineGoodMergedCandidates)
+#                candidate (merged_candidates from defineGoodMergedCandidates)
 #   vtxreco_eereco_<name>_num_<pair> : di-electron reco efficiency -- events where both
 #                gen electrons are gen-matched to reco electrons (no vertex requirement),
 #                split by the matched collections (GenEle/GenPos.matchType, R = GED,
@@ -117,13 +117,13 @@ def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
     }
 
     defineGoodVertices(events, version='v15acr')
-    # AllLptElectron (and the lptvtx/merged_vtx pools built from it) isn't present in
+    # AllLptElectron (and the lptvtx/merged_candidates pools built from it) isn't present in
     # every ntuple era (e.g. 2018) -- skip those pieces and fill their masks as all-False
     # rather than crashing, so the shared vtx-based hists still get filled.
     has_lpt = 'AllLptElectron' in events.fields
     if has_lpt:
         defineGoodLptVertices(events, version='v15acr')
-        defineGoodMergedCandidates(events)
+        defineGoodMergedCandidates(events, version='v1_Oct2026')
     no_lpt = np.zeros(len(events), dtype=bool)
 
     # di-electron reco: both gen electrons matched to a reco electron (R = GED, L = LPT)
@@ -143,7 +143,7 @@ def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
         "regvtx_genmatch_any"  : ak.any(events.vtx.isMatched, axis=1),
         "regvtx_genmatch_good" : ak.any(events.good_vtx.isMatched, axis=1),
         "merged_genmatch_any"  : ak.any(events.AllLptElectron.isGenMerged, axis=1) if has_lpt else no_lpt,
-        "merged_genmatch_good" : ak.any(events.merged_vtx.isGenMerged, axis=1) if has_lpt else no_lpt,
+        "merged_genmatch_good" : ak.any(events.merged_candidates.isGenMerged, axis=1) if has_lpt else no_lpt,
         "eereco_gedged"        : gedged,
         "eereco_gedlpt"        : gedlpt,
         "eereco_lptlpt"        : lptlpt,

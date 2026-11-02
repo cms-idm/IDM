@@ -33,6 +33,9 @@ os.makedirs('plots', exist_ok=True)
 # is excluded from the log-scale axis treatment applied to the others.
 _LINEAR_2D_KEYS = {'mele_gen_lxy_vs_svProxyVxy'}
 
+# Short y-axis names used in plot titles in place of the full axis label.
+_TITLE_YLABELS = {'mele_gen_lxy_vs_lxyEst': r'Reco $L_{xy}^{est}$ [cm]'}
+
 def _plot_2d_group(varlist):
     for key, xlabel, ylabel in varlist:
         if key not in s_hists:
@@ -49,7 +52,7 @@ def _plot_2d_group(varlist):
             ax.set_yscale('log')
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
-        ax.set_title(f'Merged electron: {ylabel} vs {xlabel}')
+        ax.set_title(f'Merged electron: {_TITLE_YLABELS.get(key, ylabel)} vs {xlabel}')
         plt.tight_layout()
         plt.savefig(f'plots/hist_{seltag}_{key}_allsamps.png')
         plt.close(fig)
@@ -60,7 +63,7 @@ print("Merged electron: gen Lxy vs reco displacement (all-samples)")
 _plot_2d_group([
     ('mele_gen_lxy_vs_dxy',        r'Gen $L_{xy}$ [cm]', r'Reco $|d_{xy}|$ [cm]'),
     ('mele_gen_lxy_vs_svProxyVxy', r'Gen $L_{xy}$ [cm]', r'Reco SV proxy $v_{xy}$ [cm]'),
-    ('mele_gen_lxy_vs_lxyEst',     r'Gen $L_{xy}$ [cm]', r'Reco $|d_{xy}|\sin(\Delta\phi(e, p_{T}^{miss}))$ [cm]'),
+    ('mele_gen_lxy_vs_lxyEst',     r'Gen $L_{xy}$ [cm]', r'Reco $|d_{xy}|/\sin(\Delta\phi(e, p_{T}^{miss}))$ [cm]'),
 ])
 
 # ── Merged-electron gen Lxy vs reco displacement correlations, sliced by
@@ -71,7 +74,7 @@ s_pts = utils.get_signal_point_dict(s_hists)
 
 _mele_lxy_corr_vars = [
     ('mele_gen_lxy_vs_dxy',    r'Gen $L_{xy}$ [cm]', r'Reco $|d_{xy}|$ [cm]'),
-    ('mele_gen_lxy_vs_lxyEst', r'Gen $L_{xy}$ [cm]', r'Reco $|d_{xy}|\sin(\Delta\phi(e, p_{T}^{miss}))$ [cm]'),
+    ('mele_gen_lxy_vs_lxyEst', r'Gen $L_{xy}$ [cm]', r'Reco $|d_{xy}|/\sin(\Delta\phi(e, p_{T}^{miss}))$ [cm]'),
 ]
 
 def _plot_2d_group_sliced(varlist, samp_mask, out_suffix, title_suffix):
@@ -94,7 +97,7 @@ def _plot_2d_group_sliced(varlist, samp_mask, out_suffix, title_suffix):
             ax.set_yscale('log')
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
-        ax.set_title(f'Merged electron: {ylabel} vs {xlabel} ({title_suffix})')
+        ax.set_title(f'Merged electron: {_TITLE_YLABELS.get(key, ylabel)} vs {xlabel} ({title_suffix})')
         plt.tight_layout()
         plt.savefig(f'plots/hist_{seltag}_{key}_{out_suffix}.png')
         plt.close(fig)

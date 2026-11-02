@@ -1,6 +1,11 @@
 import numpy as np
 import awkward as ak
-from analysisTools.analysisSubroutines import getBtagWPs, hasGoodVertex
+import json
+import os
+from analysisTools.analysisSubroutines import getBtagWPs, hasGoodVertex, getBDTscore_kfold
+
+# k-fold BDT (trainBDT/BDTutils_kfold.train_bdt). Note: any module-level name containing "cut" is picked up as a cut
+bdt_json = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../trainBDT/models/variables_BDT_AN_TestOct28.json')
 
 def _dphi(a, b):
     d = np.abs(a - b)
@@ -140,43 +145,13 @@ def cut12(events,info):
 
 def cut13(events, info):
     name = "cut13"
-    desc = "Refit Vtx Mass < 7 GeV"
-    plots = False
-    cut = events.sel_vtx.refit_m < 7.
-    return events[cut], name, desc, plots
-
-def cut14(events, info):
-    name = "cut14"
-    desc = r"Refit Vtx $\Delta R(ee) < 1$"
-    plots = False
-    cut = events.sel_vtx.refit_dR < 1.
-    return events[cut], name, desc, plots
-
-def cut15(events, info):
-    name = "cut15"
-    desc = "Vtx min $d_{xy} >0.15$ cm"
-    plots = False
-    cut = np.minimum(np.abs(events.sel_vtx.e1_refit_dxy), np.abs(events.sel_vtx.e2_refit_dxy)) > 0.15
-    return events[cut], name, desc, plots
-
-def cut16(events, info):
-    name = "cut16"
-    desc = "Vtx $L_{xy} >1$ cm"
-    plots = False
-    cut = events.sel_vtx.vxy_fromPV > 1.
-    return events[cut], name, desc, plots
-
-def cut17(events, info):
-    name = "cut17"
-    desc = r"$\Delta \phi(ee, p_T^{miss}) < 1$"
-    plots = False
-    dphi_ee_met = _dphi(events.sel_vtx.phi, events.PFMET.phi)
-    cut = dphi_ee_met < 1.
-    return events[cut], name, desc, plots
-
-def cut18(events, info):
-    name = "cut18"
-    desc = r"$\eta(e_1)\dot\eta(e_2) > 0$"
+    desc = "BDT score > medium WP"
     plots = True
-    cut = events.sel_vtx.e1.eta * events.sel_vtx.e2.eta > 0.
+    with open(bdt_json) as fin:
+        vars_dict = json.load(fin)
+    if 'thres_WP' not in vars_dict:
+        raise KeyError(f'{bdt_json} has no thres_WP; retrain with step2_trainBDT.py or add it by hand')
+    thres = vars_dict['thres_WP']['medium']
+    events['BDTScore'] = getBDTscore_kfold(events, bdt_json)
+    cut = events.BDTScore > thres
     return events[cut], name, desc, plots

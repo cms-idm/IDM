@@ -491,6 +491,78 @@ for pset in PARAM_SETS:
 print(f"  -> {n_made} per-series plots")
 
 
+# ── Section 2b: category fractions, zero match dropped, res+vtx merged ───────
+# Same per-series plots as above, but zero match is not drawn and res + vtx
+# are summed into a single "Resolved" bar. Fractions are still normalized to
+# all events (zero match included), so each bar matches the Section 2 values.
+_MERGED_CAT_GROUPS = {'mele': ['mele'], 'mpho': ['mpho'], 'res': ['res', 'vtx']}
+
+
+def _merged_cat_event_fracs(samp_sel):
+    counts = {}
+    for cat in _CAT_ORDER:
+        h = _select(_CAT_GEN_LXY_KEY[cat], samp_sel)
+        counts[cat] = float(np.sum(h.values())) if h is not None else 0.0
+    total = sum(counts.values())
+    if total <= 0:
+        zero = {c: 0.0 for c in _MERGED_CAT_GROUPS}
+        return zero, zero
+    gcounts = {c: sum(counts[s] for s in subs) for c, subs in _MERGED_CAT_GROUPS.items()}
+    fracs = {c: gcounts[c] / total for c in _MERGED_CAT_GROUPS}
+    errs  = {c: np.sqrt(gcounts[c]) / total for c in _MERGED_CAT_GROUPS}
+    return fracs, errs
+
+
+def _merged_cat_frac_series(pset):
+    points = list(_series_points(pset))
+    n = len(points)
+    if n == 0:
+        return False
+
+    fig, ax = plt.subplots(figsize=size)
+    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    x     = np.arange(len(_MERGED_CAT_GROUPS))
+    bar_w = 0.8 / n
+    any_drawn = False
+    for idx, (m1, delta, ctau) in enumerate(points):
+        sname = _samp_name(m1, delta, ctau)
+        if sname is None:
+            continue
+        fracs, errs = _merged_cat_event_fracs(sname)
+        if sum(fracs.values()) == 0:
+            continue
+        vals  = [fracs[c] for c in _MERGED_CAT_GROUPS]
+        errs_ = [errs[c]  for c in _MERGED_CAT_GROUPS]
+        offsets = x - 0.4 + bar_w * (idx + 0.5)
+        ax.bar(offsets, vals, width=bar_w, yerr=errs_, label=_sig_label(m1, delta, ctau),
+               color=f'C{idx}', alpha=0.8, edgecolor='black', linewidth=0.5,
+               error_kw={'ecolor': 'black', 'capsize': 3, 'elinewidth': 1.0})
+        any_drawn = True
+    if not any_drawn:
+        plt.close(fig)
+        return False
+
+    xlbls = [cat_styles[c]['label'] for c in _MERGED_CAT_GROUPS]
+    ax.set_xticks(x)
+    ax.set_xticklabels(xlbls, fontsize=15)
+    ax.set_ylabel('Fraction of events')
+    ax.set_ylim(0, None)
+    ax.set_title('Reco category distribution')
+    ax.legend(fontsize=13)
+    plt.tight_layout()
+    tag = _param_tag(pset['m1s'], pset['deltas'], pset['ctaus'])
+    plt.savefig(f'{plotdir}/hist_{seltag}_cat_frac_nozero_{tag}.png')
+    plt.close(fig)
+    return True
+
+
+print("Section 2b: category fractions, no zero match, res+vtx merged (per-series)")
+n_made = 0
+for pset in PARAM_SETS:
+    n_made += _merged_cat_frac_series(pset)
+print(f"  -> {n_made} per-series plots")
+
+
 # ── Sections 3 & 4: categorical "reason" plots ────────────────────────────────
 # mele_nearestEle_oppQ_failreason (Section 3) and res_notVtx_reason (Section 4)
 # are each single-category diagnostics (no cross-category overlay to make),

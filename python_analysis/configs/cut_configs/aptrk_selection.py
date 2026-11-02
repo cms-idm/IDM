@@ -1,6 +1,9 @@
 import numpy as np
 import awkward as ak
-from analysisTools.analysisSubroutines import getBtagWPs, hasGoodVertex
+try:
+    from analysisTools.analysisSubroutines import getBtagWPs, hasGoodVertex
+except ModuleNotFoundError:  # run with ../analysisTools/ on sys.path (e.g. trainBDT/skimmerTools)
+    from analysisSubroutines import getBtagWPs, hasGoodVertex
 
 def _dphi(a, b):
     d = np.abs(a - b)
@@ -113,72 +116,46 @@ def cut8(events, info):
     
 def cut9(events, info):
     name = 'cut9'
-    desc = r'has merged candidate'
+    desc = r'has good merged candidate (v1_Oct2026)'
     plots = True
 
-    cand = events.merged
-    cut = ~ak.is_none(cand)
+    # merged_candidates/best_merged are set by computeMergedVars using the
+    # processor's good_merged version (default v1_Oct2026), which covers e/jet
+    # isolation, min$\Delta\phi(e, j) > 1$, cos$\Delta\phi(e, p_T^{miss}) > 0.4$,
+    # $|d_{xy}| > 0.001$cm, log$|d_{xy}/d_z| > -2$ and track $\chi^2 < 15$.
+    cut = events.nMergedCandidates > 0
     return events[cut], name, desc, plots
 
 def cut10(events,info):
     name = "cut10"
-    desc = r"min$\Delta \phi(e, j) > 1.0$"
-    plots = False
-
-    cand = events.merged
-    min_dphi_e_j = ak.fill_none(ak.min(cand.dPhiJets, axis=-1), 999)
-    cut = min_dphi_e_j > 1.0
-    return events[cut], name, desc, plots
-
-def cut11(events,info):
-    name = "cut11"
-    desc = r"cos$(\Delta \phi(e, p_T^{miss})) > 0.4$"
-    plots = False
-    
-    # all events have one now
-    cand = events.merged
-    dphi_e_met = _dphi(cand.phi, events.PFMET.phi)
-    cut = np.cos(dphi_e_met) > 0.4
-    return events[cut], name, desc, plots
-
-def cut12(events,info):
-    name = "cut12"
-    desc = r"Candidate $d_{xy} > 0.001$cm"
-    plots = False
-    cand = events.merged
-    cut = cand.dxy > 0.001
-    return events[cut], name, desc, plots
-
-def cut13(events,info):
-    name = "cut13"
     desc = r"Candidate $L_{xy}^{est} > 0.1cm$"
     plots = True
-    cand = events.merged
+    cand = events.best_merged
     dphi_e_met = _dphi(cand.phi, events.PFMET.phi)
     lxyEst     = np.abs(cand.dxy) / np.sin(dphi_e_met)
     cut = lxyEst > 0.1
     return events[cut], name, desc, plots
 
-def cut14(events, info):
-    name = "cut14"
-    desc = r"Log$(|d_{xy}/d_z|) > -1.25$"
+def cut11(events, info):
+    name = "cut11"
+    desc = r"Log$(|d_{xy}/d_z|) > -1$"
     plots = False
-    cand = events.merged
-    cut = np.log10(np.abs(cand.dxy / cand.dz)) > -1.25
+    cand = events.best_merged
+    cut = np.log10(np.abs(cand.dxy / cand.dz)) > -1
     return events[cut], name, desc, plots
 
-def cut15(events, info):
-    name = "cut15"
+def cut12(events, info):
+    name = "cut12"
     desc = r"Electron Track $\chi^2/$df < 5"
     plots = False
-    cand = events.merged
+    cand = events.best_merged
     cut = cand.trkChi2 < 5.
     return events[cut], name, desc, plots
 
-def cut16(events, info):
-    name = 'cut16'
+def cut13(events, info):
+    name = 'cut13'
     desc = 'Mini Rel Iso < 0.9'
     plots = True
-    cand = events.merged
+    cand = events.best_merged
     cut = cand.miniRelIsoEleCorr < 0.9
     return events[cut], name, desc, plots

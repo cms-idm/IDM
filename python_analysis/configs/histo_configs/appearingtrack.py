@@ -11,12 +11,11 @@ import awkward as ak
 # "Appearing track" selection: probes single displaced-electron reconstruction
 # (as opposed to the merged-electron category in mergedcats.py/mergedeles.py,
 # which requires two nearby gen electrons collapsing into one reco electron).
-# An AllLptElectron is a candidate iff:
-#   - |dxy| >= 1e-4 cm
-#   - dR >= 1 to every other AllLptElectron in the same event
-#   - dR >= 1 to every PFJet with pt > 30 GeV in the same event
-# At most one candidate is kept per event: if several AllLptElectrons in the
-# same event pass, the one with the largest |dxy| is taken.
+# The plotted electron is events.best_merged: the one merged-electron
+# candidate per event picked by selectBestMergedCandidate from
+# events.merged_candidates (defineGoodMergedCandidates, run for every chunk by
+# computeMergedVars with the processor's good_merged version) -- i.e. the same
+# electron the aptrk_selection.py cuts act on. Events without one are skipped.
 # Works for both signal and background; the isMerged flag (signal only, from
 # AllLptElectron.is_merged -- computeMergedCatVars in
 # analysisTools/analysisSubroutines.py, registered below via `subroutines`)
@@ -178,19 +177,10 @@ subroutines = ['computeMergedCatVars']
 def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
     wgt_all = events.eventWgt / sum_wgt
 
-    # mindRj/mindPhiJ derived fields needed by _ELE_HISTS (same convention as
-    # mergedcats.py).
-    events['AllLptElectron', 'mindRj']   = ak.fill_none(ak.min(events.AllLptElectron.dRJets,   axis=-1), 999)
-    events['AllLptElectron', 'mindPhiJ'] = ak.fill_none(ak.min(events.AllLptElectron.dPhiJets, axis=-1), 999)
-
-    coll = events.AllLptElectron
-
-    # Per-electron merged-electron flag (signal only), computed once per
-    # chunk by computeMergedCatVars (analysisTools/analysisSubroutines.py,
-    # registered above via `subroutines`) using the same definition as the
-    # merged-electron category in mergedcats.py. Jagged, same shape as coll.
-    if info['type'] == 'signal':
-        per_ele_merged = coll.is_merged
+    # best_merged is only set when AllLptElectron is in the ntuple (see
+    # computeMergedVars).
+    if 'best_merged' not in events.fields:
+        return
 
     def _dphi(a, b):
         d = np.abs(a - b)
@@ -199,51 +189,32 @@ def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
     def _dr(eta1, phi1, eta2, phi2):
         return np.sqrt((eta1 - eta2)**2 + _dphi(phi1, phi2)**2)
 
-    # ── Per-electron isolation from other electrons and jets ─────────────────
-    # dR to every other AllLptElectron in the same event (self excluded).
-    idx = ak.local_index(coll, axis=1)
-    dr_ee = _dr(coll.eta[:, :, None], coll.phi[:, :, None], coll.eta[:, None, :], coll.phi[:, None, :])
-    dr_ee = ak.where(idx[:, :, None] == idx[:, None, :], np.inf, dr_ee)
-    min_dr_ee = ak.fill_none(ak.min(dr_ee, axis=-1), 999)
-    ele_iso = min_dr_ee >= 0.4
-
-    # Stash on the collection (same convention as mindRj/mindPhiJ above) so
-    # the selected electron's value can be read via _fill_single/_ELE_HISTS.
-    events['AllLptElectron', 'drNearestEle'] = min_dr_ee
-    coll = events.AllLptElectron
-
-    # dR to every PFJet with pt > 30 GeV in the same event.
-    jets = events.PFJet
-    jets = jets[jets.pt > 30]
-    dr_ej = _dr(coll.eta[:, :, None], coll.phi[:, :, None], jets.eta[:, None, :], jets.phi[:, None, :])
-    min_dr_ej = ak.fill_none(ak.min(dr_ej, axis=-1), 999)
-    jet_iso = min_dr_ej >= 0.4
-
-    dxy_pass = np.abs(coll.dxy) >= 1e-4
-
-    ele_sel = ele_iso & jet_iso & dxy_pass
-
-    # ── "Appearing track" selection ───────────────────────────────────────────
-    # At most one candidate per event: if several AllLptElectrons in the same
-    # event pass the cuts above, keep the one with the largest |dxy|.
-    cand = coll[ele_sel]
-    if ak.sum(ak.num(cand, axis=1)) == 0:
-        return
-
-    order     = ak.argsort(np.abs(cand.dxy), axis=1, ascending=False)
-    ele       = ak.firsts(cand[order])
-    has_cand  = ~ak.is_none(ele)
+    # ── Selected electron: events.best_merged ─────────────────────────────────
+    has_cand = ~ak.is_none(events.best_merged)
     if ak.sum(has_cand) == 0:
         return
 
-    ele  = ele[has_cand]
     evts = events[has_cand]
     wgt  = wgt_all[has_cand]
+    ele  = evts.best_merged
+    coll = evts.AllLptElectron
 
+    # Derived fields needed by _ELE_HISTS. best_merged is a copy of the
+    # AllLptElectron record, so compute them on it directly: mindRj/mindPhiJ
+    # (same convention as mergedcats.py) and drNearestEle, the dR to the
+    # nearest other AllLptElectron (self excluded by matching pt/eta/phi).
+    is_self = (coll.pt == ele.pt) & (coll.eta == ele.eta) & (coll.phi == ele.phi)
+    dr_ee   = ak.where(is_self, np.inf, _dr(ele.eta, ele.phi, coll.eta, coll.phi))
+    ele = ak.with_field(ele, ak.fill_none(ak.min(ele.dRJets,   axis=-1), 999), 'mindRj')
+    ele = ak.with_field(ele, ak.fill_none(ak.min(ele.dPhiJets, axis=-1), 999), 'mindPhiJ')
+    ele = ak.with_field(ele, ak.fill_none(ak.min(dr_ee,        axis=-1), 999), 'drNearestEle')
+
+    # Merged-electron flag (signal only), computed by computeMergedCatVars
+    # (analysisTools/analysisSubroutines.py) using the same definition as the
+    # merged-electron category in mergedcats.py.
     if info['type'] == 'signal':
-        merged_best       = ak.firsts(per_ele_merged[ele_sel][order])
-        is_merged_sel     = ak.to_numpy(merged_best[has_cand])
-        event_has_merged  = ak.to_numpy(ak.any(per_ele_merged, axis=1)[has_cand])
+        is_merged_sel     = ak.to_numpy(ele.is_merged)
+        event_has_merged  = ak.to_numpy(ak.any(coll.is_merged, axis=1))
         isMerged_label = np.where(
             is_merged_sel, 'mergedSelected',
             np.where(event_has_merged, 'mergedNotSelected', 'notMerged'),

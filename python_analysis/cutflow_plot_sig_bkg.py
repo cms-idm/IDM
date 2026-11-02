@@ -22,7 +22,7 @@ outdir = 'workarea'
 bkg_vers = 'Aug2026'
 sig_vers = 'Jul2026noID'
 selection = 'an'
-hists = 'SR_minimal'
+hists = 'cutflow_only'
 
 saved_signal_hists = f"{outdir}/hists_sig{sig_vers}_{selection}-sel_{hists}.coffea"
 saved_bkg_hists = f"{outdir}/hists_bkg{bkg_vers}_{selection}-sel_{hists}.coffea"

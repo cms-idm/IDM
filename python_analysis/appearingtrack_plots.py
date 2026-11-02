@@ -24,7 +24,7 @@ plt.rcParams.update({
 outdir      = 'workarea'
 bkg_vers    = 'Aug2026'
 sig_vers    = 'Jul2026noID'
-selection   = 'an'
+selection   = 'aptrk'
 hists_tag   = 'appearingtrack'
 plottag     = f'sb{bkg_vers}_{selection}-sel'
 
@@ -32,7 +32,7 @@ saved_signal_hists = f"{outdir}/hists_sig{sig_vers}_{selection}-sel_{hists_tag}.
 saved_bkg_hists    = f"{outdir}/hists_bkg{bkg_vers}_{selection}-sel_{hists_tag}.coffea"
 
 # ---- Plot settings ----------------------------------------------------------
-cut       = 'cut8'      # cut index (key in the 'cut' axis) to plot at
+cut       = 'cut9'      # cut index (key in the 'cut' axis) to plot at
 m1_values = [0.5, 5]    # signal mass points to show, combined over delta/ctau
 year      = 2024
 doLogy    = True
@@ -47,6 +47,45 @@ sig_colors = {
 }  # by isMerged category
 
 _NONPHYS_AXES = ('samp', 'cut', 'isMerged')
+
+# human-readable plot-title names for the AT_* hists; unlisted vars fall back to the raw name
+_VAR_TITLES = {
+    'AT_pt':                  r'$p_T$',
+    'AT_eta':                 r'$\eta$',
+    'AT_phi':                 r'$\phi$',
+    'AT_ID':                  'ID Score',
+    'AT_angRes':              'Angular Resolution',
+    'AT_dxy':                 r'Track $d_{xy}$',
+    'AT_dz':                  r'Track $d_z$',
+    'AT_trkChi2':             r'Track $\chi^2/\mathrm{ndf}$',
+    'AT_trkIso':              'Track Isolation',
+    'AT_trkRelIso':           'Relative Track Isolation',
+    'AT_calIso':              'Calorimeter Isolation',
+    'AT_calRelIso':           'Relative Calorimeter Isolation',
+    'AT_miniIso':             'Mini Isolation',
+    'AT_miniRelIso':          'Relative Mini Isolation',
+    'AT_rhoEA':               r'Pileup Correction ($\rho \times$ EA)',
+    'AT_trkProb':             'Track Probability',
+    'AT_numTrackerHits':      'N Tracker Hits',
+    'AT_numPixHits':          'N Pixel Hits',
+    'AT_numStripHits':        'N Strip Hits',
+    'AT_minDRtoReg':          r'Min $\Delta R$ to GED',
+    'AT_drNearestEle':        r'Min $\Delta R$ to Other Low-$p_T$',
+    'AT_mindRj':              r'Min $\Delta R$ to Jet',
+    'AT_mindPhiJ':            r'Min $\Delta\phi$ to Jet',
+    'AT_full55sigmaIetaIeta': r'$\sigma_{i\eta i\eta}$ (Full 5x5)',
+    'AT_absdEtaSeed':         r'$|\Delta\eta_\mathrm{seed}|$',
+    'AT_absdPhiIn':           r'$|\Delta\phi_\mathrm{in}|$',
+    'AT_HoverE':              'H/E',
+    'AT_abs1overEm1overP':    r'$|1/E - 1/p|$',
+    'AT_expMissingInnerHits': 'Expected Missing Inner Hits',
+    'AT_ptmiss':              r'$p_T^\mathrm{miss}$',
+    'AT_dphi_e_ptmiss':       r'$\Delta\phi$(e, $p_T^\mathrm{miss}$)',
+    'AT_dphi_e_ptmiss_log':   r'$\Delta\phi$(e, $p_T^\mathrm{miss}$) (Log Scale)',
+    'AT_cosdphi_e_ptmiss':    r'$\cos\Delta\phi$(e, $p_T^\mathrm{miss}$)',
+    'AT_lxyEst':              r'Estimated $L_{xy}$ ($d_{xy}/\sin\Delta\phi$)',
+    'AT_log10dxydz':          r'$\log_{10}(d_{xy}/d_z)$',
+}
 
 
 def _get_1d_hist_names(hists_dict):
@@ -169,13 +208,13 @@ def _prep_sig_total(hs_cut, s_hists, s_pts, cut):
     return sig_total, sig_total_integrals, sig_total_fracs, sig_total_no_cand_frac
 
 
-def _finalize_plot(ax, h_ref, var, cut, outdir, tag, title_suffix):
-    """Shared axis labeling/scaling/saving for all three plot variants."""
+def _finalize_plot(ax, h_ref, var, cut, outdir, tag, title_suffix, logy=doLogy):
+    """Shared axis labeling/scaling/saving for all plot variants."""
     phys_axis = [a for a in h_ref.axes.name if a not in _NONPHYS_AXES][0]
     ax.set_xlabel(h_ref.axes[phys_axis].label)
     ax.set_ylabel('Normalized Events')
-    ax.set_title(f'Appearing Track: cut = {cut} ({title_suffix})')
-    if doLogy:
+    ax.set_title(f'Appearing Track: {_VAR_TITLES.get(var, var)}')
+    if logy:
         ax.set_yscale('log')
     # axes built with a log transform already have bins equally spaced in
     # log(x) (i.e. constant-width in the space the plot is about to use), so
@@ -221,9 +260,9 @@ def plot_background(b_hists, bkg_cats, var, cut, outdir):
                      linewidth=2, color=f'C{i}', label=cat)
     if bkg_total is not None:
         hep.histplot(bkg_total / bkg_total_integral, ax=ax, histtype='step', linewidth=2.5,
-                     color='black', linestyle='--', label='All backgrounds')
+                     color='black', linestyle='--', label='All Backgrounds')
 
-    _finalize_plot(ax, hb_cut, var, cut, outdir, 'bkg', 'Backgrounds')
+    _finalize_plot(ax, hb_cut, var, cut, f'{outdir}/background', 'bkg', 'Backgrounds')
 
 
 _MERGE_TAGS = {
@@ -274,7 +313,7 @@ def plot_signal(s_hists, s_pts, var, cut, outdir):
             ax.plot([], [], linestyle='none',
                      label=rf'Signal $m_1$ = {m1} GeV (no candidate electron, {sig_no_cand_fracs[m1]:.1%})')
 
-    _finalize_plot(ax, hs_cut, var, cut, outdir, 'sig', 'Signal')
+    _finalize_plot(ax, hs_cut, var, cut, f'{outdir}/signal', 'sig', 'Signal')
 
 
 def plot_summary(s_hists, b_hists, bkg_cats, s_pts, var, cut, outdir):
@@ -304,7 +343,7 @@ def plot_summary(s_hists, b_hists, bkg_cats, s_pts, var, cut, outdir):
 
     if bkg_total is not None:
         hep.histplot(bkg_total / bkg_total_integral, ax=ax, histtype='step', linewidth=2,
-                     color='C0', label='All backgrounds')
+                     color='C0', label='All Backgrounds')
 
     # Legend gives each category's fraction of all signal events entering `cut`
     # (summed over every mass point), plus (as a label-only entry with no
@@ -321,7 +360,46 @@ def plot_summary(s_hists, b_hists, bkg_cats, s_pts, var, cut, outdir):
         ax.plot([], [], linestyle='none',
                  label=f'All signal (no candidate electron, {sig_total_no_cand_frac:.1%})')
 
-    _finalize_plot(ax, hs_cut, var, cut, outdir, 'summary', 'Summary')
+    _finalize_plot(ax, hs_cut, var, cut, f'{outdir}/summary', 'summary', 'Summary')
+
+
+def plot_summarysimple(s_hists, b_hists, bkg_cats, s_pts, var, cut, outdir, logy=doLogy):
+    """Simplified summary plot: total background vs. total signal (summed over all mass
+    points), signal restricted to the merged-and-selected isMerged category. logy=False
+    gives a linear-y version, saved with a '_liny' tag suffix."""
+    if var not in s_hists or var not in b_hists:
+        print(f"Skipping {var} (summarysimple): missing from one of the two files")
+        return
+
+    hs, hb = s_hists[var], b_hists[var]
+    try:
+        hs_cut = hs[{'cut': cut}]  # isMerged kept: mergedSelected picked out below
+        hb_cut = hb[{'cut': cut, 'isMerged': sum}]
+    except Exception as e:
+        print(f"Skipping {var} (summarysimple): couldn't select cut='{cut}' ({e})")
+        return
+
+    _, _, bkg_total, bkg_total_integral = _prep_bkg(hb_cut, bkg_cats)
+    sig_total, sig_total_integrals, _, _ = _prep_sig_total(hs_cut, s_hists, s_pts, cut)
+
+    if bkg_total is None and 'mergedSelected' not in sig_total:
+        print(f"Skipping {var} (summarysimple): nothing to plot at cut='{cut}'")
+        return
+
+    fig, ax = plt.subplots(figsize=(12, 10))
+    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+
+    if bkg_total is not None:
+        hep.histplot(bkg_total / bkg_total_integral, ax=ax, histtype='step', linewidth=2,
+                     color='C0', label='All Backgrounds')
+    if 'mergedSelected' in sig_total:
+        hep.histplot(sig_total['mergedSelected'] / sig_total_integrals['mergedSelected'], ax=ax,
+                     histtype='step', linewidth=1.5, yerr=True,
+                     color=sig_colors['mergedSelected'], linestyle='-',
+                     label='Signal (All Samples)')
+
+    tag = 'summarysimple' if logy else 'summarysimple_liny'
+    _finalize_plot(ax, hs_cut, var, cut, f'{outdir}/summarysimple', tag, 'Summary', logy=logy)
 
 
 if __name__ == '__main__':
@@ -339,3 +417,5 @@ if __name__ == '__main__':
         plot_background(b_hists, bkg_cats, var, cut, plotdir)
         plot_signal(s_hists, s_pts, var, cut, plotdir)
         plot_summary(s_hists, b_hists, bkg_cats, s_pts, var, cut, plotdir)
+        plot_summarysimple(s_hists, b_hists, bkg_cats, s_pts, var, cut, plotdir)
+        plot_summarysimple(s_hists, b_hists, bkg_cats, s_pts, var, cut, plotdir, logy=False)

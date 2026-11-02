@@ -19,8 +19,8 @@ import glob
 
 # ---- SETTINGS ----
 vers = 'Jul2026noID'
-cuts = 'anabrv'
-hists = 'elerecoeff'
+cuts = 'an'
+hists = 'cutflow_only'
 
 
 # ---- FILES ----
