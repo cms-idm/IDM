@@ -3,7 +3,7 @@
 
 This file owns the study-specific analysis, validation, ROOT schema and preset
 plots. For a reusable, self-contained plotting-skill tool accepting arbitrary
-saved raw numerator/denominator TH1 keys, use plot_root_efficiency.py --help.
+saved TH1 distributions, graphs or numerator/denominator pairs, use plot_root.py --help.
 That renderer takes explicit labels, styles and axis ranges and never reads
 event trees. Do not generalize this study's physics defaults into other studies.
 
