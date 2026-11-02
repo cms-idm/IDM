@@ -383,38 +383,39 @@ class iDMeProcessor(processor.ProcessorABC):
 
         # needs a good vertex
         routines.defineGoodVertices(events,version=self.good_vtx) # define "good" vertices based on whether associated electrons pass ID cuts
-        events = events[events.nGoodVtx > 0]
-        # define "selected" vertex based on selection criteria in the routine (nominally: lowest chi2)
-        #routines.selectBestVertex(events)
-        if info['type'] == "signal":
-             events = routines.selectTrueVertex(events,events.good_vtx)
-             #routines.selectBestVertex(events)
-        else:
-             routines.selectBestVertex(events)
-        routines.prepareBDT(events, self.model) # prepare BDT inference if the cuts include BDT-based cut
-
-        # Vtx SF related stuff (shitty hack)
-        if apply_vtx_SF == True:
-             events["eventWgt"] = events["eventWgt"] * events.sel_vtx.sf
-
-        # Fill cutflow after baseline selection
-        if isMC:
-            cutflow['hasVtx'] += ak.sum(events.genWgt)/sum_wgt
-        else:
-            cutflow['hasVtx'] += len(events)/sum_wgt
-        cutflow_nevts['hasVtx'] += len(events)
-        cutDesc['hasVtx'] = 'Baseline Selection@'
-
-        # For signal, (1) check if the vertex ee are gen-matched (2) check if the event has ee that are gen-matched
-        if info['type'] == "signal":
-            routines.projectGenLxy(events)
-            vtx_matched_events = events[events.sel_vtx.isMatched]
-            cutflow_vtx_matched['hasVtx'] += ak.sum(vtx_matched_events.genWgt)/ak.sum(events.genWgt)
-
+        events = routines.defineVertexInfo(events, info)
+        #events = events[events.nGoodVtx > 0]
+        ## define "selected" vertex based on selection criteria in the routine (nominally: lowest chi2)
+        ##routines.selectBestVertex(events)
+        #if info['type'] == "signal":
+        #     events = routines.selectTrueVertex(events,events.good_vtx)
+        #     #routines.selectBestVertex(events)
+        #else:
+        #     routines.selectBestVertex(events)
+        #routines.prepareBDT(events, self.model) # prepare BDT inference if the cuts include BDT-based cut
+        #
+        ## Vtx SF related stuff (shitty hack)
+        #if apply_vtx_SF == True:
+        #     events["eventWgt"] = events["eventWgt"] * events.sel_vtx.sf
+        #
+        ## Fill cutflow after baseline selection
+        #if isMC:
+        #    cutflow['hasVtx'] += ak.sum(events.genWgt)/sum_wgt
+        #else:
+        #    cutflow['hasVtx'] += len(events)/sum_wgt
+        #cutflow_nevts['hasVtx'] += len(events)
+        #cutDesc['hasVtx'] = 'Baseline Selection@'
+        #
+        ## For signal, (1) check if the vertex ee are gen-matched (2) check if the event has ee that are gen-matched
+        #if info['type'] == "signal":
+        #    routines.projectGenLxy(events)
+        #    vtx_matched_events = events[events.sel_vtx.isMatched]
+        #    cutflow_vtx_matched['hasVtx'] += ak.sum(vtx_matched_events.genWgt)/ak.sum(events.genWgt)
+        
         # computing any extra quantities specified in the histogram config file
         for subroutine in self.subroutines:
             getattr(routines,subroutine)(events)
-
+        
         
         # SF studies
         if self.isSFstudies:
@@ -436,10 +437,13 @@ class iDMeProcessor(processor.ProcessorABC):
                 cutflow[cutName] += ak.sum(events.genWgt)/sum_wgt
             else:
                 cutflow[cutName] += len(events)/sum_wgt
-            cutflow_nevts[cutName] += len(events)            
+            cutflow_nevts[cutName] += len(events)
             if info['type'] == "signal":
-                vtx_matched_events = events[events.sel_vtx.isMatched]
-                cutflow_vtx_matched[cutName] += ak.sum(vtx_matched_events.genWgt)/ak.sum(events.genWgt)
+                if 'sel_vtx' in events.fields:
+	            vtx_matched_events = events[events.sel_vtx.isMatched]
+                    cutflow_vtx_matched[cutName] += ak.sum(vtx_matched_events.genWgt)/ak.sum(events.genWgt)
+                else:
+	            cutflow_vtx_matched[cutName] = 0.
             cutDesc[cutName] += cutDescription + "@"
 
             # Fill histograms
@@ -527,9 +531,9 @@ class genProcessor(iDMeProcessor):
         routines.selectBestVertex(events)
 
         # Fill cutflow after baseline selection
-        cutflow['hasVtx'] += ak.sum(events.genWgt)/sum_wgt
-        cutflow_nevts['hasVtx'] += len(events)
-        cutDesc['hasVtx'] = 'Baseline Selection'
+        #cutflow['hasVtx'] += ak.sum(events.genWgt)/sum_wgt
+        #cutflow_nevts['hasVtx'] += len(events)
+        #cutDesc['hasVtx'] = 'Baseline Selection'
         
         # computing any extra quantities specified in the histogram config file
         for subroutine in self.subroutines:
@@ -860,6 +864,13 @@ def getLumi(year):
     year = str(year)
 
     lumi, unc = 0, 0
+    if year == '2024':
+        lumi = 124.0 # https://cds.cern.ch/record/2952191/files/DP2026_003.pdf
+        unc =  0.016*lumi # 1.6 percent
+    if year == '2022':
+	lumi = 38.01
+        unc =  0.014*lumi #1.4 percent
+
     if year == '2016':
         lumi = 16.8
         unc = 0.012*lumi # 1.2 percent
