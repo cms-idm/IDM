@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# HISTORICAL COPY, NOT MAINTAINED (user, 2026-11-02). On 2026-11-02 this file (revision 97692b0) was copied to
+# kb/skills/cms-plot-style/cms_style.py, which is now the authoritative version (local kb, used by Claude and Codex).
+# From then on this copy is kept only for historical reasons and record keeping: plots made with revision 97692b0 or
+# earlier used it. Do not edit or import it for new plots; use the kb copy.
 """CMS-style PyROOT plotting helpers for any saved 1D/2D histogram: distributions, efficiencies/fractions, 2D maps.
 The defaults are the user's choices of 2026-11-02 (mumu_talk_plots.py plot-cms, plot-cms-pt, plot-2d-all); every
 year/campaign/label-specific piece is a parameter.
