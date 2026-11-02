@@ -6,6 +6,7 @@ from XRootD import client
 from tqdm import tqdm
 from multiprocessing import Process, Value, Array, Manager
 import multiprocessing as mp
+import traceback
 
 def sum_weights(fileList,sums,blacklist,nevts,isData):
     sum_wgt = 0
@@ -21,7 +22,9 @@ def sum_weights(fileList,sums,blacklist,nevts,isData):
                     else:
                         sum_wgt += np.sum(tree['genWgt'].array())
                     sum_nevts += tree.num_entries
-        except:
+        except Exception:
+            print(f'Blacklisting {f.split("/")[-1]}; error:')
+            print(traceback.format_exc())
             blacklist.append(f.split("/")[-1])
     sums.append(sum_wgt)
     nevts.append(sum_nevts)
@@ -37,7 +40,10 @@ else:
     isData = False
 
 for samp in samples:
-    print(f"Running on {samp['name']}")
+    if 'designation' in samp.keys():
+        print(f"Running on {samp['designation']}")
+    else:
+        print(f"Running on {samp['name']}")
     loc = samp["location"]
     nFiles = -1
     has_blacklist = True if "blacklist" in samp.keys() else False
@@ -46,15 +52,21 @@ for samp in samples:
     sum_evt = []
     if '.root' in loc:
         nFiles = 1
-        tree = uproot.open(loc)['ntuples/outT']
-        if tree.num_entries == 0:
-            sum_wgt = 0
-        else:
-            if not isData:
-                sum_wgt = np.sum(tree['genWgt'].array())
-            else:
+        try:
+            tree = uproot.open(loc)['ntuples/outT']
+            if tree.num_entries == 0:
                 sum_wgt = 0
-            sum_evt = tree.num_entries
+            else:
+                if not isData:
+                    sum_wgt = np.sum(tree['genWgt'].array())
+                else:
+                    sum_wgt = 0
+                sum_evt = tree.num_entries
+        except:
+            blacklist.append(loc)
+            sum_wgt = 0
+            sum_evt = 0
+            
     else:
         xrdClient = client.FileSystem("root://cmseos.fnal.gov")
         if type(loc) != list:
@@ -77,6 +89,8 @@ for samp in samples:
         else:
             print("Parallel Mode")
             subLists = [list(l) for l in np.array_split(fullList,num_cpus)]
+            print ("num_cpus:", num_cpus)
+            
             with Manager() as manager:
                 m_blacklist = manager.list()
                 m_sums = manager.list()
@@ -95,6 +109,10 @@ for samp in samples:
     print('Blacklisted {0} files in {1}'.format(len(blacklist),samp['name']))
     samp['sum_wgt'] = float(sum_wgt)
     samp['num_events'] = int(sum_evt)
+
+    print('sum_wgt:', samp['sum_wgt'])
+    print('num_events:',samp['num_events'])
+
     if 'blacklist' in samp.keys():
         samp['blacklist'].extend(blacklist)
         samp['blacklist'] = list(set(samp['blacklist']))
