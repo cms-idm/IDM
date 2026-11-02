@@ -569,6 +569,76 @@ def plot_2d(args):
     print("2D plots written to", out, "; totals cross-check passed")
 
 
+def plot_2d_all(args):
+    """Replots of the plot-2d efficiency maps from the saved TH2D (--output, lxy_pt_2d_v2.root), PNG only
+    (user, 2026-11-02): "allbins" draws every bin with at least one muon and outlines bins with fewer than LOWSTAT muons
+    in red (contiguous ones by their outer border only); "min<LOWSTAT>" draws only bins with at least LOWSTAT muons."""
+    import ROOT
+    LOWSTAT = 10
+    ROOT.gROOT.SetBatch(True)
+    ROOT.gStyle.SetOptStat(0); ROOT.gStyle.SetOptTitle(0)
+    ROOT.gStyle.SetTextFont(42); ROOT.gStyle.SetLabelFont(42, "XYZ"); ROOT.gStyle.SetTitleFont(42, "XYZ")
+    ROOT.gStyle.SetPadTickX(1); ROOT.gStyle.SetPadTickY(1); ROOT.gStyle.SetPalette(ROOT.kViridis)
+    out = Path(args.plot_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    f = ROOT.TFile.Open(args.output)
+    keep = []
+    for m in TALK:
+        s = "%s_ctau-100" % m
+        den, num = f.Get(s + "__den"), f.Get(s + "__h")
+        nx, ny = den.GetNbinsX(), den.GetNbinsY()
+        xa, ya = den.GetXaxis(), den.GetYaxis()
+        low = np.zeros((nx + 2, ny + 2), bool)
+        for i in range(1, nx + 1):
+            for j in range(1, ny + 1):
+                d = den.GetBinContent(i, j)
+                low[i, j] = 0 < d < LOWSTAT
+        for variant in ("allbins", "min%d" % LOWSTAT):
+            eff = den.Clone("%s__eff_%s" % (s, variant)); eff.Reset(); keep.append(eff)
+            for i in range(1, nx + 1):
+                for j in range(1, ny + 1):
+                    d = den.GetBinContent(i, j)
+                    if d > 0 and (variant == "allbins" or not low[i, j]):
+                        eff.SetBinContent(i, j, max(num.GetBinContent(i, j) / d, 1e-9))  # content 0 is not drawn
+            c = ROOT.TCanvas("c_%s_%s" % (variant, s), "", 800, 700); keep.append(c)
+            c.SetLeftMargin(0.13); c.SetRightMargin(0.17); c.SetTopMargin(0.08); c.SetBottomMargin(0.13)
+            eff.GetXaxis().SetTitle("Gen L_{xy} [cm]"); eff.GetYaxis().SetTitle("Gen muon p_{T} [GeV]")
+            eff.GetZaxis().SetTitle("Muon matching efficiency")
+            for ax in (eff.GetXaxis(), eff.GetYaxis(), eff.GetZaxis()):
+                ax.SetTitleSize(0.045); ax.SetLabelSize(0.038)
+            eff.GetYaxis().SetTitleOffset(1.25); eff.GetZaxis().SetTitleOffset(1.35)
+            eff.SetMinimum(0); eff.SetMaximum(1)
+            eff.Draw("COLZ")
+            if variant == "allbins":
+                for i in range(1, nx + 1):
+                    for j in range(1, ny + 1):
+                        if not low[i, j]:
+                            continue
+                        x0, x1, y0, y1 = xa.GetBinLowEdge(i), xa.GetBinUpEdge(i), ya.GetBinLowEdge(j), ya.GetBinUpEdge(j)
+                        for nb, seg in (((i - 1, j), (x0, y0, x0, y1)), ((i + 1, j), (x1, y0, x1, y1)),
+                                        ((i, j - 1), (x0, y0, x1, y0)), ((i, j + 1), (x0, y1, x1, y1))):
+                            if not low[nb]:  # shared with a bin that is not low-count, or the frame: outer border
+                                ln = ROOT.TLine(*seg); ln.SetLineColor(ROOT.kRed); ln.SetLineWidth(2); ln.Draw()
+                                keep.append(ln)
+            t = ROOT.TLatex(); t.SetNDC(); keep.append(t)
+            t.SetTextFont(61); t.SetTextSize(0.05); t.SetTextAlign(11); t.DrawLatex(0.13, 0.94, "CMS")
+            t.SetTextFont(52); t.SetTextSize(0.038); t.DrawLatex(0.235, 0.94, "Simulation Private Work")
+            t.SetTextFont(42); t.SetTextAlign(31); t.DrawLatex(0.83, 0.94, "2022EE (13.6 TeV)")
+            t.SetTextSize(0.035); t.SetTextAlign(33)
+            a_, b_ = re.fullmatch(r"Mchi-([\dp]+)_dMchi-([\dp]+)", m).groups()
+            t.DrawLatex(0.80, 0.89, "m_{#chi} = %s, #Deltam = %s GeV" % (a_.replace("p", "."), b_.replace("p", ".")))
+            t.DrawLatex(0.80, 0.845, "c#tau = 100 mm")
+            if variant == "allbins":
+                t.SetTextColor(ROOT.kRed); t.DrawLatex(0.80, 0.80, "Red: < %d muons per bin" % LOWSTAT)
+            else:
+                t.DrawLatex(0.80, 0.80, "Bins with #geq %d muons" % LOWSTAT)
+            c.RedrawAxis()
+            c.SaveAs(str(out / ("ctau100_%s_lxy_pt_eff_%s.png" % (m, variant))))
+        nz = sum(den.GetBinContent(i, j) > 0 for i in range(1, nx + 1) for j in range(1, ny + 1))
+        print("%s: %d bins with muons, %d with < %d" % (s, nz, int(low.sum()), LOWSTAT))
+    print("plots written to", out)
+
+
 def validate(args):
     """Independent PyROOT loop with explicit gen-leg indexing; compares every bin (flow included) of the overall group
     and the four talk samples, and every residual row."""
@@ -690,7 +760,7 @@ def validate(args):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=("analyze", "plot", "plot-cms", "plot-2d", "validate"))
+    ap.add_argument("mode", choices=("analyze", "plot", "plot-cms", "plot-2d", "plot-2d-all", "validate"))
     ap.add_argument("--check", help="plot-2d: validated slide ROOT file for the totals cross-check")
     ap.add_argument("--input-dir")
     ap.add_argument("--revision", default="unspecified")
@@ -700,4 +770,4 @@ if __name__ == "__main__":
     ap.add_argument("--expected-events", type=int, default=720000)
     ap.add_argument("--log", action="store_true", help="add log-y copies of the efficiency plots")
     args = ap.parse_args()
-    {"analyze": analyze, "plot": plot, "plot-cms": plot_cms, "plot-2d": plot_2d, "validate": validate}[args.mode](args)
+    {"analyze": analyze, "plot": plot, "plot-cms": plot_cms, "plot-2d": plot_2d, "plot-2d-all": plot_2d_all, "validate": validate}[args.mode](args)
