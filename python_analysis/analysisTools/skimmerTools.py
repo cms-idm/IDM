@@ -25,13 +25,28 @@ from analysisTools import getLumi, deltaPhi
 import plotTools as ptools
 
 class Skimmer:
-    def __init__(self,fileList,cuts,max_samples=-1,max_files_per_samp=-1,last_cut=None):
+    def __init__(self,fileList,cuts,max_samples=-1,max_files_per_samp=-1,last_cut=None,slimFileList=None,bdt_type='vertexed'):
+        # which BDT inputs to make: 'vertexed' (makeBDTInputs) or 'merged' (makeMergedBDTInputs)
+        if bdt_type not in ('vertexed','merged'):
+            raise ValueError(f"bdt_type must be 'vertexed' or 'merged', got '{bdt_type}'")
+        self.bdt_type = bdt_type
+
         # load in file config
         if type(fileList) == str and ".json" in fileList:
             with open(fileList) as f:
                 self.fileList = json.load(f)
         else:
             self.fileList = fileList
+
+        # load in companion "slim" config (bkg only): all-events, high-level-info-only ntuples.
+        # Only used for normalization -- each bkg sample takes its slim counterpart's sum_wgt,
+        # so the summed event weights equal xsec*lumi*(fraction of all events passing the skim).
+        # The slim ntuples themselves are never opened.
+        if slimFileList is not None and type(slimFileList) == str and ".json" in slimFileList:
+            with open(slimFileList) as f:
+                self.slimFileList = json.load(f)
+        else:
+            self.slimFileList = slimFileList
 
         # load in cuts config (should be a path to a .py file with cut methods)
         self.cuts = cuts
@@ -50,6 +65,12 @@ class Skimmer:
         self.loadFiles()
     
     def loadFiles(self):
+        # index the companion slim config by the same name/year key used below
+        slimByName = {}
+        if self.slimFileList is not None:
+            for slimSample in self.slimFileList:
+                slimByName["bkg_{0}_{1}".format(slimSample['year'],slimSample['name'])] = slimSample
+
         loaded = 0
         for sample in self.fileList:
             if self.max_samples > 0 and loaded == self.max_samples:
@@ -69,7 +90,22 @@ class Skimmer:
                     print("Error! You're mixing samples of differing types (e.g. signal and bkg, signal and data, etc)")
                     print("Please split up different kinds of samples into different configs")
                     exit()
-            
+
+            if mode == 'bkg':
+                if name in slimByName:
+                    # the full config's sum_wgt/num_events only cover the HLT-passed subset --
+                    # stash them, and normalize against the whole-sample values from the slim config
+                    slimSample = slimByName[name]
+                    sample['full_sum_wgt'] = sample.get('sum_wgt',0.0)
+                    sample['full_num_events'] = sample.get('num_events',0)
+                    sample['sum_wgt'] = slimSample['sum_wgt']
+                    sample['num_events'] = slimSample['num_events']
+                elif self.slimFileList is not None:
+                    print(f"Warning: no slim counterpart found for bkg sample {name}; dropping it (its sum_wgt only covers the HLT-passed subset)")
+                    continue
+                else:
+                    print(f"Warning: no slimFileList given; bkg sample {name} is normalized to the full config's sum_wgt (HLT-passed subset only if ntuplized with the slim split)")
+
             loc = sample['location']
             if '.root' in loc:
                 # if the location is just a single file, load it in
@@ -97,7 +133,8 @@ class Skimmer:
 
     def process(self,treename='ntuples/outT',execr="iterative",workers=4):
         fileset = self.sample_locs
-        proc = makeBDTInputs(self.sample_names,self.sample_info,self.sample_locs,self.cuts,mode=self.mode,last_cut=self.last_cut)
+        procClass = makeMergedBDTInputs if self.bdt_type == 'merged' else makeBDTInputs
+        proc = procClass(self.sample_names,self.sample_info,self.sample_locs,self.cuts,mode=self.mode,last_cut=self.last_cut)
         if execr == "iterative":
             executor = processor.IterativeExecutor()
         elif execr == "futures":
@@ -270,4 +307,125 @@ class makeBDTInputs(processor.ProcessorABC):
 
     def postprocess(self, accumulator):
         return accumulator
-    
+
+def _log10_floor(x, floor=1e-4):
+    # same log-scaling as configs/histo_configs/corrmatrix.py: values at/below the floor are clamped to it
+    return np.log10(np.maximum(x, floor))
+
+class makeMergedBDTInputs(makeBDTInputs):
+    # BDT inputs for merged-electron candidates (events.best_merged, see analysisSubroutines.computeMergedVars).
+    # Same event-level outputs as makeBDTInputs, no vertex quantities; candidate variables mirror
+    # _MELE_VARS in configs/histo_configs/corrmatrix.py, written with a "mele_" prefix.
+    def __init__(self,samples,sampleInfo,fileSet,cutFile,mode='signal',last_cut=None,good_merged='v1_Oct2026'):
+        super().__init__(samples,sampleInfo,fileSet,cutFile,mode=mode,last_cut=last_cut)
+        self.good_merged = good_merged
+
+    def process(self,events):
+        samp = events.metadata["dataset"]
+        outputs = {}
+        info = self.sampleInfo[samp]
+        isMC = info["type"] == "signal" or info["type"] == "bkg"
+        if isMC:
+            sum_wgt = info["sum_wgt"]
+            lumi, unc = getLumi(info['year'])
+            xsec = info['xsec']
+            if info['type'] == 'signal':
+                xsec = xsec*info['filter_eff']
+            # register event weight branch
+            events.__setitem__("eventWgt",xsec*lumi*events.genWgt)
+            events.__setitem__("eventWgtNorm",xsec*lumi*events.genWgt/sum_wgt)
+        else:
+            sum_wgt = info["num_events"]
+
+        if info['type'] == "signal":
+            events.__setitem__("m1",ptools.signalPoint(samp)['m1'])
+            events.__setitem__("delta",ptools.signalPoint(samp)['delta'])
+            events.__setitem__("ctau",ptools.signalPoint(samp)['ctau'])
+
+        #################################
+        ## Calculating Additional Vars ##
+        #################################
+        events = routines.computeExtraVariables(events,info)
+
+        #################################
+        ##### Hard-coded basic cuts #####
+        #################################
+        nJets = ak.count(events.PFJet.pt,axis=1)
+        events["nJets"] = nJets
+        events = events[nJets>0]
+        # merged-electron categories/candidates (cat_merged, merged_candidates, best_merged, ...)
+        routines.computeMergedVars(events,good_merged=self.good_merged)
+        events = events[~ak.is_none(events.best_merged)]
+        # for signal, only keep events where the selected candidate is gen-merged (cf. selectTrueVertex)
+        if info['type'] == "signal":
+            events = events[ak.fill_none(events.best_merged.isGenMerged,False)]
+
+        ###############################
+        ######## CUTS & HISTOS ########
+        ###############################
+        for cut in self.cuts:
+            events, cutName, cutDesc, savePlots = cut(events,info)
+
+        # filling outputs dictionary
+        me = events.best_merged
+        me_METdPhi = np.abs(deltaPhi(me.phi, events.PFMET.phi))
+
+        outputs['wgt'] = column_accumulator(events["eventWgt"].to_numpy())
+        xsec = info['xsec']
+        if info['type'] == 'signal':
+            xsec = xsec*info['filter_eff']
+        outputs['xsec'] = column_accumulator(xsec*np.ones(len(events)))
+        outputs['wgt_norm'] = column_accumulator(events["eventWgtNorm"].to_numpy())
+        # event IDs, used for the k-fold assignment in BDT training (fold = eventNum % k)
+        outputs['eventNum'] = column_accumulator(events.eventNum.to_numpy())
+        outputs['lumiSec'] = column_accumulator(events.lumiSec.to_numpy())
+        outputs['runNum'] = column_accumulator(events.runNum.to_numpy())
+        outputs['lead_jet_eta'] = column_accumulator(events.PFJet.eta[:,0].to_numpy())
+        outputs['lead_jet_pt'] = column_accumulator(events.PFJet.pt[:,0].to_numpy())
+        outputs['jetMETdPhi'] = column_accumulator(np.abs(events.PFJet.METdPhi[:,0]).to_numpy())
+        outputs['minJetMETdPhi'] = column_accumulator(ak.min(np.abs(events.PFJet.METdPhi),axis=1).to_numpy())
+        outputs['met_leadPt_ratio'] = column_accumulator((events.PFMET.pt/events.PFJet.pt[:,0]).to_numpy())
+        outputs['met_pt'] = column_accumulator(events.PFMET.pt.to_numpy())
+        outputs['nMergedCandidates'] = column_accumulator(events.nMergedCandidates.to_numpy())
+
+        if info['type'] == 'signal':
+            outputs['mele_isGenMerged'] = column_accumulator(ak.values_astype(me.isGenMerged,int).to_numpy())
+            outputs['m1'] = column_accumulator(events["m1"].to_numpy())
+            outputs['delta'] = column_accumulator(events["delta"].to_numpy())
+            outputs['ctau'] = column_accumulator(events["ctau"].to_numpy())
+
+        outputs['mele_pt'] = column_accumulator(me.pt.to_numpy())
+        outputs['mele_eta'] = column_accumulator(me.eta.to_numpy())
+        outputs['mele_log10_dxy'] = column_accumulator(_log10_floor(np.abs(me.dxy)).to_numpy())
+        outputs['mele_log10_dxy_signif'] = column_accumulator(_log10_floor(np.abs(me.dxy)/me.dxyErr).to_numpy())
+        outputs['mele_log10_dz'] = column_accumulator(_log10_floor(np.abs(me.dz)).to_numpy())
+        outputs['mele_log10_dz_signif'] = column_accumulator(_log10_floor(np.abs(me.dz)/me.dzErr).to_numpy())
+        outputs['mele_logDxyDz'] = column_accumulator(np.log10(np.abs(me.dxy/me.dz)).to_numpy())
+        outputs['mele_METdPhi'] = column_accumulator(me_METdPhi.to_numpy())
+        outputs['mele_cosMETdPhi'] = column_accumulator(np.cos(me_METdPhi).to_numpy())
+        # Lxy estimate |dxy|/sin(dPhi(e, ptmiss))
+        outputs['mele_log10_lxyEst'] = column_accumulator(_log10_floor(np.abs(me.dxy)/np.sin(me_METdPhi)).to_numpy())
+        outputs['mele_mindRj'] = column_accumulator(me.mindRj.to_numpy())
+        outputs['mele_mindPhiJ'] = column_accumulator(me.mindPhiJ.to_numpy())
+        outputs['mele_dRj0'] = column_accumulator(me.dRj0.to_numpy())
+        outputs['mele_log10_trkChi2'] = column_accumulator(_log10_floor(me.trkChi2).to_numpy())
+        outputs['mele_trkProb'] = column_accumulator(me.trkProb.to_numpy())
+        outputs['mele_numTrackerHits'] = column_accumulator(me.numTrackerHits.to_numpy())
+        outputs['mele_numPixHits'] = column_accumulator(me.numPixHits.to_numpy())
+        outputs['mele_ID'] = column_accumulator(me.ID.to_numpy())
+        outputs['mele_log10_PFRelIso'] = column_accumulator(_log10_floor(me.PFRelIso).to_numpy())
+        outputs['mele_log10_miniRelIso'] = column_accumulator(_log10_floor(me.miniRelIso).to_numpy())
+        outputs['mele_log10_trkRelIso'] = column_accumulator(_log10_floor(me.trkRelIso).to_numpy())
+        outputs['mele_HoverE'] = column_accumulator(me.HoverE.to_numpy())
+        outputs['mele_EoverPInv'] = column_accumulator(me.abs1overEm1overP.to_numpy())
+        outputs['mele_dEtaSeed'] = column_accumulator(me.absdEtaSeed.to_numpy())
+        outputs['mele_dPhiIn'] = column_accumulator(me.absdPhiIn.to_numpy())
+        outputs['mele_sigmaIetaIeta'] = column_accumulator(me.full55sigmaIetaIeta.to_numpy())
+        outputs['mele_scEtaWidth'] = column_accumulator(me.scEtaWidth.to_numpy())
+        outputs['mele_scPhiWidth'] = column_accumulator(me.scPhiWidth.to_numpy())
+        outputs['mele_missingInnerHits'] = column_accumulator(me.expMissingInnerHits.to_numpy())
+        outputs['mele_conversionVeto'] = column_accumulator(ak.values_astype(me.conversionVeto,int).to_numpy())
+        outputs['mele_svProxyVxy'] = column_accumulator(me.svProxyVxy.to_numpy())
+
+        return outputs
+

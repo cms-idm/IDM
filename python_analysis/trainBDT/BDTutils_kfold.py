@@ -100,13 +100,15 @@ def process_bkg_inputs(bkg_files,variables):
     return bkg_data, bkg_xsec_norm, bkg_fold
 
 def reweight_bkg_arrays(bkg_xsec_norm):
-    # same normalization as reweight_bkg, but on an in-memory array so it can be applied to the training folds only
+    # same normalization as reweight_bkg, but on an in-memory array so it can be applied to the training folds only.
+    # negative-weight events get zero weight, and the rest are normalized so the bkg sf sum to the raw count
     bkg_nev_raw = len(bkg_xsec_norm)
-    bkg_sumWgts = bkg_xsec_norm.sum()
-    print(f'Total background counts (xsec weighted): {bkg_sumWgts:.2f}')
-    print(f'Total background counts (raw): {bkg_nev_raw}')
+    bkg_wgt_pos = np.clip(bkg_xsec_norm, 0, None)
+    bkg_sumWgts = bkg_wgt_pos.sum()
+    print(f'Total background counts (xsec weighted, negative weights zeroed): {bkg_sumWgts:.2f}')
+    print(f'Total background counts (raw): {bkg_nev_raw}, of which {np.sum(bkg_xsec_norm < 0)} with negative weight set to 0')
 
-    bkg_sf = bkg_xsec_norm / bkg_sumWgts * bkg_nev_raw
+    bkg_sf = bkg_wgt_pos / bkg_sumWgts * bkg_nev_raw
     print("Sum bkg sf ",bkg_sf.sum())
 
     return bkg_nev_raw, bkg_sumWgts, bkg_sf, bkg_xsec_norm
@@ -183,11 +185,21 @@ def reweight_signal(sig_data,bkg_nev_raw,nSamp,bkg_sf,sig_subprocess,bkg_xsec_no
     
     return sig_sf
 
-def run_training(bdt_name,variables,sig_data,sig_sf_arr,sig_xsec_norm,sig_point,
-                 bkg_data,bkg_sf_arr,bkg_xsec_norm,
-                 n_estimators=1000,max_depth=8,learning_rate=0.05):
-    # trains the model for a single fold on the given (training-fold) inputs, saves it to models/{bdt_name}.json
-    # and returns it. Performance plots and WPs are made from out-of-fold scores in train_bdt.
+## 'learning_rate': 0.01, 'max_depth': 6, 'n_estimators': 600
+### 'learning_rate': 0.01, 'max_depth': 5, 'n_estimators': 700
+#### 'learning_rate': 0.012, 'max_depth': 3, 'n_estimators': 700
+##### 'learning_rate': 0.015, 'max_depth': 2, 'n_estimators': 800 BDT out-of-fold AUC: 0.9920
+###### 'learning_rate': 0.018, 'max_depth': 2, 'n_estimators': 800 BDT out-of-fold AUC: 0.9919
+####### 'learning_rate': 0.018, 'max_depth': 2, 'n_estimators': 800 BDT out-of-fold AUC: 0.9919
+PARAM_GRID = {
+    'max_depth': [2, 4, 6, 8],
+    'n_estimators': [600, 800, 1000, 1200],
+    'learning_rate': [0.01, 0.018, 0.02, 0.03]
+}
+
+def build_training_set(sig_data,sig_sf_arr,bkg_data,bkg_sf_arr):
+    # stacks signal (label 1) and bkg (label 0) into one shuffled training set with abs weights (a no-op now that
+    # reweight_bkg_arrays zeroes negative bkg weights; kept as a safeguard)
     train = np.concatenate((sig_data,bkg_data),axis=0)
     train_sf = np.concatenate((sig_sf_arr,bkg_sf_arr),axis=0)
     train_sf = abs(train_sf)
@@ -195,55 +207,51 @@ def run_training(bdt_name,variables,sig_data,sig_sf_arr,sig_xsec_norm,sig_point,
 
     rng = np.random.default_rng(seed=438290)
     perm = rng.permutation(len(train))
-    train = train[perm]
-    y_train = y_train[perm]
-    train_sf = train_sf[perm]
+    return train[perm], y_train[perm], train_sf[perm]
 
-    # grid search (its CV only splits the training folds, i.e. it is nested inside the k-fold)
-    import sklearn.metrics as skmetrics
-    #regressor = xgb.XGBRegressor()
-    classifier = xgb.XGBClassifier()
-    print("Starting grid search")
-    from sklearn.experimental import enable_halving_search_cv
-    from sklearn.model_selection import HalvingRandomSearchCV, HalvingGridSearchCV
-    
-    from scipy.stats import uniform, randint
-    #param_grid = {
-    #    'learning_rate':[0.01,0.05,0.1],
-    #    'n_estimators':[200,400,600,800,1000,1200,1400],
-    #    'max_depth':[2,4,6,8,10,12]
-    #}
-    #grid_search = HalvingGridSearchCV(estimator=classifier, param_grid=param_grid, 
-    #                           cv=3, scoring='neg_log_loss', verbose=1,refit=True,
-    #                          n_jobs=-1)
-
-    ## 'learning_rate': 0.01, 'max_depth': 6, 'n_estimators': 600
-    ### 'learning_rate': 0.01, 'max_depth': 5, 'n_estimators': 700
-    #### 'learning_rate': 0.012, 'max_depth': 3, 'n_estimators': 700
-    ##### 'learning_rate': 0.015, 'max_depth': 2, 'n_estimators': 800 BDT out-of-fold AUC: 0.9920
-    ###### 'learning_rate': 0.018, 'max_depth': 2, 'n_estimators': 800 BDT out-of-fold AUC: 0.9919
-    ####### 'learning_rate': 0.018, 'max_depth': 2, 'n_estimators': 800 BDT out-of-fold AUC: 0.9919
-    param_grid = {
-        'max_depth': [2, 4, 6, 8],
-        'n_estimators': [600, 800, 1000, 1200],
-        'learning_rate': [0.01, 0.018, 0.02, 0.03]
-    }
+def grid_search_fold(train,y_train,train_sf,param_grid=PARAM_GRID):
+    # grid search on one fold's training events (its CV only splits the training folds, i.e. it is nested inside
+    # the k-fold). No refit: train_bdt pools the CV scores of all folds in pick_common_params and trains every
+    # fold model with the same parameters. Returns GridSearchCV.cv_results_
     from sklearn.model_selection import GridSearchCV
-    grid_search = GridSearchCV(estimator=classifier, param_grid=param_grid, 
-                                cv=3, scoring='neg_log_loss', verbose=2,refit=True,
+    print("Starting grid search")
+    grid_search = GridSearchCV(estimator=xgb.XGBClassifier(), param_grid=param_grid,
+                                cv=3, scoring='neg_log_loss', verbose=2,refit=False,
                                 n_jobs=1)
-
     grid_search.fit(train, y_train,sample_weight=train_sf)
-    best_params = grid_search.best_params_
-    print(f"Best parameters: {best_params}")
-    bst = grid_search.best_estimator_
-    
-    #print("training bdt")
-    ## train bdt
-    #bst = xgb.XGBRegressor(objective=skmetrics.log_loss,**best_params)
-    #bst.fit(train, y_train, sample_weight=train_sf, 
-    #    eval_set=[(test, y_test)], eval_metric="rmse", early_stopping_rounds=10,verbose=50)
-    
+    return grid_search.cv_results_
+
+def pick_common_params(cv_results,n_show=5):
+    # cv_results: one GridSearchCV.cv_results_ per fold, all on the same grid. Averages each parameter set's CV
+    # score over the folds and returns the best, so all fold models share the same hyperparameters
+    params = cv_results[0]['params']
+    if any(r['params'] != params for r in cv_results):
+        raise ValueError('grid searches of the folds were run on different parameter grids')
+    scores = np.array([r['mean_test_score'] for r in cv_results]) # (k, n_params)
+    mean_score = scores.mean(axis=0)
+    best = int(np.argmax(mean_score))
+
+    print('\nPer-fold best parameters (not used):')
+    for i, s in enumerate(scores):
+        print(f'fold{i}: {params[int(np.argmax(s))]}  score = {s.max():.5f}')
+    print(f'\nTop {n_show} parameter sets by fold-averaged CV score (neg_log_loss):')
+    print(f'{"mean":>9} ' + ' '.join(f'{f"fold{i}":>9}' for i in range(len(scores))) + '  params')
+    for j in np.argsort(mean_score)[::-1][:n_show]:
+        print(f'{mean_score[j]:>9.5f} ' + ' '.join(f'{s:>9.5f}' for s in scores[:,j]) + f'  {params[j]}')
+    print(f'\nCommon parameters for all folds: {params[best]}')
+    return params[best]
+
+def run_training(bdt_name,variables,sig_data,sig_sf_arr,sig_xsec_norm,sig_point,
+                 bkg_data,bkg_sf_arr,bkg_xsec_norm,params):
+    # trains the model for a single fold on the given (training-fold) inputs with fixed hyperparameters params
+    # (from pick_common_params), saves it to models/{bdt_name}.json and returns it. Performance plots and WPs are
+    # made from out-of-fold scores in train_bdt.
+    train, y_train, train_sf = build_training_set(sig_data,sig_sf_arr,bkg_data,bkg_sf_arr)
+
+    print(f"Training with {params}")
+    bst = xgb.XGBClassifier(**params)
+    bst.fit(train, y_train, sample_weight=train_sf)
+
     # importance
     os.makedirs(f"plots/{bdt_name}/",exist_ok=True)
     plt.figure(figsize=(8,6))
@@ -282,7 +290,7 @@ def predict_kfold(models,data,folds):
 def compute_WPs(y,scores,weights=None,tpr_WP=None,epsilon=0.005):
     # weights: per-event weights for the ROC, so the WP signal efficiencies are weighted efficiencies
     if tpr_WP is None:
-        tpr_WP = {'tight': 0.7, 'medium': 0.85, 'loose': 0.9}
+        tpr_WP = {'tight': 0.7, 'medium': 0.8, 'loose': 0.9}
     fpr, tpr, thresholds = roc_curve(y, scores, sample_weight=weights)
     idx_valid = thresholds < 1
     tpr = tpr[idx_valid]
@@ -443,10 +451,10 @@ def train_bdt(bdt_name,signal_h5,bkg_h5,variables,max_depth=6,n_estimators=500,l
 
     print_fold_balance(sig_point,bkg_fold,k)
 
-    models = []
-    train_y, train_scores, train_wgts = [], [], []
+    # pass 1: grid search on each fold's training events, then one common parameter set for all folds
+    fold_inputs, cv_results = [], []
     for i in range(k):
-        print(f'\n========== Fold {i}: training on folds != {i} ==========')
+        print(f'\n========== Fold {i}: grid search on folds != {i} ==========')
         sig_train = sig_fold != i
         bkg_train = bkg_fold != i
         sig_point_train = {key: v[sig_train] for key, v in sig_point.items()}
@@ -455,11 +463,21 @@ def train_bdt(bdt_name,signal_h5,bkg_h5,variables,max_depth=6,n_estimators=500,l
         # reweight using the training folds only
         bkg_nev_raw, bkg_sumWgts, bkg_sf, bkg_xsec_norm_train = reweight_bkg_arrays(bkg_xsec_norm[bkg_train])
         sig_sf = reweight_signal(sig_data[sig_train],bkg_nev_raw,nSamp,bkg_sf,sig_subprocess,bkg_xsec_norm_train)
+        fold_inputs.append((sig_train,bkg_train,sig_point_train,sig_sf,np.array(bkg_sf),bkg_xsec_norm_train))
+
+        cv_results.append(grid_search_fold(*build_training_set(sig_data[sig_train],sig_sf,bkg_data[bkg_train],np.array(bkg_sf))))
+    params = pick_common_params(cv_results)
+
+    # pass 2: train every fold model with the common parameters
+    models = []
+    train_y, train_scores, train_wgts = [], [], []
+    for i in range(k):
+        print(f'\n========== Fold {i}: training on folds != {i} ==========')
+        sig_train, bkg_train, sig_point_train, sig_sf, bkg_sf, bkg_xsec_norm_train = fold_inputs[i]
 
         # train bdt
         bst = run_training(f'{bdt_name}_fold{i}',variables,sig_data[sig_train],sig_sf,sig_xsec_norm[sig_train],sig_point_train,
-                           bkg_data[bkg_train],np.array(bkg_sf),bkg_xsec_norm_train,
-                           n_estimators=n_estimators,max_depth=max_depth,learning_rate=lr)
+                           bkg_data[bkg_train],bkg_sf,bkg_xsec_norm_train,params)
         models.append(bst)
 
         # scores on this model's own training events, for the overtraining check
@@ -474,8 +492,8 @@ def train_bdt(bdt_name,signal_h5,bkg_h5,variables,max_depth=6,n_estimators=500,l
     scores = np.concatenate((sig_score,bkg_score))
     folds = np.concatenate((sig_fold,bkg_fold))
 
-    # evaluation weights: same scheme as training (xsec-weighted bkg, equal weight per signal point, abs as in
-    # run_training), computed on the full sample so every out-of-fold event has one
+    # evaluation weights: same scheme as training (xsec-weighted bkg with negative weights zeroed, equal weight per
+    # signal point), computed on the full sample so every out-of-fold event has one
     print('\nComputing full-sample weights for the out-of-fold evaluation')
     sig_subprocess_all, nSamp_all = build_sig_subprocess(sig_point)
     bkg_nev_all, _, bkg_wgt, _ = reweight_bkg_arrays(bkg_xsec_norm)
@@ -498,8 +516,11 @@ def train_bdt(bdt_name,signal_h5,bkg_h5,variables,max_depth=6,n_estimators=500,l
     save_oof_scores(f"h5/{bdt_name}_oof_scores_bkg.h5",bkg_score,bkg_fold,bkg_event_num)
 
     # vars dict
-    vars_dict = {"variables":variables, "k":k, "fold_rule":"eventNum % k",
-                 "models":[f"models/{bdt_name}_fold{i}.json" for i in range(k)]}
+    # WPs from the weighted out-of-fold ROC: thres_WP[wp] is the score cut giving signal efficiency tpr_WP[wp]
+    vars_dict = {"variables":variables, "k":k, "fold_rule":"eventNum % k", "params":params,
+                 "models":[f"models/{bdt_name}_fold{i}.json" for i in range(k)],
+                 "tpr_WP":{wp: float(v) for wp, v in tpr_WP.items()},
+                 "thres_WP":{wp: float(v) for wp, v in thres_WP.items()}}
     with open(f"models/variables_{bdt_name}.json","w") as fout:
         json.dump(vars_dict,fout,indent=4)
 

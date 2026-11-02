@@ -19,6 +19,9 @@ from XRootD import client
 NanoAODSchema.warn_missing_crossrefs = False
 import xgboost as xgb
 import correctionlib
+import sys
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../trainBDT"))
+from feature_sets import FEATURE_SETS
 
 # Helper functions
 def deltaPhi(v1,v2):
@@ -135,55 +138,10 @@ def electronID(events,info):
     events["Electron","passID"] = ele_kinematic_cut & ele_id_cut & (eles.mindRj > 0.4)
     events["Electron","passIDBasic"] = ele_kinematic_cut & ele_id_cut
     
-def selectMergedElectronCandidates(events,jet_pt_cut=10,dr_cut=0.4,self_jet_dr=0.1,self_jet_frac=0.3):
-    """
-    Select merged low-pT electron candidates. An AllLptElectron is a
-    candidate iff it is separated by dR >= dr_cut from every other
-    AllLptElectron and from every PFJet with pt > jet_pt_cut in the same
-    event. If multiple candidates pass in the same event, the one closest
-    in phi to the event's ptmiss (PFMET) is kept.
-
-    A merged ee pair is often clustered into a PFJet of its own, which would
-    otherwise veto the electron against itself. So for the jet isolation, a
-    jet is ignored for the electron being tested if the electron is within
-    dR < self_jet_dr of it and carries pT(e)/pT(jet) > self_jet_frac. This is
-    local to the candidate selection -- events.PFJet is left untouched.
-
-    Stores the result as events.merged and also returns it: an awkward
-    array with one entry per event, the selected AllLptElectron record
-    (all fields intact), or None if the event has no candidates.
-    """
-    eles = events.AllLptElectron
-    idx = ak.local_index(eles,axis=1)
-
-    # dR to every other AllLptElectron in the same event (self excluded)
-    dr_ee = deltaR(eles.eta[:,:,None],eles.phi[:,:,None],eles.eta[:,None,:],eles.phi[:,None,:])
-    dr_ee = ak.where(idx[:,:,None] == idx[:,None,:],np.inf,dr_ee)
-    min_dr_ee = ak.fill_none(ak.min(dr_ee,axis=-1),np.inf)
-    ele_iso = min_dr_ee >= dr_cut
-
-    # dR to every PFJet with pt > jet_pt_cut in the same event, ignoring any
-    # jet that is the electron itself (electron at the jet core carrying a
-    # large fraction of the jet pt)
-    jets = events.PFJet
-    jets = jets[jets.pt > jet_pt_cut]
-    dr_ej = deltaR(eles.eta[:,:,None],eles.phi[:,:,None],jets.eta[:,None,:],jets.phi[:,None,:])
-    pt_frac = eles.pt[:,:,None]/jets.pt[:,None,:]
-    dr_ej = ak.where((dr_ej < self_jet_dr) & (pt_frac > self_jet_frac),np.inf,dr_ej)
-    min_dr_ej = ak.fill_none(ak.min(dr_ej,axis=-1),np.inf)
-    jet_iso = min_dr_ej >= dr_cut
-
-    cand = eles[ele_iso & jet_iso]
-    dphi_met = np.abs(deltaPhi(cand.phi,events.PFMET.phi))
-    order = ak.argsort(dphi_met,axis=1,ascending=True)
-    merged = ak.firsts(cand[order])
-    events.__setitem__("merged",merged)
-    return merged
-
 def checkMergedElectronGenMatch(events,cand):
     """
     Given `cand`, the per-event merged-electron candidate produced by
-    selectMergedElectronCandidates (one entry per event, or None), check
+    selectBestMergedCandidate (one entry per event, or None), check
     whether it is a genuine merged electron under the same definition used
     in configs/histo_configs/mergedeles.py (mirrors mergedcats.py's
     _cat_merged): quality-matched (dR<0.1, correct charge, pt within 20%) to
@@ -542,19 +500,35 @@ def computeMergedCatVars(events):
     events['cat_sep']           = _cat_sep
     events['cat_zero']          = _no_ele & ~_ge_any & ~_gp_any
 
-def defineGoodMergedCandidates(events):
+def defineGoodMergedCandidates(events,version='v1_Oct2026'):
     """
     Tag "good" merged-electron candidates among AllLptElectron and store all
     of them (every passing electron, with all of its fields) as
-    events.merged_vtx. An AllLptElectron is good iff:
+    events.merged_candidates, with their per-event count as
+    events.nMergedCandidates. Use selectBestMergedCandidate to pick one per
+    event. The criteria depend on `version`:
+
+    none -- every AllLptElectron is good.
+
+    v0_iso -- isolation only (the former selectMergedElectronCandidates):
+      - dR >= 0.4 to the nearest other AllLptElectron (self excluded)
+      - dR >= 0.4 to the nearest PFJet with pt > 10, ignoring any jet that is
+        the electron itself (dR < 0.1 and pT(e)/pT(jet) > 0.3) -- a merged ee
+        pair is often clustered into a PFJet of its own, which would
+        otherwise veto the electron against itself. events.PFJet is left
+        untouched.
+
+    v1_Oct2026 -- an AllLptElectron is good iff:
       - dR > 0.4 to the nearest other AllLptElectron (self excluded)
       - dR > 0.4 to the nearest PFJet with pt > 10
       - |dPhi| > 1 to the nearest PFJet with pt > 10
+      (both jet requirements ignore the electron's own jet, as in v0_iso)
       - |dxy| > 0.001 cm
       - log10(|dxy/dz|) > -2
       - cos(dPhi(e, ptmiss)) > 0.4
+      - track chi2 < 15
 
-    Signal only (GenEle present): also sets merged_vtx.isGenMerged, True iff
+    Signal only (GenEle present): also sets merged_candidates.isGenMerged, True iff
     the candidate is matched to both gen electrons (AllLptElectron.is_merged)
     and the event is not resolved, i.e. it's in cat_merged (which excludes
     cat_sep and cat_vertexed) -- see computeMergedCatVars, which is run here
@@ -568,47 +542,77 @@ def defineGoodMergedCandidates(events):
     dr_ee = ak.where(idx[:,:,None] == idx[:,None,:],np.inf,dr_ee)
     min_dr_ee = ak.fill_none(ak.min(dr_ee,axis=-1),999)
 
-    # dR/dPhi to nearest PFJet with pt > 10
+    # dR/dPhi to nearest PFJet with pt > 10, ignoring the jet that is the
+    # electron itself (dR < 0.1 and pT(e)/pT(jet) > 0.3)
     jets = events.PFJet
     jets = jets[jets.pt > 10]
     dr_ej = deltaR(eles.eta[:,:,None],eles.phi[:,:,None],jets.eta[:,None,:],jets.phi[:,None,:])
     dphi_ej = np.abs(deltaPhi(eles.phi[:,:,None],jets.phi[:,None,:]))
+    self_jet = (dr_ej < 0.1) & (eles.pt[:,:,None]/jets.pt[:,None,:] > 0.3)
+    dr_ej = ak.where(self_jet,np.inf,dr_ej)
+    dphi_ej = ak.where(self_jet,np.inf,dphi_ej)
     min_dr_j = ak.fill_none(ak.min(dr_ej,axis=-1),999)
     min_dphi_j = ak.fill_none(ak.min(dphi_ej,axis=-1),999)
     abs_dxy = np.abs(eles.dxy)
     log_dxy_dz = np.log10(abs_dxy/np.abs(eles.dz))
     cos_dphi_met = np.cos(deltaPhi(eles.phi,events.PFMET.phi))
 
-    events['AllLptElectron','isGoodMerged'] = (
-        (min_dr_ee > 0.4) &
-        (min_dr_j > 0.4) &
-        (min_dphi_j > 1.0) &
-        (abs_dxy > 0.001) &
-        (log_dxy_dz > -2) &
-        (cos_dphi_met > 0.4)
-    )
+    ele_iso = min_dr_ee > 0.4
+    jet_iso = min_dr_j > 0.4
+    jet_dphi = min_dphi_j > 1.0
+    dxy = abs_dxy > 0.001
+    logdxydz = log_dxy_dz > -2
+    met_dphi = cos_dphi_met > 0.4
+    chi2 = eles.trkChi2 < 15
+
+    if version == 'none':
+        events['AllLptElectron','isGoodMerged'] = ak.values_astype(ak.ones_like(eles.pt),bool)
+    elif version == 'v0_iso':
+        events['AllLptElectron','isGoodMerged'] = (min_dr_ee >= 0.4) & (min_dr_j >= 0.4)
+    elif version == 'v1_Oct2026':
+        events['AllLptElectron','isGoodMerged'] = ele_iso & jet_iso & jet_dphi & dxy & logdxydz & met_dphi & chi2
+    else:
+        raise ValueError(f"defineGoodMergedCandidates: unknown version '{version}'")
 
     if 'GenEle' in events.fields:
         if 'is_merged' not in events.AllLptElectron.fields or 'cat_merged' not in events.fields:
             computeMergedCatVars(events)
         events['AllLptElectron','isGenMerged'] = events.AllLptElectron.is_merged & events.cat_merged
 
-    events.__setitem__("merged_vtx",events.AllLptElectron[events.AllLptElectron.isGoodMerged])
-    events.__setitem__("nMergedVtx",ak.count(events.merged_vtx.pt,axis=1))
+    events.__setitem__("merged_candidates",events.AllLptElectron[events.AllLptElectron.isGoodMerged])
+    events.__setitem__("nMergedCandidates",ak.count(events.merged_candidates.pt,axis=1))
 
-def computeMergedVars(events):
+def selectBestMergedCandidate(events,version='v1_Oct2026'):
+    """
+    Pick one merged-electron candidate per event from events.merged_candidates
+    (see defineGoodMergedCandidates). Stored as events.best_merged, the
+    selected AllLptElectron record (all fields intact), or None if the event
+    has no candidates. `version` should match the one passed to
+    defineGoodMergedCandidates; the ranking depends on it:
+
+    none, v0_iso, v1_Oct2026 -- smallest |dPhi(e, ptmiss)|
+    """
+    cands = events.merged_candidates
+    if version in ('none','v0_iso','v1_Oct2026'):
+        score = np.abs(deltaPhi(cands.phi,events.PFMET.phi))
+    else:
+        raise ValueError(f"selectBestMergedCandidate: unknown version '{version}'")
+    best_merged = ak.firsts(cands[ak.argmin(score,axis=1,keepdims=True)])
+    events.__setitem__("best_merged",best_merged)
+
+def computeMergedVars(events,good_merged='v1_Oct2026'):
     """
     Run all merged-electron routines so their outputs are always present in
     the event arrays: computeMergedCatVars (signal-only categorization),
-    defineGoodMergedCandidates (merged_vtx/nMergedVtx), and
-    selectMergedElectronCandidates (merged). No-op if AllLptElectron isn't
-    present (not in all ntuple eras).
+    defineGoodMergedCandidates (merged_candidates/nMergedCandidates, using
+    version good_merged), and selectBestMergedCandidate (best_merged, same
+    version). No-op if AllLptElectron isn't present (not in all ntuple eras).
     """
     if 'AllLptElectron' not in events.fields:
         return
     computeMergedCatVars(events)
-    defineGoodMergedCandidates(events)
-    selectMergedElectronCandidates(events)
+    defineGoodMergedCandidates(events,version=good_merged)
+    selectBestMergedCandidate(events,version=good_merged)
 
 def jetBtag(events,year):
     year = str(year)
@@ -1282,40 +1286,40 @@ def makeBDTv2Inputs(events): # Legacy BDT; not used anymore
 
     return input
 
-def makeBDTinputs(events): # Current BDT for SR vtx cut
+# Definitions of the BDT input variables, keyed by the names used in trainBDT/feature_sets.py.
+# These must match the columns written to the training h5 by skimmerTools (Skimmer.process).
+# A name always means one definition: if a definition changes, add it under a new name (e.g. vxy -> vxy_corr)
+# so that existing trained models keep their meaning.
+BDT_VARIABLES = {
+    'sel_vtx_chi2':          lambda events: events.sel_vtx.reduced_chi2.to_numpy(),
+    'sel_vtx_METdPhi':       lambda events: np.abs(events.sel_vtx.METdPhi).to_numpy(),
+    'sel_vtx_refit_m':       lambda events: events.sel_vtx.refit_m.to_numpy(),
+    'sel_vtx_refit_dR':      lambda events: events.sel_vtx.refit_dR.to_numpy(),
+    'sel_vtx_corrMinDxy':    lambda events: events.sel_vtx.corrMinDxy.to_numpy(),
+    'sel_vtx_minDxy_refit':  lambda events: np.minimum(np.abs(events.sel_vtx.e1.refit_dxy), np.abs(events.sel_vtx.e2.refit_dxy)).to_numpy(),
+    'vxy':                   lambda events: events.sel_vtx.vxy.to_numpy(),
+    'vxy_corr':              lambda events: np.sqrt((events.sel_vtx.vx-events.PV.x)**2+(events.sel_vtx.vy-events.PV.y)**2).to_numpy(),
+    'vxy_signif':            lambda events: (events.sel_vtx.vxy/events.sel_vtx.sigmavxy).to_numpy(),
+    'sel_vtx_cos_collinear': lambda events: events.sel_vtx.cos_collinear.to_numpy(),
+    'sel_vtx_prod_eta':      lambda events: (events.sel_vtx.e1.eta*events.sel_vtx.e2.eta).to_numpy(),
+    'met_leadPt_ratio':      lambda events: (events.PFMET.pt/events.PFJet.pt[:,0]).to_numpy(),
+    'jetMETdPhi':            lambda events: np.abs(events.PFJet.METdPhi[:,0]).to_numpy(),
+    'minJetMETdPhi':         lambda events: ak.min(np.abs(events.PFJet.METdPhi),axis=1).to_numpy(),
+}
+
+def makeBDTinputs(events, features="comb11"):
     '''
-    # BDT_10vars_comb11 (ROC-AUC, PR-AUC) = (0.9958, 0.9959)
-    variables = ['sel_vtx_chi2','sel_vtx_METdPhi','sel_vtx_refit_m','sel_vtx_refit_dR','sel_vtx_corrMinDxy','vxy','vxy_signif',\
-                 'sel_vtx_cos_collinear', 'sel_vtx_prod_eta', 'met_leadPt_ratio'
-]
+    Build the BDT input array, columns in the order of the feature set.
+    features: a key of FEATURE_SETS in trainBDT/feature_sets.py (e.g. "AN"), or a list of variable names
+              (e.g. the "variables" entry of a trained model's models/variables_*.json)
+    Default "comb11" is the 12-variable set used by the legacy BDT_BJetMedium*/BDT_NJetL* models.
     '''
+    variables = FEATURE_SETS[features] if isinstance(features, str) else list(features)
+    missing = [v for v in variables if v not in BDT_VARIABLES]
+    if len(missing) > 0:
+        raise KeyError(f'BDT variables with no definition in analysisSubroutines.BDT_VARIABLES: {missing}')
 
-    mindxy = np.minimum(np.abs(events.sel_vtx.e1.dxy),np.abs(events.sel_vtx.e2.dxy))
-    maxdxy = np.maximum(np.abs(events.sel_vtx.e1.dxy),np.abs(events.sel_vtx.e2.dxy))
-
-    deltadxy = np.abs(np.abs(events.sel_vtx.e1.dxy) - np.abs(events.sel_vtx.e2.dxy))
-
-    sel_vtx_chi2_arr = events.sel_vtx.reduced_chi2.to_numpy()
-    sel_vtx_METdPhi_arr = np.abs(events.sel_vtx.METdPhi).to_numpy()
-    sel_vtx_m_arr = events.sel_vtx.m.to_numpy()
-    sel_vtx_refit_m_arr = events.sel_vtx.refit_m.to_numpy()
-    sel_vtx_dR_arr = events.sel_vtx.dR.to_numpy()
-    sel_vtx_refit_dR_arr = events.sel_vtx.refit_dR.to_numpy()
-    sel_vtx_minDxy_arr = mindxy.to_numpy()
-    sel_vtx_corrMinDxy_arr = events.sel_vtx.corrMinDxy.to_numpy()
-    sel_vtx_vxy_arr = events.sel_vtx.vxy.to_numpy()
-    vxy_signif_arr = (events.sel_vtx.vxy/events.sel_vtx.sigmavxy).to_numpy()
-    cos_collinear_arr = events.sel_vtx.cos_collinear.to_numpy()
-    sel_vtx_prod_eta_arr = (events.sel_vtx.e1.eta * events.sel_vtx.e2.eta).to_numpy()
-    met_leadPt_ratio_arr = (events.PFMET.pt/events.PFJet.pt[:,0]).to_numpy()
-    jetMETdPhi = np.abs(events.PFJet.METdPhi[:,0]).to_numpy()
-    minJetMETdPhi = ak.min(np.abs(events.PFJet.METdPhi),axis=1).to_numpy()
-
-    input_arrs = (sel_vtx_chi2_arr, sel_vtx_METdPhi_arr, sel_vtx_refit_m_arr, sel_vtx_refit_dR_arr, \
-                  sel_vtx_corrMinDxy_arr, sel_vtx_vxy_arr, vxy_signif_arr, \
-                  cos_collinear_arr, sel_vtx_prod_eta_arr, met_leadPt_ratio_arr, jetMETdPhi, minJetMETdPhi)
-
-    input = np.stack(input_arrs, axis=1)
+    input = np.stack([BDT_VARIABLES[v](events) for v in variables], axis=1)
 
     return input
 
@@ -1370,6 +1374,39 @@ def getBDTscore(arr, model):
 
     # get BDT score
     score = trained_model.predict(arr)
+
+    return score
+
+def getBDTscore_kfold(events, vars_json):
+    '''
+    BDT score from a k-fold cross-trained model (trainBDT/BDTutils_kfold.train_bdt).
+    vars_json: the model's models/variables_<name>.json, giving the variables, k and the fold model paths
+               (relative paths are taken relative to the trainBDT directory, i.e. the parent of models/)
+    Each event is scored by models[eventNum % k], the fold model that did not train on it. The same rule is
+    applied to data and MC.
+    '''
+    with open(vars_json) as fin:
+        vars_dict = json.load(fin)
+    if vars_dict.get('fold_rule') != 'eventNum % k':
+        raise ValueError(f"{vars_json}: unsupported fold_rule {vars_dict.get('fold_rule')}")
+    k = vars_dict['k']
+    if len(vars_dict['models']) != k:
+        raise ValueError(f"{vars_json}: k = {k} but {len(vars_dict['models'])} fold models are listed")
+
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(vars_json)))
+    model_paths = [m if os.path.isabs(m) else os.path.join(base_dir, m) for m in vars_dict['models']]
+
+    arr = makeBDTinputs(events, vars_dict['variables'])
+    folds = (events.eventNum.to_numpy().astype(np.uint64) % np.uint64(k)).astype(int)
+
+    score = np.full(len(arr), -1.0)
+    for i, path in enumerate(model_paths):
+        in_fold = folds == i
+        if np.sum(in_fold) == 0:
+            continue
+        trained_model = xgb.XGBClassifier()
+        trained_model.load_model(path)
+        score[in_fold] = trained_model.predict_proba(arr[in_fold])[:,1]
 
     return score
 
