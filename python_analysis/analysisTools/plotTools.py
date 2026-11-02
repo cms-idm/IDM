@@ -259,7 +259,7 @@ def overlay(h,overlay,label_key=None,**kwargs):
     hep.histplot(histos,label=labels,**kwargs)
 
 # Plot efficiency type stuff
-def plot_signal_efficiency(sig_histo, df, plot_dict_sig_eff, doLog=True, show=True):
+def plot_signal_efficiency(sig_histo, df, plot_dict_sig_eff, df_wts=None, doLog=True, show=True):
     """
     Example plot_dict_sig_eff
 
@@ -319,7 +319,15 @@ def plot_signal_efficiency(sig_histo, df, plot_dict_sig_eff, doLog=True, show=Tr
                     label = rf"($M_{1}$, $\Delta$) = ({round(m1, 5)}, {round(dmchi, 5)}) GeV, c$\tau$ = {ctau}mm"
                 else:
                     label = plot_dict_sig_eff['label']
-                ax.plot(cuts, df.loc[point], label=label, color=cmap[color_idx])
+                eff = df.loc[point].values
+                if df_wts is not None:
+                    W_0 = eff[0]  # cutflow['all'] = sum(genWgt)/sum_wgt ≈ 1
+                    sw2_all = df_wts.loc[point].iloc[0]  # sum of (genWgt_j/sum_wgt)^2 over all events
+                    yerr = np.sqrt(eff * (1 - eff) * sw2_all) / W_0
+                    ax.errorbar(cuts, eff, yerr=yerr, label=label, color=cmap[color_idx],
+                                fmt='-o', markersize=3, capsize=3)
+                else:
+                    ax.plot(cuts, eff, label=label, color=cmap[color_idx])
                 color_idx += 1
 
     if plot_dict_sig_eff['doLog']:
@@ -330,13 +338,15 @@ def plot_signal_efficiency(sig_histo, df, plot_dict_sig_eff, doLog=True, show=Tr
 
     
     ax.grid()
-    
-    ax.set_ylabel(plot_dict_sig_eff['ylabel'])
-    ax.set_title(plot_dict_sig_eff['title'])
-    
+
+    ax.set_ylabel(plot_dict_sig_eff['ylabel'], fontsize=28)
+    ax.set_title(plot_dict_sig_eff['title'], fontsize=28)
+
     ax.set_xticks(ticks = np.arange(len(cuts)), labels = cuts, rotation = 45, ha = 'right')
-    
-    ax.legend(loc='upper right')
+    ax.tick_params(axis='x', labelsize=17)
+    ax.tick_params(axis='y', labelsize=28)
+
+    ax.legend(loc='upper right', fontsize=28)
     
     if plot_dict_sig_eff['doSave']:
         os.makedirs(plot_dict_sig_eff['outDir'], exist_ok=True)
@@ -466,16 +476,16 @@ def plot_signal_1D(sig_histo, m1, delta, ctau, plot_dict, style_dict, cmap_idx=0
     'cut': 'cut7',
     'year': 2018
     }
-    
+
     style_dict = {
         'fig': fig,
         'ax': ax,
         'rebin': 1j,
         'xlim': None,     # if None, the default will show up; otherwise give as a list, i.e. [0, 10]
-        'doLogy': True, 
+        'doLogy': True,
         'doLogx': False,
         'doDensity': False,
-        'doYerr': False, 
+        'doYerr': False,
         'xlabel': r"$L_{xy}$ [cm]",   # if None, the default will show up; otherwise give as a string, i.e. 'Electron dxy'
         'ylabel': 'Events/0.1cm',   # if None, the default will show up; otherwise give as a string, i.e. 'Efficiency'
         'label': None,    # if None, the default will show up; otherwise give as a string, i.e. 'Highest ctau signal samples'
@@ -486,11 +496,12 @@ def plot_signal_1D(sig_histo, m1, delta, ctau, plot_dict, style_dict, cmap_idx=0
     }
 
     """
-    
+
     fig = style_dict['fig']
     ax = style_dict['ax']
-    
-    hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6')
+
+    if style_dict.get('doCMSLabel', True):
+        hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6')
     
     # get signal point info
     si = utils.get_signal_point_dict(sig_histo)
