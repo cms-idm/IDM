@@ -7,9 +7,9 @@ try:
     import analysisSubroutines as routines
     import corrections
 except ModuleNotFoundError:
-    from tools.mySchema_newCoffea import MySchema
-    import tools.analysisSubroutines as routines
-    import tools.corrections
+    from analysisTools.mySchema_newCoffea import MySchema
+    import analysisTools.analysisSubroutines as routines
+    import analysisTools.corrections
 
 from coffea import processor
 
@@ -34,13 +34,11 @@ import pandas as pd
 from XRootD import client
 import re
 NanoAODSchema.warn_missing_crossrefs = False
-import analysisSubroutines as routines
 import sys
 from collections import defaultdict
 from hist import Hist
 from hist.axis import StrCategory, Regular, Integer, IntCategory
 import hist
-import corrections
 
 match_names = {"Default":"match0","lowpt":"match1"}
 vxy_range = {1:[0,20],10:[0,50],100:[0,50],1000:[0,50]}
@@ -261,10 +259,10 @@ class iDMeProcessor(processor.ProcessorABC):
         info['selectBestVertex'] = routines.selectBestVertex
         for k,v in self.extraStuff.items():
             info[f"extras_{k}"] = v
-        
-        #histos = self.histoMod.make_histograms()
+            
+        histObj = self.histoMod.make_histograms()
         #histos['cutDesc'] = defaultdict(str)
-        histObj = self.histoMod.make_histograms(info)
+        #istObj = self.histoMod.make_histograms(info)
         cutDesc = defaultdict(str)
 
         cutflow = defaultdict(float)               # efficiency
@@ -356,7 +354,8 @@ class iDMeProcessor(processor.ProcessorABC):
         nJets = ak.count(events.PFJet.pt,axis=1)
         #events = events[(nJets>0) & (nJets<3)] # Nominal NJet requirement for SR
         events["nJets"] = nJets
-        events = events[nJets>0]
+        # XYZ no njet cut ACR
+        #events = events[nJets>0]
 
         if self.nJet_isNom != None: # If applying Njet cut (legacy: deprecated after fixing the nJet bug in pythia)
             if self.nJet_isNom:
@@ -440,13 +439,14 @@ class iDMeProcessor(processor.ProcessorABC):
             cutflow_nevts[cutName] += len(events)
             if info['type'] == "signal":
                 if 'sel_vtx' in events.fields:
-	            vtx_matched_events = events[events.sel_vtx.isMatched]
+                    vtx_matched_events = events[events.sel_vtx.isMatched]
                     cutflow_vtx_matched[cutName] += ak.sum(vtx_matched_events.genWgt)/ak.sum(events.genWgt)
                 else:
-	            cutflow_vtx_matched[cutName] = 0.
+                    cutflow_vtx_matched[cutName] = 0.
             cutDesc[cutName] += cutDescription + "@"
 
             # Fill histograms
+            #print(savePlots, len(events))
             if savePlots and len(events) > 0: # fixes some bugginess trying to fill histograms with empty arrays
                 self.histoFill(events,histObj,samp,cutName,info,sum_wgt=sum_wgt)
         
@@ -456,7 +456,7 @@ class iDMeProcessor(processor.ProcessorABC):
             else:
                 cutflow_counts[k] = sum_wgt*cutflow[k]
         
-        histos = histObj.histograms
+        histos = histObj
         histos['cutDesc'] = cutDesc
         histos['cutflow'] = {samp:cutflow}
         histos['cutflow_cts'] = {samp:cutflow_counts}
@@ -868,7 +868,7 @@ def getLumi(year):
         lumi = 124.0 # https://cds.cern.ch/record/2952191/files/DP2026_003.pdf
         unc =  0.016*lumi # 1.6 percent
     if year == '2022':
-	lumi = 38.01
+        lumi = 38.01
         unc =  0.014*lumi #1.4 percent
 
     if year == '2016':

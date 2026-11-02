@@ -16,7 +16,7 @@ from matplotlib.colors import Normalize, LogNorm
 try:
     import utils
 except ModuleNotFoundError:
-    from tools import utils
+    from analysisTools import utils
 
 
 
@@ -520,7 +520,7 @@ def plot_signal_1D(sig_histo, m1, delta, ctau, plot_dict, style_dict, cmap_idx=0
         
         
     #print(plot_dict['variable'], samp, plot_dict['cut'], style_dict['rebin'])
-    cuts = [f'cut{i}' for i in [0, 3, 4, 5, 6, 7]]
+    #cuts = [f'cut{i}' for i in [0, 3, 4, 5, 6, 7]]
     #for c in cuts:
     #    print(samp, plot_dict['variable'], sig_histo[plot_dict['variable']][{"samp":samp, "cut": c}].to_numpy())
     #exit()
@@ -667,10 +667,11 @@ def plot_signal_2D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
         plt.tight_layout()
         plt.savefig(f"{style_dict['outDir']}/{style_dict['outName']}")
         print(f"Saved: {style_dict['outDir']}/{style_dict['outName']}")
-    count = histo.values()
+    counts = histo.values()
+    variances = histo.variances()
     edges0 = histo.axes[0].edges
     edges1 = histo.axes[1].edges
-    return count, edges0, edges1
+    return counts, variances, edges0, edges1
 
 def plot_signal_2D_match(sig_histo, m1, delta, ctau, plot_dict, style_dict,match_type='L', passID=1):
     """

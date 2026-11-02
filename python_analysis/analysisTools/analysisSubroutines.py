@@ -133,13 +133,17 @@ def jetBtag(events,year):
 
 def getBtagWPs(year):
     year = str(year)
+    if year == '2024':
+       loose,med,tight = 0.0485, 0.2480, 0.6708
+    if year == '2022':
+       loose,med,tight = 0.0583, 0.3086, 0.7183
     if year == '2018':
         loose,med,tight = 0.0490, 0.2783, 0.7100
     if year == '2017':
         loose,med,tight = 0.0532, 0.3040, 0.7476
     if year == '2016':
         loose,med,tight = 0.0480, 0.2489, 0.6377
-    if year == '2016APV':
+    if year == "2016APV":
         loose,med,tight = 0.0508, 0.2598, 0.6502
     return loose,med,tight
 
@@ -516,14 +520,14 @@ def genElectronKinematicBins(events):
     vxy_map = ak.Array(["0to1","1to5","5to10","10to15","15toInf"])
     pt_map = ak.Array(["0to5","5to10","10to20","20toInf"])
 
-    events["GenEle","dRbin"] = dR_map[runJitOutput(ele_dRcategory,events.GenEle.dr)]
-    events["GenEle","vxyBin"] = vxy_map[runJitOutput(ele_vxyCategory,events.GenEle.vxy)]
-    events["GenEle","ptBin"] = pt_map[runJitOutput(ele_ptCategory,events.GenEle.pt)]
+    events["GenEle","dRbin"] = dR_map[runJitOutput(ele_dRcategory,ak.materialize(events.GenEle.dr))]
+    events["GenEle","vxyBin"] = vxy_map[runJitOutput(ele_vxyCategory,ak.materialize(events.GenEle.vxy))]
+    events["GenEle","ptBin"] = pt_map[runJitOutput(ele_ptCategory,ak.materialize(events.GenEle.pt))]
 
-    events["GenPos","dRbin"] = dR_map[runJitOutput(ele_dRcategory,events.GenPos.dr)]
-    events["GenPos","vxyBin"] = vxy_map[runJitOutput(ele_vxyCategory,events.GenPos.vxy)]
-    events["GenPos","ptBin"] = pt_map[runJitOutput(ele_ptCategory,events.GenPos.pt)]
-
+    events["GenPos","dRbin"] = dR_map[runJitOutput(ele_dRcategory,ak.materialize(events.GenPos.dr))]
+    events["GenPos","vxyBin"] = vxy_map[runJitOutput(ele_vxyCategory,ak.materialize(events.GenPos.vxy))]
+    events["GenPos","ptBin"] = pt_map[runJitOutput(ele_ptCategory,ak.materialize(events.GenPos.pt))]
+    
 @nb.njit
 def regEle_lptMatchID(b,ele_lptMatchIdx,lpt_ele_id):
     nEvents = len(ele_lptMatchIdx)
