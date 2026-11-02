@@ -24,7 +24,8 @@ from preselected_vertexing_talk import cp, flowcounts, write_hist
 INPUT_REV, INPUT_ORDER = "5a2b10e", "global>inner>outer(DSA)"
 
 S1_VIEWS = {"pt30": ("pt", np.arange(0, 30.01, 1.0)), "pt100": ("pt", np.arange(0, 100.01, 5.0)),
-            "d030": ("d0", np.arange(0, 30.01, 1.0)), "d0740": ("d0", np.arange(0, 740.01, 10.0))}
+            "d030": ("d0", np.arange(0, 30.01, 1.0)), "d0740": ("d0", np.arange(0, 740.01, 10.0)),
+            "lxy30": ("lxy", np.arange(0, 30.01, 1.0)), "lxy740": ("lxy", np.arange(0, 740.01, 10.0))}
 S2_VIEWS = {"lxy30": ("lxy", np.arange(0, 30.01, 1.0)), "lxy740": ("lxy", np.arange(0, 740.01, 10.0)),
             "d015": ("d0max", np.arange(0, 15.01, 1.0))}
 XLAB = {"pt30": r"Gen muon $p_T$ [GeV]", "pt100": r"Gen muon $p_T$ [GeV]", "d030": r"Gen muon $|d_0|$ to origin [cm]",
@@ -87,7 +88,7 @@ def load(args):
         lxy = ak.to_numpy(a["sigLxy"])[:, 0]
         d0 = ak.to_numpy(a["sigD0"])
         for g in (0, 1):
-            mu.append(dict(sample=np.full(n, si), pt=ak.to_numpy(a["sigPt"])[:, g], d0=d0[:, g], h=mo[:, g] >= 0,
+            mu.append(dict(sample=np.full(n, si), pt=ak.to_numpy(a["sigPt"])[:, g], d0=d0[:, g], lxy=lxy, h=mo[:, g] >= 0,
                            I=io[:, g] >= 0, O=io[:, 2 + g] >= 0, G=io[:, 4 + g] >= 0))
         ev.append(dict(sample=np.full(n, si), lxy=lxy, d0max=d0.max(axis=1), matched=both, valid=valid,
                        matchedfixed=both & fixed, validfixed=valid & fixed, dsa=np.any(mt == 1, axis=1),
@@ -212,7 +213,7 @@ def plot(args):
 
     def eff_panels(series, slide, views, title, path, note, ylabel, pdf=False):
         """series: list of (group, key, label, colour, linestyle)."""
-        nc = 2 if len(views) == 4 else len(views)
+        nc = {4: 2, 6: 3}.get(len(views), len(views))
         nr = (len(views) + nc - 1) // nc
         fig, axs = plt.subplots(nr, nc, figsize=(6.2 * nc, 4.6 * nr), squeeze=False)
         for ax, v in zip(axs.flat, views):
@@ -478,7 +479,7 @@ def validate(args):
             xs2 = {"lxy": lxy, "d0max": max(d0)}
             for g in gs:
                 for gi in (0, 1):
-                    x1 = {"pt": pt[gi], "d0": d0[gi]}
+                    x1 = {"pt": pt[gi], "d0": d0[gi], "lxy": lxy}
                     fl1 = {"den": True, "h": mo[gi] >= 0, "G": ind["G"][gi] >= 0, "I": ind["I"][gi] >= 0, "O": ind["O"][gi] >= 0}
                     for v, (src, _) in S1_VIEWS.items():
                         for k, ok in fl1.items():
