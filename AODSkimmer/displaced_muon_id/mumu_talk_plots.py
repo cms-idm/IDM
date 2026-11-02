@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """mumu talk plots from saved PreselectedVertexing outputs (no new MINIAOD processing).
 
+This file owns the study-specific analysis, validation, ROOT schema and preset
+plots. For a reusable, self-contained plotting-skill tool accepting arbitrary
+saved raw numerator/denominator TH1 keys, use plot_root_efficiency.py --help.
+That renderer takes explicit labels, styles and axis ranges and never reads
+event trees. Do not generalize this study's physics defaults into other studies.
+
 python3 mumu_talk_plots.py analyze --input-dir RUN/inputs --output OUT/mumu_talk.root --revision <sha>
 python3 mumu_talk_plots.py plot --output OUT/mumu_talk.root --plot-dir OUT/plots [--log]
 python3 mumu_talk_plots.py validate --input-dir RUN/inputs --output OUT/mumu_talk.root
