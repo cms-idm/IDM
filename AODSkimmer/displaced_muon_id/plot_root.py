@@ -58,7 +58,7 @@ Input contract:
   exclusions and weighting; the tool cannot infer these from histogram names.
 
 Outputs are PNG + vector PDF; existing outputs are refused. --log adds a log-y
-PNG alongside linear exports (nonpositive values are invisible on log-y).
+PNG alongside linear exports (nonpositive points are omitted from log-y only).
 After every new configuration, inspect the PNG AND a rendered PDF for readable
 labels, correct ranges, unobscured points/errors, and no clipping or overlap:
     pdftoppm -cropbox -scale-to 900 -singlefile -png plot.pdf preview
@@ -324,6 +324,16 @@ def render(args):
         args.output_base.parent.mkdir(parents=True, exist_ok=True)
         canvas.Modified(); canvas.SaveAs(str(outputs[0])); canvas.SaveAs(str(outputs[1]))
         if args.log:
+            # ROOT can pin zero-valued symbols/error bars to the log floor.
+            # Filter copies for the extra log export; preserve the linear graphs.
+            log_graphs = []
+            for graph in graphs:
+                canvas.GetListOfPrimitives().Remove(graph)
+                positive = graph.Clone(); log_graphs.append(positive)
+                for i in range(positive.GetN() - 1, -1, -1):
+                    if positive.GetPointY(i) <= 0:
+                        positive.RemovePoint(i)
+                positive.Draw("LP same" if args.connect else "P same")
             frame.SetMinimum(max(1e-3, args.ylim[0])); canvas.SetLogy(1); canvas.Modified()
             canvas.SaveAs(str(outputs[2]))
         # ROOT can log a SaveAs error without raising a Python exception.
