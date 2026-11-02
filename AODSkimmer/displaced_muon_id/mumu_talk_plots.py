@@ -322,7 +322,7 @@ def plot_cms(args):
     s1lab = {"h": "Global > Inner > DSA", "G": "Global", "I": "Inner", "O": "DSA"}
     s2lab = {"matched": "Both muons matched", "valid": "Matched and vertexed"}
     keep = []
-    pt_layout = args.mode == "plot-cms-pt"
+    band_layout = args.mode in ("plot-cms-pt", "plot-cms-lxy-focused")
 
     def mass_label(m):
         a, b = re.fullmatch(r"Mchi-([\dp]+)_dMchi-([\dp]+)", m).groups()
@@ -335,7 +335,7 @@ def plot_cms(args):
     def canvas(name):
         c = ROOT.TCanvas(name, "", 800, 700)
         c.SetLeftMargin(0.15); c.SetRightMargin(0.04); c.SetTopMargin(0.08); c.SetBottomMargin(0.13)
-        if pt_layout:
+        if band_layout:
             c.SetCanvasSize(900, 800)
             c.SetTopMargin(0.30)
         keep.append(c)
@@ -352,7 +352,7 @@ def plot_cms(args):
     def labels(c, lines=()):
         c.cd()
         t = ROOT.TLatex(); t.SetNDC(); keep.append(t)
-        if pt_layout:
+        if band_layout:
             t.SetTextFont(61); t.SetTextSize(0.04); t.SetTextAlign(11); t.DrawLatex(0.15, 0.95, "CMS")
             t.SetTextFont(52); t.SetTextSize(0.031); t.DrawLatex(0.255, 0.95, "Simulation Private Work")
             t.SetTextFont(42); t.SetTextAlign(31); t.DrawLatex(0.96, 0.95, "2022EE (13.6 TeV)")
@@ -376,7 +376,7 @@ def plot_cms(args):
             leg.AddEntry(o, lab, opt)
         leg.Draw()
 
-    def pt_legend(entries, series, header):
+    def split_legend(entries, series, header):
         # Reserve the band above the frame for the keys; never compete with points or annotations.
         stage = ROOT.TLegend(0.19, 0.72, 0.94, 0.775); keep.append(stage)
         stage.SetBorderSize(0); stage.SetFillStyle(0); stage.SetTextSize(0.028); stage.SetNColumns(2)
@@ -452,22 +452,23 @@ def plot_cms(args):
             best = (ym, y2b)
         return max(0.1, np.ceil(best[0] * 20) / 20), best[1]
 
-    def eff_plot(name, series, slide, v, ytitle, lines=(), x1=0.52, d=None, header=None, pdf=True):
+    def eff_plot(name, series, slide, v, ytitle, lines=(), x1=0.52, d=None, header=None, pdf=True, xmax=None):
         c = canvas("c_" + name)
         edges = S1_VIEWS[v][1] if slide == 1 else {**S2_VIEWS, **S2PT_VIEWS}[v][1]
         ent = []
         for g, k, lab, color, style, marker in series:
             gr, _ = eff_graph(g, slide, k, v, color, style, marker)
             ent.append((gr, lab, "lp"))
-        ymax, y2 = (1.05, None) if pt_layout else place([e[0] for e in ent], edges, len(ent) + bool(header), x1, lines)
-        frame(c, edges, 0, ymax, xt[v], ytitle)
-        if pt_layout:
+        ymax, y2 = ((0.8 if args.mode == "plot-cms-lxy-focused" else 1.05), None) if band_layout else \
+            place([e[0] for e in ent], edges, len(ent) + bool(header), x1, lines)
+        frame(c, (edges[0], xmax) if xmax is not None else edges, 0, ymax, xt[v], ytitle)
+        if band_layout:
             c.Update()
         for gr, _, _ in ent:
             gr.Draw("P same")
         labels(c, lines)
-        if pt_layout:
-            pt_legend(ent, series, header)
+        if band_layout:
+            split_legend(ent, series, header)
         else:
             legend(ent, y2=y2, x1=x1, header=header)
         save(c, name, d=d, pdf=pdf)
@@ -503,6 +504,16 @@ def plot_cms(args):
     blue, orange, green, yellow = col("#0072B2"), col("#D55E00"), col("#009E73"), col("#E69F00")
     pop = "Both signal muons accepted"
     tcol = {TALK[0]: blue, TALK[1]: orange}
+    if args.mode == "plot-cms-lxy-focused":
+        # Display-only ranges aligned with the saved 10 cm bins; retain the original graphs and errors.
+        for tau, xmax in (("10", 100), ("100", 400)):
+            series = [("sample_%s_ctau-%s" % (m, tau), k, "%s, %s" % (short_mass(m), s2lab[k]),
+                       tcol[m], 1 if k == "valid" else 2, 20 if k == "valid" else 24)
+                      for m in TALK for k in ("matched", "valid")]
+            eff_plot("ctau%s_s2_lxy%d" % (tau, xmax), series, 2, "lxy740", "Event efficiency",
+                     ["c#tau = %s mm" % tau, pop], header="m_{#chi} / #Deltam", xmax=xmax)
+        print("Focused CMS-style Lxy plots written to", out)
+        return
     if args.mode == "plot-cms-pt":
         # Matched and vertexed vs leading / subleading gen muon pT (user, 2026-11-02): per lifetime (pooled over
         # masses, unweighted) and per sample, PNG only; talk masses overlaid per ctau 10 and 100 mm, PNG + PDF.
@@ -836,7 +847,7 @@ def validate(args):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=("analyze", "plot", "plot-cms", "plot-cms-pt", "plot-2d", "plot-2d-all", "validate"))
+    ap.add_argument("mode", choices=("analyze", "plot", "plot-cms", "plot-cms-pt", "plot-cms-lxy-focused", "plot-2d", "plot-2d-all", "validate"))
     ap.add_argument("--check", help="plot-2d: validated slide ROOT file for the totals cross-check")
     ap.add_argument("--input-dir")
     ap.add_argument("--revision", default="unspecified")
@@ -846,4 +857,5 @@ if __name__ == "__main__":
     ap.add_argument("--expected-events", type=int, default=720000)
     ap.add_argument("--log", action="store_true", help="add log-y copies of the efficiency plots")
     args = ap.parse_args()
-    {"analyze": analyze, "plot": plot, "plot-cms": plot_cms, "plot-cms-pt": plot_cms, "plot-2d": plot_2d, "plot-2d-all": plot_2d_all, "validate": validate}[args.mode](args)
+    {"analyze": analyze, "plot": plot, "plot-cms": plot_cms, "plot-cms-pt": plot_cms,
+     "plot-cms-lxy-focused": plot_cms, "plot-2d": plot_2d, "plot-2d-all": plot_2d_all, "validate": validate}[args.mode](args)
