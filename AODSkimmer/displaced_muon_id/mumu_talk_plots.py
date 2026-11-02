@@ -4,12 +4,14 @@
 python3 mumu_talk_plots.py analyze --input-dir RUN/inputs --output OUT/mumu_talk.root --revision <sha>
 python3 mumu_talk_plots.py plot --output OUT/mumu_talk.root --plot-dir OUT/plots [--log]
 python3 mumu_talk_plots.py validate --input-dir RUN/inputs --output OUT/mumu_talk.root
+python3 mumu_talk_plots.py plot-cms-pt --output OUT/mumu_talk.root --plot-dir OUT/plots_cms_pt
 Study note: kb/studies/mumu-talk-matching-vertexing.md. Inputs: met_proxy_20261022 (hierarchy G > I > DSA, 5a2b10e).
 Population: two-accepted events (twoAcc: exactly two signal muons, opposite charge, both accepted). Raw, unweighted.
 Slide 1 (per muon): den = signal muons in twoAcc events; num = hierarchy match (matchObj >= 0) or independent
 Global / Inner / DSA match (indObj, layout [type I, O, G][gen 0, 1]). Slide 2 (per event): den = twoAcc events;
 matched = both hierarchy-matched; valid = best-best fit valid (bbStatus == 3, no fallback); *fixed = additionally both
-matched legs are their object's top eligible component (G > I > DSA). Residual: valid best-best fits,
+matched legs are their object's top eligible component (G > I > DSA); slide-2 x = gen Lxy, max gen |d0|, and
+(2026-11-02) the leading and subleading gen muon pT of the two muons. Residual: valid best-best fits,
 dr = hypot(bbVx, bbVy) - gen Lxy (both from the origin); tracker = no DSA leg, anyDSA = at least one DSA leg.
 """
 import argparse
@@ -29,6 +31,9 @@ S1_VIEWS = {"pt30": ("pt", np.arange(0, 30.01, 1.0)), "pt100": ("pt", np.arange(
             "lxy30": ("lxy", np.arange(0, 30.01, 1.0)), "lxy740": ("lxy", np.arange(0, 740.01, 10.0))}
 S2_VIEWS = {"lxy30": ("lxy", np.arange(0, 30.01, 1.0)), "lxy740": ("lxy", np.arange(0, 740.01, 10.0)),
             "d015": ("d0max", np.arange(0, 15.01, 1.0))}
+# Slide-2 event efficiency vs the two muons' gen pT (user, 2026-11-02); not used by the residual plots.
+S2PT_VIEWS = {"ptlead30": ("ptlead", np.arange(0, 30.01, 1.0)), "ptlead100": ("ptlead", np.arange(0, 100.01, 5.0)),
+              "ptsub30": ("ptsub", np.arange(0, 30.01, 1.0)), "ptsub100": ("ptsub", np.arange(0, 100.01, 5.0))}
 XLAB = {"pt30": r"Gen muon $p_T$ [GeV]", "pt100": r"Gen muon $p_T$ [GeV]", "d030": r"Gen muon $|d_0|$ to origin [cm]",
         "d0740": r"Gen muon $|d_0|$ to origin [cm]", "lxy30": r"Gen production $L_{xy}$ [cm]",
         "lxy740": r"Gen production $L_{xy}$ [cm]", "d015": r"Max gen $|d_0|$ of the two muons [cm]"}
@@ -89,10 +94,12 @@ def load(args):
             fixed[i] = all(top_type(mo[i, g], *c) == mt[i, g] for g in (0, 1))
         lxy = ak.to_numpy(a["sigLxy"])[:, 0]
         d0 = ak.to_numpy(a["sigD0"])
+        pt = ak.to_numpy(a["sigPt"])
         for g in (0, 1):
             mu.append(dict(sample=np.full(n, si), pt=ak.to_numpy(a["sigPt"])[:, g], d0=d0[:, g], lxy=lxy, h=mo[:, g] >= 0,
                            I=io[:, g] >= 0, O=io[:, 2 + g] >= 0, G=io[:, 4 + g] >= 0))
-        ev.append(dict(sample=np.full(n, si), lxy=lxy, d0max=d0.max(axis=1), matched=both, valid=valid,
+        ev.append(dict(sample=np.full(n, si), lxy=lxy, d0max=d0.max(axis=1), ptlead=pt.max(axis=1),
+                       ptsub=pt.min(axis=1), matched=both, valid=valid,
                        matchedfixed=both & fixed, validfixed=valid & fixed, dsa=np.any(mt == 1, axis=1),
                        vx=np.asarray(a["bbVx"]).astype(float), vy=np.asarray(a["bbVy"]).astype(float)))
     if len(revs) != 1 or not next(iter(revs)).startswith(INPUT_REV) or orders != {INPUT_ORDER}:
@@ -142,7 +149,7 @@ def analyze(args):
             for k in ("den",) + tuple(S1_NUMS):
                 sel = gm if k == "den" else gm & mu[k]
                 write_hist("s1__%s__%s" % (k, v), k, edges, flowcounts(mu[src][sel], edges))
-        for v, (src, edges) in S2_VIEWS.items():
+        for v, (src, edges) in {**S2_VIEWS, **S2PT_VIEWS}.items():
             for k in ("den", "matched", "valid", "matchedfixed", "validfixed"):
                 sel = ge if k == "den" else ge & ev[k]
                 write_hist("s2__%s__%s" % (k, v), k, edges, flowcounts(ev[src][sel], edges))
@@ -309,7 +316,9 @@ def plot_cms(args):
     col = lambda h: ROOT.TColor.GetColor(h)
     xt = {"pt30": "Gen muon p_{T} [GeV]", "pt100": "Gen muon p_{T} [GeV]", "d030": "Gen muon |d_{0}| [cm]",
           "d0740": "Gen muon |d_{0}| [cm]", "lxy30": "Gen L_{xy} [cm]", "lxy740": "Gen L_{xy} [cm]",
-          "d015": "Max gen muon |d_{0}| [cm]"}
+          "d015": "Max gen muon |d_{0}| [cm]", "ptlead30": "Leading gen muon p_{T} [GeV]",
+          "ptlead100": "Leading gen muon p_{T} [GeV]", "ptsub30": "Subleading gen muon p_{T} [GeV]",
+          "ptsub100": "Subleading gen muon p_{T} [GeV]"}
     s1lab = {"h": "Global > Inner > DSA", "G": "Global", "I": "Inner", "O": "DSA"}
     s2lab = {"matched": "Both muons matched", "valid": "Matched and vertexed"}
     keep = []
@@ -368,9 +377,11 @@ def plot_cms(args):
         gr.SetLineWidth(2); gr.SetLineStyle(style)
         return gr, edges
 
-    def save(c, name, log=True, d=None):
+    def save(c, name, log=True, d=None, pdf=True):
         d = d or out
-        c.Modified(); c.SaveAs(str(d / (name + ".png"))); c.SaveAs(str(d / (name + ".pdf")))
+        c.Modified(); c.SaveAs(str(d / (name + ".png")))
+        if pdf:
+            c.SaveAs(str(d / (name + ".pdf")))
         if args.log and log:
             fr = [p for p in c.GetListOfPrimitives() if p.InheritsFrom("TH1")][0]
             fr.SetMinimum(1e-3); fr.SetMaximum(5); c.SetLogy(1); c.Modified()
@@ -406,9 +417,9 @@ def plot_cms(args):
             best = (ym, y2b)
         return max(0.1, np.ceil(best[0] * 20) / 20), best[1]
 
-    def eff_plot(name, series, slide, v, ytitle, lines=(), x1=0.52, d=None, header=None):
+    def eff_plot(name, series, slide, v, ytitle, lines=(), x1=0.52, d=None, header=None, pdf=True):
         c = canvas("c_" + name)
-        edges = S1_VIEWS[v][1] if slide == 1 else S2_VIEWS[v][1]
+        edges = S1_VIEWS[v][1] if slide == 1 else {**S2_VIEWS, **S2PT_VIEWS}[v][1]
         ent = []
         for g, k, lab, color, style, marker in series:
             gr, _ = eff_graph(g, slide, k, v, color, style, marker)
@@ -418,7 +429,7 @@ def plot_cms(args):
         for gr, _, _ in ent:
             gr.Draw("P same")
         labels(c, lines); legend(ent, y2=y2, x1=x1, header=header)
-        save(c, name, d=d)
+        save(c, name, d=d, pdf=pdf)
 
     def resid_plot(name, cls, v, series, lines=()):
         src, edges = S2_VIEWS[v]
@@ -450,6 +461,31 @@ def plot_cms(args):
 
     blue, orange, green, yellow = col("#0072B2"), col("#D55E00"), col("#009E73"), col("#E69F00")
     pop = "Both signal muons accepted"
+    tcol = {TALK[0]: blue, TALK[1]: orange}
+    if args.mode == "plot-cms-pt":
+        # Matched and vertexed vs leading / subleading gen muon pT (user, 2026-11-02): per lifetime (pooled over
+        # masses, unweighted) and per sample, PNG only; talk masses overlaid per ctau 10 and 100 mm, PNG + PDF.
+        ctau = lambda t: t.replace("p", ".")
+        for sub, groups in (("ctau", [g for g in groups_of(names) if g.startswith("ctau_")]),
+                            ("sample", ["sample_" + s for s in names])):
+            (out / sub).mkdir(exist_ok=True)
+            for g in groups:
+                tau = g.rsplit("ctau", 1)[1].lstrip("_-")
+                lines = ([mass_label(g[len("sample_"):].rsplit("_ctau-", 1)[0])] if sub == "sample" else []) + \
+                    ["c#tau = %s mm" % ctau(tau), pop]
+                for v in S2PT_VIEWS:
+                    eff_plot("%s_%s" % (g, v), [(g, k, s2lab[k], c_, 1, m_) for k, c_, m_ in
+                                                (("matched", blue, 21), ("valid", orange, 20))], 2, v, "Event efficiency",
+                             lines, x1=0.57, d=out / sub, pdf=False)
+        (out / "talk").mkdir(exist_ok=True)
+        for tau in TALK_CT:
+            for v in S2PT_VIEWS:
+                eff_plot("ctau%s_%s" % (tau, v), [("sample_%s_ctau-%s" % (m, tau), k, "%s, %s" % (
+                    short_mass(m), "matched and vertexed" if k == "valid" else "matched"), tcol[m], 1 if k == "valid" else 2,
+                    20 if k == "valid" else 24) for m in TALK for k in ("matched", "valid")], 2, v, "Event efficiency",
+                    ["c#tau = %s mm" % tau, pop], x1=0.40, d=out / "talk", header="m_{#chi} / #Deltam")
+        print("CMS-style pT plots written to", out)
+        return
     s1c = {"h": (ROOT.kBlack, 20), "G": (blue, 21), "I": (yellow, 22), "O": (green, 23)}
     for v in S1_VIEWS:
         eff_plot("overall_s1_%s" % v, [("overall", k, s1lab[k], s1c[k][0], 1, s1c[k][1]) for k in S1_NUMS], 1, v,
@@ -460,7 +496,6 @@ def plot_cms(args):
         for cls, cname in ((0, "tracker"), (1, "anydsa")):
             resid_plot("overall_residual_%s_%s" % (cname, v), cls, v, [(None, "", blue if cls == 0 else orange)],
                        [pop, "Tracker legs" if cls == 0 else "#geq 1 DSA leg"])
-    tcol = {TALK[0]: blue, TALK[1]: orange}
     for tau in TALK_CT:
         lines = ["c#tau = %s mm" % tau]
         for v in S1_VIEWS:
@@ -653,7 +688,7 @@ def validate(args):
     ref = {}
     for g in check:
         for sl, views, keys in ((1, S1_VIEWS, ("den",) + tuple(S1_NUMS)),
-                                (2, S2_VIEWS, ("den", "matched", "valid", "matchedfixed", "validfixed"))):
+                                (2, {**S2_VIEWS, **S2PT_VIEWS}, ("den", "matched", "valid", "matchedfixed", "validfixed"))):
             for v, (src, edges) in views.items():
                 for k in keys:
                     h = ROOT.TH1D("ref_%s_%d_%s_%s" % (g, sl, k, v), "", len(edges) - 1, array("d", edges))
@@ -683,7 +718,7 @@ def validate(args):
                                  for g in (0, 1))
             nm += both; nv += valid; nmf += both and fixed; nvf += valid and fixed
             flags = {"den": True, "matched": both, "valid": valid, "matchedfixed": both and fixed, "validfixed": valid and fixed}
-            xs2 = {"lxy": lxy, "d0max": max(d0)}
+            xs2 = {"lxy": lxy, "d0max": max(d0), "ptlead": max(pt), "ptsub": min(pt)}
             for g in gs:
                 for gi in (0, 1):
                     x1 = {"pt": pt[gi], "d0": d0[gi], "lxy": lxy}
@@ -692,7 +727,7 @@ def validate(args):
                         for k, ok in fl1.items():
                             if ok:
                                 ref[(g, 1, k, v)].Fill(x1[src])
-                for v, (src, _) in S2_VIEWS.items():
+                for v, (src, _) in {**S2_VIEWS, **S2PT_VIEWS}.items():
                     for k, ok in flags.items():
                         if ok:
                             ref[(g, 2, k, v)].Fill(xs2[src])
@@ -760,7 +795,7 @@ def validate(args):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=("analyze", "plot", "plot-cms", "plot-2d", "plot-2d-all", "validate"))
+    ap.add_argument("mode", choices=("analyze", "plot", "plot-cms", "plot-cms-pt", "plot-2d", "plot-2d-all", "validate"))
     ap.add_argument("--check", help="plot-2d: validated slide ROOT file for the totals cross-check")
     ap.add_argument("--input-dir")
     ap.add_argument("--revision", default="unspecified")
@@ -770,4 +805,4 @@ if __name__ == "__main__":
     ap.add_argument("--expected-events", type=int, default=720000)
     ap.add_argument("--log", action="store_true", help="add log-y copies of the efficiency plots")
     args = ap.parse_args()
-    {"analyze": analyze, "plot": plot, "plot-cms": plot_cms, "plot-2d": plot_2d, "plot-2d-all": plot_2d_all, "validate": validate}[args.mode](args)
+    {"analyze": analyze, "plot": plot, "plot-cms": plot_cms, "plot-cms-pt": plot_cms, "plot-2d": plot_2d, "plot-2d-all": plot_2d_all, "validate": validate}[args.mode](args)
