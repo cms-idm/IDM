@@ -571,7 +571,7 @@ def plot_2d(args):
 
 def plot_2d_all(args):
     """Replots of the plot-2d efficiency maps from the saved TH2D (--output, lxy_pt_2d_v2.root), PNG only
-    (user, 2026-11-02): "allbins" draws every bin with at least one muon and outlines bins with fewer than LOWSTAT muons
+    (user, 2026-11-02): "allbins_plain" draws every bin with at least one muon, unmarked; "allbins" draws every bin with at least one muon and outlines bins with fewer than LOWSTAT muons
     in red (contiguous ones by their outer border only); "min<LOWSTAT>" draws only bins with at least LOWSTAT muons."""
     import ROOT
     LOWSTAT = 10
@@ -593,12 +593,12 @@ def plot_2d_all(args):
             for j in range(1, ny + 1):
                 d = den.GetBinContent(i, j)
                 low[i, j] = 0 < d < LOWSTAT
-        for variant in ("allbins", "min%d" % LOWSTAT):
+        for variant in ("allbins", "allbins_plain", "min%d" % LOWSTAT):
             eff = den.Clone("%s__eff_%s" % (s, variant)); eff.Reset(); keep.append(eff)
             for i in range(1, nx + 1):
                 for j in range(1, ny + 1):
                     d = den.GetBinContent(i, j)
-                    if d > 0 and (variant == "allbins" or not low[i, j]):
+                    if d > 0 and (variant.startswith("allbins") or not low[i, j]):
                         eff.SetBinContent(i, j, max(num.GetBinContent(i, j) / d, 1e-9))  # content 0 is not drawn
             c = ROOT.TCanvas("c_%s_%s" % (variant, s), "", 800, 700); keep.append(c)
             c.SetLeftMargin(0.13); c.SetRightMargin(0.17); c.SetTopMargin(0.08); c.SetBottomMargin(0.13)
@@ -630,7 +630,7 @@ def plot_2d_all(args):
             t.DrawLatex(0.80, 0.845, "c#tau = 100 mm")
             if variant == "allbins":
                 t.SetTextColor(ROOT.kRed); t.DrawLatex(0.80, 0.80, "Red: < %d muons per bin" % LOWSTAT)
-            else:
+            elif variant != "allbins_plain":
                 t.DrawLatex(0.80, 0.80, "Bins with #geq %d muons" % LOWSTAT)
             c.RedrawAxis()
             c.SaveAs(str(out / ("ctau100_%s_lxy_pt_eff_%s.png" % (m, variant))))
