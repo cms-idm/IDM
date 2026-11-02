@@ -322,6 +322,7 @@ def plot_cms(args):
     s1lab = {"h": "Global > Inner > DSA", "G": "Global", "I": "Inner", "O": "DSA"}
     s2lab = {"matched": "Both muons matched", "valid": "Matched and vertexed"}
     keep = []
+    pt_layout = args.mode == "plot-cms-pt"
 
     def mass_label(m):
         a, b = re.fullmatch(r"Mchi-([\dp]+)_dMchi-([\dp]+)", m).groups()
@@ -334,6 +335,9 @@ def plot_cms(args):
     def canvas(name):
         c = ROOT.TCanvas(name, "", 800, 700)
         c.SetLeftMargin(0.15); c.SetRightMargin(0.04); c.SetTopMargin(0.08); c.SetBottomMargin(0.13)
+        if pt_layout:
+            c.SetCanvasSize(900, 800)
+            c.SetTopMargin(0.30)
         keep.append(c)
         return c
 
@@ -348,6 +352,14 @@ def plot_cms(args):
     def labels(c, lines=()):
         c.cd()
         t = ROOT.TLatex(); t.SetNDC(); keep.append(t)
+        if pt_layout:
+            t.SetTextFont(61); t.SetTextSize(0.04); t.SetTextAlign(11); t.DrawLatex(0.15, 0.95, "CMS")
+            t.SetTextFont(52); t.SetTextSize(0.031); t.DrawLatex(0.255, 0.95, "Simulation Private Work")
+            t.SetTextFont(42); t.SetTextAlign(31); t.DrawLatex(0.96, 0.95, "2022EE (13.6 TeV)")
+            t.SetTextSize(0.028); t.SetTextAlign(13)
+            for i, line in enumerate(lines):
+                t.DrawLatex(0.19, 0.90 - 0.04 * i, line)
+            return
         t.SetTextFont(61); t.SetTextSize(0.05); t.SetTextAlign(11); t.DrawLatex(0.15, 0.94, "CMS")
         t.SetTextFont(52); t.SetTextSize(0.038); t.DrawLatex(0.255, 0.94, "Simulation Private Work")
         t.SetTextFont(42); t.SetTextAlign(31); t.DrawLatex(0.96, 0.94, "2022EE (13.6 TeV)")
@@ -363,6 +375,29 @@ def plot_cms(args):
         for o, lab, opt in entries:
             leg.AddEntry(o, lab, opt)
         leg.Draw()
+
+    def pt_legend(entries, series, header):
+        # Reserve the band above the frame for the keys; never compete with points or annotations.
+        stage = ROOT.TLegend(0.19, 0.72, 0.94, 0.775); keep.append(stage)
+        stage.SetBorderSize(0); stage.SetFillStyle(0); stage.SetTextSize(0.028); stage.SetNColumns(2)
+        if header:
+            mass = ROOT.TLegend(0.60, 0.79, 0.94, 0.915); keep.append(mass)
+            mass.SetBorderSize(0); mass.SetFillStyle(0); mass.SetTextSize(0.028)
+            mass.SetHeader("m_{#chi} / #Deltam [GeV]")
+            for i, m in zip((0, 2), TALK):
+                proxy = entries[i][0].Clone(); keep.append(proxy)
+                proxy.SetLineStyle(1)
+                mass.AddEntry(proxy, short_mass(m).replace(" GeV", ""), "l")
+            mass.Draw()
+            # Neutral proxies explain stage styling independently of the mass colors.
+            for gr, (g, k, lab, color, style, marker) in zip(entries[:2], series[:2]):
+                proxy = gr[0].Clone(); keep.append(proxy)
+                proxy.SetLineColor(ROOT.kBlack); proxy.SetMarkerColor(ROOT.kBlack)
+                stage.AddEntry(proxy, s2lab[k], "lp")
+        else:
+            for gr, lab, opt in entries:
+                stage.AddEntry(gr, lab, opt)
+        stage.Draw()
 
     def eff_graph(g, slide, k, v, color, style=1, marker=20):
         a, edges = f["groups/%s/s%d__%s__%s" % (g, slide, k, v)].to_numpy()
@@ -424,11 +459,17 @@ def plot_cms(args):
         for g, k, lab, color, style, marker in series:
             gr, _ = eff_graph(g, slide, k, v, color, style, marker)
             ent.append((gr, lab, "lp"))
-        ymax, y2 = place([e[0] for e in ent], edges, len(ent) + bool(header), x1, lines)
+        ymax, y2 = (1.05, None) if pt_layout else place([e[0] for e in ent], edges, len(ent) + bool(header), x1, lines)
         frame(c, edges, 0, ymax, xt[v], ytitle)
+        if pt_layout:
+            c.Update()
         for gr, _, _ in ent:
             gr.Draw("P same")
-        labels(c, lines); legend(ent, y2=y2, x1=x1, header=header)
+        labels(c, lines)
+        if pt_layout:
+            pt_legend(ent, series, header)
+        else:
+            legend(ent, y2=y2, x1=x1, header=header)
         save(c, name, d=d, pdf=pdf)
 
     def resid_plot(name, cls, v, series, lines=()):
