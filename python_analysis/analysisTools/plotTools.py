@@ -13,11 +13,19 @@ plt.rcParams['font.size'] = 16.0
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 from matplotlib.colors import Normalize, LogNorm
-import utils
+try:
+    import utils
+except ModuleNotFoundError:
+    from tools import utils
+
+
+
+import boost_histogram as bh
 
 from mplhep.styles.cms import cmap_petroff
 
-cmap = ["#3f90da", "#ffa90e", "#bd1f01", "#94a4a2", "#832db6", "#a96b59", "#e76300", "#b9ac70", "#717581", "#92dadd"] # cms-recommended version of 10-color scheme
+cmap = ["#3f90da", "#ffa90e", "#bd1f01", "#94a4a2", "#832db6", "#a96b59", "#e76300", "#b9ac70", "#717581", "#92dadd"] 
+# cms-recommended version of 10-color scheme
 
 bkg_cmap = {
     "QCD":cmap_petroff[0],
@@ -45,19 +53,6 @@ bkg_cmap = {
     "TTX": cmap[9]
 }
 '''
-
-selected_signals = [
-    "sig_2018_Mchi-10p5_dMchi-1p0_ctau-1",
-    "sig_2018_Mchi-11p0_dMchi-2p0_ctau-100",
-    "sig_2018_Mchi-52p5_dMchi-5p0_ctau-10",
-    "sig_2018_Mchi-77p0_dMchi-14p0_ctau-100"
-]
-selected_signals_cmap = {
-    "sig_2018_Mchi-10p5_dMchi-1p0_ctau-1":"k",
-    "sig_2018_Mchi-11p0_dMchi-2p0_ctau-100":"g",
-    "sig_2018_Mchi-52p5_dMchi-5p0_ctau-10":"c",
-    "sig_2018_Mchi-77p0_dMchi-14p0_ctau-100":"b"
-}
 
 class histContainer:
     def __init__(self,path,noMeta=False,bkg=False):
@@ -161,8 +156,8 @@ def getSampleInfo(histos,hname="ele_kinematics"):
     masses = []
     cts = []
     for s in samps:
-        ct = re.findall("ctau-(\d+)",s)[0]
-        m, dm = re.findall("Mchi-(\d+p\d)_dMchi-(\d+p\d)",s)[0]
+        ct = re.findall(r"ctau-(\d+)",s)[0]
+        m, dm = re.findall(r"Mchi-(\d+p\d)_dMchi-(\d+p\d)",s)[0]
         m = m.replace("p",".")
         dm = dm.replace("p",".")
         entry = "{0}-{1}".format(m,dm)
@@ -179,8 +174,8 @@ def getSampleInfo(histos,hname="ele_kinematics"):
 
 def reduceSampleName(name,lifetime=False,mass=False,full=False,verbosity=0):
     output = name
-    m, dm = re.findall("Mchi-(\d+p\d)_dMchi-(\d+p\d)",name)[0]
-    ct = re.findall("ctau-(\d+)",name)[0]
+    m, dm = re.findall(r"Mchi-(\d+p\d)_dMchi-(\d+p\d)",name)[0]
+    ct = re.findall(r"ctau-(\d+)",name)[0]
     m = m.replace("p",".")
     dm = dm.replace("p",".")
     if full:
@@ -194,14 +189,15 @@ def reduceSampleName(name,lifetime=False,mass=False,full=False,verbosity=0):
     return output
 
 def signalPoint(name):
-    a = re.search('Mchi-(\d+p\d+)_dMchi-(\d+p\d+)_ctau-(\d+)',name)
+    a = re.search(r'Mchi-(\d+p\d+)_dMchi-(\d+p\d+)_ctau-(\d+)',name)
     mchi = float(a.group(1).replace("p","."))
     dmchi = float(a.group(2).replace("p","."))
     ctau = float(a.group(3).replace("p","."))
     m1 = mchi - dmchi/2
     m2 = mchi + dmchi/2
     delta = dmchi/m1
-    return {"mchi":mchi, "dmchi":dmchi, "ctau":ctau, "m1":m1, "m2":m2, "delta":delta, "name":name}
+    designation = f'signal_M1-{utils.stringfy_friendly(m1)}_dM-{utils.stringfy_friendly(delta)}_ctau-{ctau}'
+    return {"mchi":mchi, "dmchi":dmchi, "ctau":ctau, "m1":m1, "m2":m2, "delta":delta, "name":name, "designation": designation}
 
 def getCut(label,n=2):
     name = ""
@@ -211,7 +207,7 @@ def getCut(label,n=2):
     return name
 
 def getHTlow(sampName):
-    ht = int(re.search("HT(\d+)to",sampName).group(1))
+    ht = int(re.search(r"HT(\d+)to",sampName).group(1))
     return ht
 
 def setDefaultStyle(fontsize=14):
@@ -263,7 +259,7 @@ def overlay(h,overlay,label_key=None,**kwargs):
     hep.histplot(histos,label=labels,**kwargs)
 
 # Plot efficiency type stuff
-def plot_signal_efficiency(sig_histo, df, plot_dict_sig_eff):
+def plot_signal_efficiency(sig_histo, df, plot_dict_sig_eff, doLog=True, show=True):
     """
     Example plot_dict_sig_eff
 
@@ -279,6 +275,7 @@ def plot_signal_efficiency(sig_histo, df, plot_dict_sig_eff):
     'doLog': True,
     
     'ylabel': 'Events', # None for default
+    'title': rf"Cutflow: $\Delta$ = {deltas[0]}, c$\tau$ = {ctaus[0]}mm", 
     'title': rf"Cutflow: $\Delta$ = {deltas[0]}, c$\tau$ = {ctaus[0]}mm",
     'label': None,
 
@@ -295,50 +292,61 @@ def plot_signal_efficiency(sig_histo, df, plot_dict_sig_eff):
     m1_list = []
     for point in df.index.values:
         sig_dict = signalPoint(point)
-        m1 = int(sig_dict['m1'])
+        m1 = round(sig_dict['m1'], 5)
         m1_list.append(m1)
 
     df['m1'] = m1_list
     df = df.sort_values(by=['m1']) # sort by m1
     df.pop('m1')
-    
+
+    size = (16, 12)
+    fig, ax = plt.subplots(figsize=size)
+
+    color_idx = 0
     for point in df.index.values:
         sig_dict = signalPoint(point)
-        m1 = int(sig_dict['m1'])
-        delta = sig_dict['delta']
-        dmchi = sig_dict['dmchi']
+        m1 = round(sig_dict['m1'], 5)
+        delta = round(sig_dict['delta'], 5)
+        dmchi = round(sig_dict['dmchi'], 5)
         ctau = int(sig_dict['ctau'])
+
+        m1 = int(m1) if m1.is_integer() else m1
+        delta = int(delta) if delta.is_integer() else delta
         
         if (m1 in plot_dict_sig_eff['m1s']) and (delta in plot_dict_sig_eff['deltas']):
             if ctau in plot_dict_sig_eff['ctaus']:
                 if plot_dict_sig_eff['label'] == None:
-                    label = rf"($M_{1}$, $\Delta$) = ({m1:.0f}, {dmchi:.0f}) GeV, c$\tau$ = {int(ctau)}mm"
+                    label = rf"($M_{1}$, $\Delta$) = ({round(m1, 5)}, {round(dmchi, 5)}) GeV, c$\tau$ = {ctau}mm"
                 else:
                     label = plot_dict_sig_eff['label']
-                plt.plot(cuts, df.loc[point], label=label)
+                ax.plot(cuts, df.loc[point], label=label, color=cmap[color_idx])
+                color_idx += 1
 
     if plot_dict_sig_eff['doLog']:
-        plt.yscale('log')
+        ax.set_yscale('log')
 
     if plot_dict_sig_eff['ylim'] != None:
-        plt.ylim(plot_dict_sig_eff['ylim'][0], plot_dict_sig_eff['ylim'][1])
+        ax.set_ylim(plot_dict_sig_eff['ylim'][0], plot_dict_sig_eff['ylim'][1])
 
     
-    plt.grid()
+    ax.grid()
     
-    plt.ylabel(plot_dict_sig_eff['ylabel'])
-    plt.title(plot_dict_sig_eff['title'])
+    ax.set_ylabel(plot_dict_sig_eff['ylabel'])
+    ax.set_title(plot_dict_sig_eff['title'])
     
-    plt.xticks(ticks = np.arange(len(cuts)), labels = cuts, rotation = 45, ha = 'right')
+    ax.set_xticks(ticks = np.arange(len(cuts)), labels = cuts, rotation = 45, ha = 'right')
     
-    plt.legend(loc='upper right')
+    ax.legend(loc='upper right')
     
     if plot_dict_sig_eff['doSave']:
         os.makedirs(plot_dict_sig_eff['outDir'], exist_ok=True)
         plt.tight_layout()
         plt.savefig(f"{plot_dict_sig_eff['outDir']}/{plot_dict_sig_eff['outName']}")
         print(f"Saved: {plot_dict_sig_eff['outDir']}/{plot_dict_sig_eff['outName']}")
-    
+
+    if show:
+        plt.show()
+
 
 def plot_bkg_efficiency(bkg_histos, df, plot_dict_bkg_eff):
     """
@@ -355,6 +363,7 @@ def plot_bkg_efficiency(bkg_histos, df, plot_dict_bkg_eff):
     
     'ylabel': 'Events', # None for default
     'title': rf"Cutflow", 
+
     'label': None,
     'color': None,
 
@@ -448,7 +457,7 @@ def plot_bkg_efficiency_legacy(bkg_histos, df, doLog = True, ylabel = '', title 
     plt.show()
 
 # Plot kinematics
-def plot_signal_1D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
+def plot_signal_1D(sig_histo, m1, delta, ctau, plot_dict, style_dict, cmap_idx=0):
     """
     Example:
 
@@ -477,37 +486,56 @@ def plot_signal_1D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
     }
 
     """
-
+    
     fig = style_dict['fig']
     ax = style_dict['ax']
     
-    hep.cms.label('', data=False, year=plot_dict['year'])
+    hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6')
     
     # get signal point info
     si = utils.get_signal_point_dict(sig_histo)
-    samp_df = si[(si.m1 == m1) & (si.delta == delta) & (si.ctau == ctau)]
-    
-    samp = samp_df.name[0]
+    #samp_df = si[(si.m1 == m1) & (si.delta == delta) & (si.ctau == ctau)]
+    samp_df = si[np.isclose(si.m1, m1) & np.isclose(si.delta, delta) & (si.ctau == ctau)]
 
-    m1 = samp_df.m1[0]
-    dmchi = samp_df.dmchi[0]
-    ctau = samp_df.ctau[0]
-    label = rf"$(m_\chi, \Delta m_\chi) = ({m1:.0f}, {dmchi:.0f})$ GeV"
+    if samp_df.empty:
+        print(f"No matching sample found for m1={m1}, delta={delta}, ctau={ctau}")
+        print("Similar samples:\n", si[np.isclose(si.m1, m1) & np.isclose(si.delta, delta)].designation, '\n',
+              si[np.isclose(si.m1, m1) & (si.ctau == ctau)].designation)
+        return
+    samp = samp_df.name.iloc[0]
+        
+    m1 = samp_df.m1.iloc[0]
+    dmchi = samp_df.dmchi.iloc[0]
+    ctau = samp_df.ctau.iloc[0]
+    label = rf"$(m_\chi, \Delta m_\chi) = ({round(m1, 5)}, {round(dmchi, 5)})$ GeV; $c\tau={ctau}$mm"
 
     if style_dict['label'] != None:
         label = style_dict['label']
     
     # get histogram from coffea output
-    histo = sig_histo[plot_dict['variable']][{"samp":samp, "cut": plot_dict['cut']}]
-
+    if type(plot_dict['variable']) == list:
+        histo = [sig_histo[var][{"samp":samp, "cut": plot_dict['cut']}] for var in plot_dict['variable']]
+    else:
+        histo = sig_histo[plot_dict['variable']][{"samp":samp, "cut": plot_dict['cut']}]
+        
+        
+    #print(plot_dict['variable'], samp, plot_dict['cut'], style_dict['rebin'])
+    cuts = [f'cut{i}' for i in [0, 3, 4, 5, 6, 7]]
+    #for c in cuts:
+    #    print(samp, plot_dict['variable'], sig_histo[plot_dict['variable']][{"samp":samp, "cut": c}].to_numpy())
+    #exit()
+    
     # rebinning
-    histo = histo[::style_dict['rebin']]
+    #histo = histo[::style_dict['rebin']]
 
     # set x range manually
     if style_dict['xlim'] != None:
         xlim = style_dict['xlim']
         xbin_range = np.where((histo.axes.edges[0] > xlim[0]) & (histo.axes.edges[0] < xlim[1]))[0]
-        histo = histo[ int(xbin_range[0])-1:int(xbin_range[-1]+1) ]
+        if type(histo) == list:
+            histo = [h[ int(xbin_range[0])-1:int(xbin_range[-1]+1) ] for h in histo]
+        else:
+            histo = histo[ int(xbin_range[0])-1:int(xbin_range[-1]+1) ]
 
     # x and y labels
     if style_dict['xlabel'] != None:
@@ -515,8 +543,11 @@ def plot_signal_1D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
 
     if style_dict['ylabel'] != None:
         ax.set_ylabel(style_dict['ylabel'])
-    else:   
-        binwidth = histo.axes.widths[0][0]
+    else:
+        if type(histo) == list:
+            binwidth = histo[0].axes.widths[0][0]
+        else:
+            binwidth = histo.axes.widths[0][0]
         if style_dict['doDensity']:
             ax.set_ylabel(f'A.U./{binwidth:.3f}')
         else:
@@ -528,9 +559,9 @@ def plot_signal_1D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
     if style_dict['doLogy']:
         ax.set_yscale('log')
 
-    # Plot
-    hep.histplot(histo, yerr=style_dict['doYerr'], density=style_dict['doDensity'], ax=ax, histtype='step', flow=style_dict['flow'], label = label)
-
+    hep.histplot(histo, yerr=style_dict['doYerr'], density=style_dict['doDensity'], ax=ax,
+                 histtype='step', flow=style_dict['flow'], label = label, ls=style_dict['ls'],
+                 color=cmap[cmap_idx])
     plt.legend()
     
     if style_dict['doSave']:
@@ -538,8 +569,9 @@ def plot_signal_1D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
         plt.tight_layout()
         plt.savefig(f"{style_dict['outDir']}/{style_dict['outName']}")
         print(f"Saved: {style_dict['outDir']}/{style_dict['outName']}")
-    
 
+    return histo, cmap[cmap_idx]
+        
 def plot_signal_2D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
     """
     Example:
@@ -574,24 +606,29 @@ def plot_signal_2D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
     fig = style_dict['fig']
     ax = style_dict['ax']
     
-    hep.cms.label('', data=False, year=plot_dict['year'])
+    hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6')
     
     # get signal point info
     si = utils.get_signal_point_dict(sig_histo)
-    samp_df = si[(si.m1 == m1) & (si.delta == delta) & (si.ctau == ctau)]
-    
-    samp = samp_df.name[0]
+    samp_df = si[np.isclose(si.m1, m1) & np.isclose(si.delta, delta) & (si.ctau == ctau)]
 
-    m1 = samp_df.m1[0]
-    dmchi = samp_df.dmchi[0]
-    ctau = samp_df.ctau[0]
+    if samp_df.empty:
+        print(f"No matching sample found for m1={m1}, delta={delta}, ctau={ctau}")
+        print("Similar samples:\n", si[np.isclose(si.m1, m1) & np.isclose(si.delta, delta)].designation, '\n',
+              si[np.isclose(si.m1, m1) & (si.ctau == ctau)].designation)
+        return
+    samp = samp_df.name.iloc[0]
+
+    m1 = samp_df.m1.iloc[0]
+    dmchi = samp_df.dmchi.iloc[0]
+    ctau = samp_df.ctau.iloc[0]
     label = f'({m1}, {dmchi}) GeV, ctau = {int(ctau)}mm'
     
     # get histogram from coffea output
     histo = sig_histo[plot_dict['variable']][{"samp":samp, "cut": plot_dict['cut']}]
-
+    
     # rebinning
-    histo = histo[::style_dict['xrebin'],::style_dict['yrebin']]
+    #histo = histo[::style_dict['xrebin'],::style_dict['yrebin']]
 
     # set x range manually
     if style_dict['xlim'] != None:
@@ -630,6 +667,120 @@ def plot_signal_2D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
         plt.tight_layout()
         plt.savefig(f"{style_dict['outDir']}/{style_dict['outName']}")
         print(f"Saved: {style_dict['outDir']}/{style_dict['outName']}")
+    count = histo.values()
+    edges0 = histo.axes[0].edges
+    edges1 = histo.axes[1].edges
+    return count, edges0, edges1
+
+def plot_signal_2D_match(sig_histo, m1, delta, ctau, plot_dict, style_dict,match_type='L', passID=1):
+    """
+    Example:
+
+    plot_dict = {
+        'variable': 'sel_vtx_vx_vs_vy',
+        'cut': 'cut9',
+        'year': 2018
+    }
+    
+    style_2d_dict = {
+        'fig': fig,
+        'ax': ax,
+        'xrebin': 1j,
+        'yrebin': 1j,
+        'xlim': None,     # if None, the default will show up; otherwise give as a list, i.e. [0, 10]  
+        'ylim': None,     # if None, the default will show up; otherwise give as a list, i.e. [0, 10]
+        'doLogy': False, 
+        'doLogx': False,
+        'doLogz': True,
+        'xlabel': r"$v_{x}$ [cm]",   # if None, the default will show up; otherwise give as a string, i.e. 'Electron dxy'
+        'ylabel': r"$v_{y}$ [cm]",   # if None, the default will show up; otherwise give as a string, i.e. 'Efficiency'
+        'zlabel': 'Events',   
+        'flow': None,     # overflow
+        'doSave': True,
+        'outDir': './plots/',
+        'outName': f'signal_cut7_vx_vs_vy_m1_{m1}_delta_{delta}_ctau_{ctau}.png'
+    }
+
+    """
+
+    fig = style_dict['fig']
+    ax = style_dict['ax']
+    
+    hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6')
+    
+    # get signal point info
+    si = utils.get_signal_point_dict(sig_histo)
+    samp_df = si[np.isclose(si.m1, m1) & np.isclose(si.delta, delta) & (si.ctau == ctau)]
+
+    if samp_df.empty:
+        print(f"No matching sample found for m1={m1}, delta={delta}, ctau={ctau}")
+        print("Similar samples:\n", si[np.isclose(si.m1, m1) & np.isclose(si.delta, delta)].designation, '\n',
+              si[np.isclose(si.m1, m1) & (si.ctau == ctau)].designation)
+        return  
+    samp = samp_df.name[0]
+
+    m1 = samp_df.m1[0]
+    dmchi = samp_df.dmchi[0]
+    ctau = samp_df.ctau[0]
+    label = f'({m1}, {dmchi}) GeV, ctau = {int(ctau)}mm'
+    
+    # get histogram from coffea output
+    histo = sig_histo[plot_dict['variable']][{"samp":samp, "cut": plot_dict['cut']}]
+
+    # Project categorical axes to pt
+    # histo_sel = histo
+    #PART for match "pT" or "vxy" plots
+    if "match_type" in histo.axes.name:
+        histo = histo[{"match_type": match_type}]
+    if "passID" in histo.axes.name:
+        histo = histo[{"passID": passID}]
+
+
+    # rebinning
+    # histo = histo[::style_dict['xrebin'],::style_dict['yrebin']]
+
+    # set x range manually
+    if style_dict['xlim'] != None:
+        xlim = style_dict['xlim']
+        xbin_range = np.where((histo.axes.edges[0] > xlim[0]) & (histo.axes.edges[0] < xlim[1]))[0]
+        histo = histo[ int(xbin_range[0])-1:int(xbin_range[-1]+1), : ]
+    if style_dict['ylim'] != None:
+        ylim = style_dict['ylim']
+        ybin_range = np.where((histo.axes.edges[1] > ylim[0]) & (histo.axes.edges[1] < ylim[1]))[1]
+        histo = histo[ :, int(ybin_range[0]):int(ybin_range[-1]+1) ]
+    
+    # x and y labels
+    if style_dict['xlabel'] != None:
+        ax.set_xlabel(style_dict['xlabel'])
+    if style_dict['ylabel'] != None:
+        ax.set_ylabel(style_dict['ylabel'])
+
+    # x,y scale
+    if style_dict['doLogx']:
+        ax.set_xscale('log')
+    if style_dict['doLogy']:
+        ax.set_yscale('log')
+    
+    # Plot
+    if style_dict['doLogz']:
+        hep.hist2dplot(histo, flow=style_dict['flow'], norm=mpl.colors.LogNorm(), ax=ax, cbarextend=True)
+    else:
+        hep.hist2dplot(histo, flow=style_dict['flow'], ax=ax, cbarextend=True)
+
+    # z label
+    if style_dict['zlabel'] != None:
+        fig.get_axes()[-1].set_ylabel(style_dict['zlabel'])
+    
+    if style_dict['doSave']:
+        os.makedirs(style_dict['outDir'], exist_ok=True)
+        plt.tight_layout()
+        plt.savefig(f"{style_dict['outDir']}/{style_dict['outName']}")
+        print(f"Saved: {style_dict['outDir']}/{style_dict['outName']}")
+
+    count = histo.values()
+    edges0 = histo.axes[0].edges
+    edges1 = histo.axes[1].edges
+    return count, edges0, edges1
 
 
 
@@ -717,7 +868,6 @@ def get_bkg_histo_stacked_1d(bkg_histos, plot_dict, style_dict, processes = 'all
 
 
 
-
 def get_data_histo_1d(data_histo, plot_dict, style_dict):
     runs = list(data_histo['cutflow_cts'].keys())
 
@@ -729,7 +879,6 @@ def get_data_histo_1d(data_histo, plot_dict, style_dict):
                 histo += data_histo[plot_dict['variable']][{"samp":run, "cut": plot_dict['cut']}]
         except:
             print('No run')
-
     # rebinning
     histo = histo[::style_dict['rebin']]
 
@@ -774,8 +923,8 @@ def plot_bkg_1d(bkg_histos, plot_dict, style_dict, isLegacy = False, processes =
     ax = style_dict['ax']
 
     # CMS styling
-    #hep.cms.label(r"$\mathrm{Private Work}$", data=False, year=plot_dict['year'])
-    hep.cms.label('', data=False, year=plot_dict['year'])
+    #hep.cms.label(r"$\mathrm{Private Work}$", data=True, year=plot_dict['year'])
+    hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6')
     
     if isLegacy:
         return plot_bkg_1d_legacy(ax, bkg_histos, plot_dict, style_dict, processes, isLegacy)
@@ -807,6 +956,7 @@ def plot_bkg_1d(bkg_histos, plot_dict, style_dict, isLegacy = False, processes =
         
         # add histos to stack after rebinning and range setting
         for process in sorted_entries.keys():
+
             bkg[plot_dict['variable']][process] = bkg[plot_dict['variable']][process][plot_dict['cut'],::style_dict['rebin']]
         
             # set x range manually
@@ -975,7 +1125,7 @@ def plot_bkg_1d_stacked(bkg_histos, plot_dict, style_dict, isLegacy = False, pro
     fig = style_dict['fig']
     ax = style_dict['ax']
     
-    hep.cms.label('', data=False, year=plot_dict['year'])
+    hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6')
     
     if isLegacy:
         return plot_bkg_1d_stacked_legacy(ax, bkg_histos, plot_dict, style_dict, processes = 'all', isLegacy = isLegacy)
@@ -1154,7 +1304,7 @@ def plot_bkg_2D(bkg_histos, plot_dict, style_dict, isLegacy=False, processes = '
 
     """
     
-    hep.cms.label('', data=False, year=plot_dict['year'])
+    hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6')
 
     fig = style_dict['fig']
     ax = style_dict['ax']
@@ -1309,7 +1459,7 @@ def plot_bkg_2D_legacy(ax, bkg_histos, plot_dict, style_dict, processes = 'all',
 
 def plot_data_1d(data_histo, plot_dict, style_dict):
         
-    #hep.cms.label('', data=False, year=plot_dict['year'])
+    #hep.cms.label('', data=True, year=plot_dict['year'])
 
     fig = style_dict['fig']
     ax = style_dict['ax']
@@ -1402,9 +1552,8 @@ def plot_data_2D(data_histo, plot_dict, style_dict):
     fig = style_dict['fig']
     ax = style_dict['ax']
     
-    #hep.cms.label('', data=True, year=plot_dict['year'])
-    hep.cms.label('', data=False, llabel='Private Work', rlabel='')
-    
+    hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6')
+
     # Get list of data
     runs = list(data_histo['cutflow_cts'].keys())
 
@@ -1455,6 +1604,7 @@ def plot_data_2D(data_histo, plot_dict, style_dict):
         plt.savefig(f"{style_dict['outDir']}/{style_dict['outName']}")
         print(f"Saved: {style_dict['outDir']}/{style_dict['outName']}")
 
+
 def plot_data_MC_ratio(data_histo, bkg_histo, plot_dict, style_dict):
     """
     Plot data and background MC
@@ -1464,6 +1614,7 @@ def plot_data_MC_ratio(data_histo, bkg_histo, plot_dict, style_dict):
     ax = style_dict['ax']
     
     plot_bkg_1d(bkg_histo, plot_dict, style_dict, processes = 'all')
+
     plot_bkg_1d_stacked_errbar(bkg_histo, plot_dict, style_dict, processes = 'all')
     plot_data_1d(data_histo, plot_dict, style_dict)
 
@@ -1584,7 +1735,7 @@ def plot_samples_sigBkg(loader_sig,loader_bkg,hname,selection,samples,labels,out
         plt.xscale('log')
     plt.legend(ncol=ncol_leg,fontsize=legend_fontsize,loc=legend_loc)
     hep.cms.text(heplabel)
-    #hep.cms.label("Simulation", data=False, year=2018)
+    #hep.cms.label("Simulation", data=True, year=2018)
     plt.tight_layout()
     if save:
         os.makedirs(outD,exist_ok=True)
@@ -1721,4 +1872,5 @@ def summedBkgCutflow(loader_bkg,cfname,cut):
     for key,value in cf.items():
         cat = key.split("_")[2]
         output[cat] += value[cut]
+
     return output
