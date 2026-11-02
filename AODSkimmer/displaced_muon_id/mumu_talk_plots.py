@@ -40,6 +40,7 @@ RANK = {2: 0, 0: 1, 1: 2}  # G > I > DSA; types 0 I, 1 O(DSA), 2 G
 TALK = ("Mchi-5p25_dMchi-0p5", "Mchi-55p0_dMchi-10p0")
 TALK_CT = ("10", "100")
 Q_NMIN = 100
+LEG_DY = 0.05  # CMS-style legend row height (NDC)
 EFF_NMIN = 20
 
 
@@ -341,7 +342,7 @@ def plot_cms(args):
             t.DrawLatex(0.19, 0.88 - 0.045 * i, line)
 
     def legend(entries, y2=0.89, x1=0.52):
-        leg = ROOT.TLegend(x1, y2 - 0.05 * len(entries), 0.94, y2); keep.append(leg)
+        leg = ROOT.TLegend(x1, y2 - LEG_DY * len(entries), 0.94, y2); keep.append(leg)
         leg.SetBorderSize(0); leg.SetFillStyle(0); leg.SetTextSize(0.033)
         for o, lab, opt in entries:
             leg.AddEntry(o, lab, opt)
@@ -360,23 +361,57 @@ def plot_cms(args):
         gr.SetLineWidth(2); gr.SetLineStyle(style)
         return gr, edges
 
-    def save(c, name, log=True):
-        c.Modified(); c.SaveAs(str(out / (name + ".png"))); c.SaveAs(str(out / (name + ".pdf")))
+    def save(c, name, log=True, d=None):
+        d = d or out
+        c.Modified(); c.SaveAs(str(d / (name + ".png"))); c.SaveAs(str(d / (name + ".pdf")))
         if args.log and log:
             fr = [p for p in c.GetListOfPrimitives() if p.InheritsFrom("TH1")][0]
             fr.SetMinimum(1e-3); fr.SetMaximum(5); c.SetLogy(1); c.Modified()
-            c.SaveAs(str(out / (name + "_log.png"))); c.SetLogy(0)
+            c.SaveAs(str(d / (name + "_log.png"))); c.SetLogy(0)
 
-    def eff_plot(name, series, slide, v, ytitle, lines=(), x1=0.52):
+    def place(graphs, edges, n_ent, x1, lines):
+        """Smallest y maximum that keeps every point (with its error bars) clear of the in-frame text and of the legend,
+        with the legend either top right or bottom right. Returns (ymax, legend y2)."""
+        pts = []
+        for gr in graphs:
+            for i in range(gr.GetN()):
+                x, y = gr.GetPointX(i), gr.GetPointY(i)
+                pts.append((x - gr.GetErrorXlow(i), x + gr.GetErrorXhigh(i), y - gr.GetErrorYlow(i), y + gr.GetErrorYhigh(i)))
+        if not pts:
+            return 1.05, 0.89
+        fy = lambda ndc: (ndc - 0.13) / 0.79                                   # NDC y -> fraction of the frame height
+        xd = lambda ndc: edges[0] + (ndc - 0.15) / 0.81 * (edges[-1] - edges[0])  # NDC x -> data x
+        text_x = (xd(0.15), xd(0.19 + 0.0135 * max([len(l.replace("#", "")) for l in lines] or [0])))
+        text_f = fy(0.88 - 0.045 * len(lines) - 0.01) if lines else 0.97
+        leg_x = (xd(x1), xd(0.94))
+        over = lambda p, r: p[0] < r[1] and p[1] > r[0]
+        top = lambda p: text_f if lines and over(p, text_x) else 0.97
+        best = None
+        # legend top right
+        lb = fy(0.89 - LEG_DY * n_ent - 0.01)
+        ym = max(p[3] / (min(top(p), lb) if over(p, leg_x) else top(p)) for p in pts)
+        best = (ym, 0.89)
+        # legend bottom right (inside the frame, above the x axis)
+        y2b = 0.16 + LEG_DY * n_ent
+        ym = max(p[3] / top(p) for p in pts)
+        lt = fy(y2b + 0.01)
+        if all(p[2] > lt * ym for p in pts if over(p, leg_x)) and ym < best[0]:
+            best = (ym, y2b)
+        return max(0.1, np.ceil(best[0] * 20) / 20), best[1]
+
+    def eff_plot(name, series, slide, v, ytitle, lines=(), x1=0.52, d=None):
         c = canvas("c_" + name)
         edges = S1_VIEWS[v][1] if slide == 1 else S2_VIEWS[v][1]
-        frame(c, edges, 0, 1.5, xt[v], ytitle)
         ent = []
         for g, k, lab, color, style, marker in series:
             gr, _ = eff_graph(g, slide, k, v, color, style, marker)
-            gr.Draw("P same"); ent.append((gr, lab, "lp"))
-        labels(c, lines); legend(ent, x1=x1)
-        save(c, name)
+            ent.append((gr, lab, "lp"))
+        ymax, y2 = place([e[0] for e in ent], edges, len(ent), x1, lines)
+        frame(c, edges, 0, ymax, xt[v], ytitle)
+        for gr, _, _ in ent:
+            gr.Draw("P same")
+        labels(c, lines); legend(ent, y2=y2, x1=x1)
+        save(c, name, d=d)
 
     def resid_plot(name, cls, v, series, lines=()):
         src, edges = S2_VIEWS[v]
@@ -429,6 +464,16 @@ def plot_cms(args):
                                                   tcol[m], 1 if k == "valid" else 2, 20 if k == "valid" else 24)
                                                  for m in TALK for k in ("matched", "valid")], 2, v, "Event efficiency",
                      lines, x1=0.40)
+    # Lifetime overlay of the extended-Lxy views (user, 2026-11-02): both talk masses at ctau 10 and 100 mm, filled
+    # markers ctau 100, open ctau 10; slide 2 shows the matched-and-vertexed stage only.
+    ov = out / "ctau_overlay"
+    ov.mkdir(exist_ok=True)
+    tsty = {"10": (2, 24), "100": (1, 20)}
+    for slide, k, ytitle, v in ((1, "h", "Muon matching efficiency", "lxy740"), (2, "valid", "Event efficiency", "lxy740")):
+        eff_plot("ctau10_100_s%d_%s" % (slide, v),
+                 [("sample_%s_ctau-%s" % (m, tau), k, "%s, c#tau = %s mm" % (mass_label(m), tau), tcol[m], tsty[tau][0], tsty[tau][1])
+                  for m in TALK for tau in TALK_CT], slide, v, ytitle,
+                 ["Matched and vertexed"] if slide == 2 else [], x1=0.36, d=ov)
     print("CMS-style plots written to", out)
 
 
