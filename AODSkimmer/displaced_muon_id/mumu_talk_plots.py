@@ -392,7 +392,7 @@ def plot_cms(args):
         ent = []
         x = 0.5 * (edges[1:] + edges[:-1]); w = 0.5 * (edges[1:] - edges[:-1])
         for q, (ids, lab, color) in zip(qs, series):
-            band, med = ROOT.TGraphAsymmErrors(), ROOT.TGraph(); keep += [band, med]
+            band, med = ROOT.TGraphAsymmErrors(), ROOT.TGraph(); keep.extend([band, med])
             for i in np.flatnonzero(np.isfinite(q[0])):
                 n = band.GetN(); band.SetPoint(n, x[i], q[0, i]); band.SetPointError(n, w[i], w[i], q[0, i] - q[1, i], q[2, i] - q[0, i])
                 med.SetPoint(med.GetN(), x[i], q[0, i])
