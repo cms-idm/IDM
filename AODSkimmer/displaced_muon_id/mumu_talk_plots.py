@@ -206,7 +206,7 @@ def plot(args):
             fig.savefig(path.with_suffix(".pdf"))
         if args.log and logy:
             for ax in fig.axes:
-                ax.set_yscale("log")
+                ax.set_yscale("log"); ax.set_ylim(1e-3, 1.1)  # efficiencies only; the linear y floor of 0 is not loggable
             fig.savefig(path.with_name(path.stem + "_log.png"), dpi=130)
         plt.close(fig)
 
