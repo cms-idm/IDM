@@ -1,45 +1,58 @@
 #!/usr/bin/env python3
-"""CMS-style PyROOT plotting helpers: the plot choices used for the 2026-11-02 mumu talk plots (mumu_talk_plots.py
-plot-cms, plot-cms-pt, plot-2d-all), kept in one place so any agent reproduces them.
+"""CMS-style PyROOT plotting helpers for any saved 1D/2D histogram: distributions, efficiencies/fractions, 2D maps.
+The defaults are the user's choices of 2026-11-02 (mumu_talk_plots.py plot-cms, plot-cms-pt, plot-2d-all); every
+year/campaign/label-specific piece is a parameter.
 
-Style only: no event loops, selections, normalization or rebinning. Inputs are saved histograms: anything with UHI
-axes/values()/variances() (hist, boost-histogram, uproot TH1) or a ROOT TH1; bin variances of a TH1 are
-GetBinError()**2 (ROOT's convention, Poisson when no Sumw2 is stored). Run with PyROOT (cmsenv on LPC).
+Style only: no event loops, selections or rebinning; nothing is written back to the inputs. Inputs: anything with UHI
+axes/values()/variances() (hist, boost-histogram, uproot TH1) or a ROOT TH1; TH1 variances are GetBinError()**2
+(ROOT's convention). Run with PyROOT (cmsenv on LPC).
 
-Choices kept:
-* Header "CMS" (bold) + "Simulation Private Work" (italic) at left, "2022EE (13.6 TeV)" at right; no other text
-  beyond short context lines (population, c#tau, mass point).
-* Okabe-Ito colors; for efficiency stages "matched" = open marker 24 dashed, "matched and vertexed" = filled 20 solid.
-* Efficiencies: raw counts, central Clopper-Pearson 68.3% bars, bins with den < min_den (default 20) not drawn.
-* Two 1D layouts:
-  "frame" (plot-cms): legend inside the frame, top or bottom right, y max fitted to the points and text
-    (no empty space above the data);
-  "band" (plot-cms-pt): wider canvas, color key (groups) and stage key above the frame, fixed y max (1.05).
-* Linear PNG + PDF; log=True adds a log-y PNG copy (1e-3 .. 5), never replacing the linear plot.
-* 2D maps: COLZ, viridis, efficiency z in [0, 1], optional red outer border around low-count bins.
+Defaults (change per plot, or globally with setup(era=..., status=...)):
+* Header: "CMS" bold + STYLE["status"] italic at left, STYLE["era"] at right; context lines are short and top left.
+* Colors: Okabe-Ito (COLORS, or BLUE, ORANGE, ...). Two-stage overlays: OPEN_DASHED (open 24, dashed) for the looser
+  stage, FILLED_SOLID (filled 20, solid) for the tighter one (MATCHED / VERTEXED are the same styles).
+* Efficiencies/fractions (eff_graph): raw counts, central Clopper-Pearson 68.3% bars, bins with den < 20 not drawn.
+* Distributions (hist_graph): points with stored errors, or step=True for an outline; norm=True draws a copy whose
+  bin contents sum to 1 (over all normal bins, flow excluded, not divided by bin width: "Fraction of events / bin");
+  the stored histogram is never changed.
+* 1D layouts: "frame" = legend inside the frame (top or bottom right), y max fitted so there is no empty space above
+  the data; "band" = color key (groups) and style key (stages) above the frame, for group x stage overlays.
+* Linear PNG + PDF; log=True adds a _log.png copy (points <= 0 left out), never replacing the linear plot.
+* 2D (map2d): COLZ, viridis, optional red outer border around flagged (e.g. low-count) bins.
 
-Example (efficiency, frame layout):
+Examples:
     import cms_style as cs
-    cs.setup()
-    s = [cs.eff_graph(f["matched"], f["den"], cs.BLUE, *cs.MATCHED), cs.eff_graph(f["valid"], f["den"], cs.ORANGE, *cs.VERTEXED)]
-    cs.plot("out/overall_lxy", s, ["Both muons matched", "Matched and vertexed"], "Gen L_{xy} [cm]", "Event efficiency",
+    cs.setup(era="2022EE (13.6 TeV)", status="Simulation Private Work")
+    # efficiency, frame layout
+    s = [cs.eff_graph(f["matched"], f["den"], cs.BLUE, 1, 21), cs.eff_graph(f["valid"], f["den"], cs.ORANGE, 1, 20)]
+    cs.plot("out/eff_lxy", s, ["Both muons matched", "Matched and vertexed"], "Gen L_{xy} [cm]", "Event efficiency",
             lines=["Both signal muons accepted"])
-Band layout: cs.plot(..., layout="band", groups={"5.25 / 0.5": cs.BLUE, ...}, stages={"Matched": cs.MATCHED, ...},
-group_header="m_{#chi} / #Deltam [GeV]") draws the two keys instead of per-series labels.
+    # distributions, unnormalized and unit-area copies
+    for norm, yt in ((False, "Muons / 1 GeV"), (True, "Fraction of muons / 1 GeV")):
+        s = [cs.hist_graph(h, c, step=True, norm=norm) for h, c in zip(hists, cs.COLORS)]
+        cs.plot("out/pt" + ("_norm" if norm else ""), s, labels, "Muon p_{T} [GeV]", yt)
+    # groups x stages, band layout
+    cs.plot(..., labels=None, layout="band", groups={"5.25 / 0.5": cs.BLUE, "55.0 / 10.0": cs.ORANGE},
+            stages={"Matched": cs.OPEN_DASHED, "Matched and vertexed": cs.FILLED_SOLID}, group_header="m_{#chi} / #Deltam [GeV]")
 """
 from pathlib import Path
+import math
 import numpy as np
 import ROOT
 
-BLUE, ORANGE, GREEN, YELLOW, BLACK = "#0072B2", "#D55E00", "#009E73", "#E69F00", "#000000"
-MATCHED, VERTEXED = (2, 24), (1, 20)  # (line style, marker style)
-MIN_DEN = 20
+BLUE, ORANGE, GREEN, YELLOW, SKY, PURPLE, BLACK = "#0072B2", "#D55E00", "#009E73", "#E69F00", "#56B4E9", "#CC79A7", "#000000"
+COLORS = (BLUE, ORANGE, GREEN, YELLOW, SKY, PURPLE, BLACK)
+OPEN_DASHED, FILLED_SOLID = (2, 24), (1, 20)  # (line style, marker style)
+MATCHED, VERTEXED = OPEN_DASHED, FILLED_SOLID
+STYLE = {"era": "2022EE (13.6 TeV)", "status": "Simulation Private Work", "min_den": 20, "level": 0.6827}
 LEG_DY = 0.05
-_keep = []  # PyROOT objects must outlive SaveAs
-_xrange = {}  # id(graph) -> (first, last) bin edge of its histogram, the default x range
+_keep = []    # PyROOT objects must outlive SaveAs
+_info = {}    # id(graph) -> (x range of its histogram, draw option, legend option, kind "eff" or "hist")
 
 
-def setup():
+def setup(**style):
+    """Global ROOT style; keyword arguments override STYLE (era, status, min_den, level)."""
+    STYLE.update(style)
     ROOT.gROOT.SetBatch(True)
     ROOT.gStyle.SetOptStat(0); ROOT.gStyle.SetOptTitle(0)
     ROOT.gStyle.SetTextFont(42); ROOT.gStyle.SetLabelFont(42, "XYZ"); ROOT.gStyle.SetTitleFont(42, "XYZ")
@@ -60,8 +73,8 @@ def arrays(h):
     return edges, np.asarray(h.values(), float), None if var is None else np.asarray(var, float)
 
 
-def _style(gr, color, line, marker, edges):
-    _xrange[id(gr)] = (edges[0], edges[-1])
+def _style(gr, color, line, marker, edges, opt="P", legopt="lp", kind="hist"):
+    _info[id(gr)] = ((edges[0], edges[-1]), opt, legopt, kind)
     c = ROOT.TColor.GetColor(color)
     gr.SetLineColor(c); gr.SetMarkerColor(c); gr.SetLineStyle(line); gr.SetMarkerStyle(marker)
     gr.SetLineWidth(2); gr.SetMarkerSize(1.0)
@@ -69,8 +82,11 @@ def _style(gr, color, line, marker, edges):
     return gr
 
 
-def eff_graph(num, den, color, line=1, marker=20, min_den=MIN_DEN, level=0.6827):
-    """num/den per bin with central Clopper-Pearson bars; raw unweighted counts required."""
+def eff_graph(num, den, color, line=1, marker=20, min_den=None, level=None):
+    """num/den per bin (efficiency, acceptance, fraction) with central Clopper-Pearson bars; raw unweighted counts
+    (Poisson variances) required; bins with den < min_den are not drawn."""
+    min_den = STYLE["min_den"] if min_den is None else min_den
+    level = STYLE["level"] if level is None else level
     e, k, vk = arrays(num)
     e2, n, vn = arrays(den)
     poisson = all(v is None or np.allclose(v, x) for v, x in ((vk, k), (vn, n)))  # weighted fills fail this
@@ -82,13 +98,25 @@ def eff_graph(num, den, color, line=1, marker=20, min_den=MIN_DEN, level=0.6827)
         lo = ROOT.TEfficiency.ClopperPearson(int(n[i]), int(k[i]), level, False)
         hi = ROOT.TEfficiency.ClopperPearson(int(n[i]), int(k[i]), level, True)
         j = gr.GetN(); gr.SetPoint(j, x, r); gr.SetPointError(j, w, w, r - lo, hi - r)
-    return _style(gr, color, line, marker, e)
+    return _style(gr, color, line, marker, e, kind="eff")
 
 
-def hist_graph(h, color, line=1, marker=20):
-    """Distribution as points with stored errors (none if the provider reports variances=None); contents unchanged."""
+def hist_graph(h, color, line=1, marker=20, step=False, norm=False, errors=True):
+    """Distribution: points with stored errors (none if the provider reports variances=None), or step=True for an
+    outline without errors. norm=True draws contents and errors divided by the sum of all normal bins (flow excluded,
+    also bins later cropped by xlim; no division by bin width); say so in the y title. The input is not modified."""
     e, v, var = arrays(h)
-    err = np.zeros_like(v) if var is None else np.sqrt(var)
+    err = np.zeros_like(v) if var is None or not errors else np.sqrt(var)
+    if norm:
+        s = v.sum()
+        if s <= 0:
+            raise ValueError("norm=True needs a positive sum of the normal bins")
+        v, err = v / s, err / s
+    if step:
+        gr = ROOT.TGraphAsymmErrors()  # same interface as the other series (zero errors)
+        for i in range(len(v)):
+            gr.SetPoint(gr.GetN(), e[i], v[i]); gr.SetPoint(gr.GetN(), e[i + 1], v[i])
+        return _style(gr, color, line, marker, e, opt="L", legopt="l")
     gr = ROOT.TGraphAsymmErrors()
     for i in range(len(v)):
         w = 0.5 * (e[i + 1] - e[i])
@@ -112,17 +140,23 @@ def frame(c, xlo, xhi, ylo, yhi, xtitle, ytitle):
     return h
 
 
-def labels(c, lines=(), band=False, x0=0.15, era="2022EE (13.6 TeV)", status="Simulation Private Work", xr=0.96):
-    """Header plus context lines (top left inside the frame; in the band above it for the band layout)."""
+def header(c, x0, y, sizes, xr):
+    """CMS + status at left, era at right (NDC)."""
     c.cd()
     t = ROOT.TLatex(); t.SetNDC(); _keep.append(t)
+    t.SetTextFont(61); t.SetTextSize(sizes[0]); t.SetTextAlign(11); t.DrawLatex(x0, y, "CMS")
+    t.SetTextFont(52); t.SetTextSize(sizes[1]); t.DrawLatex(x0 + 0.105, y, STYLE["status"])
+    t.SetTextFont(42); t.SetTextAlign(31); t.DrawLatex(xr, y, STYLE["era"])
+    return t
+
+
+def context(c, lines=(), band=False):
+    """Header plus context lines (top left inside the frame; in the band above it for the band layout)."""
     y, big, small, txt, y0, dy = (0.95, 0.04, 0.031, 0.028, 0.90, 0.04) if band else (0.94, 0.05, 0.038, 0.035, 0.88, 0.045)
-    t.SetTextFont(61); t.SetTextSize(big); t.SetTextAlign(11); t.DrawLatex(x0, y, "CMS")
-    t.SetTextFont(52); t.SetTextSize(small); t.DrawLatex(x0 + 0.105, y, status)
-    t.SetTextFont(42); t.SetTextAlign(31); t.DrawLatex(xr, y, era)
+    t = header(c, 0.15, y, (big, small), 0.96)
     t.SetTextSize(txt); t.SetTextAlign(13)
     for i, line in enumerate(lines):
-        t.DrawLatex(x0 + 0.04, y0 - dy * i, line)
+        t.DrawLatex(0.19, y0 - dy * i, line)
 
 
 def legend(entries, y2=0.89, x1=0.52, header=None, x2=0.94, ncol=1, size=0.033, y1=None):
@@ -138,13 +172,25 @@ def legend(entries, y2=0.89, x1=0.52, header=None, x2=0.94, ncol=1, size=0.033, 
     return leg
 
 
+def _points(graphs):
+    return [(gr.GetPointX(i) - gr.GetErrorXlow(i), gr.GetPointX(i) + gr.GetErrorXhigh(i),
+             gr.GetPointY(i) - gr.GetErrorYlow(i), gr.GetPointY(i) + gr.GetErrorYhigh(i))
+            for gr in graphs for i in range(gr.GetN())]
+
+
+def _round_up(y):
+    """0.05 steps on the efficiency scale (0.1-2, as on 2026-11-02); otherwise 5% of the leading decade."""
+    if 0.1 <= y <= 2:
+        return math.ceil(y * 20 - 1e-9) / 20
+    m = 10 ** math.floor(math.log10(y))
+    return math.ceil(y / m * 20 - 1e-9) / 20 * m
+
+
 def fit_ymax(graphs, xlo, xhi, n_leg, x1, lines):
-    """plot-cms placement: smallest y max (in 0.05 steps) keeping every point and its bars clear of the context lines
-    and of the legend, with the legend top right or bottom right. Returns (ymax, legend y2)."""
-    pts = [(gr.GetPointX(i) - gr.GetErrorXlow(i), gr.GetPointX(i) + gr.GetErrorXhigh(i),
-            gr.GetPointY(i) - gr.GetErrorYlow(i), gr.GetPointY(i) + gr.GetErrorYhigh(i))
-           for gr in graphs for i in range(gr.GetN())]
-    if not pts:
+    """frame layout (plot-cms): smallest y max keeping every point and its bars clear of the context lines and of the
+    legend, with the legend top right or bottom right; y min is 0. Returns (ymax, legend y2)."""
+    pts = [p for p in _points(graphs) if p[1] >= xlo and p[0] <= xhi]
+    if not pts or max(p[3] for p in pts) <= 0:
         return 1.05, 0.89
     fy = lambda ndc: (ndc - 0.13) / 0.79
     xd = lambda ndc: xlo + (ndc - 0.15) / 0.81 * (xhi - xlo)
@@ -159,7 +205,7 @@ def fit_ymax(graphs, xlo, xhi, n_leg, x1, lines):
     ym = max(p[3] / top(p) for p in pts)
     if all(p[2] > fy(y2b + 0.01) * ym for p in pts if over(p, leg_x)) and ym < best[0]:
         best = (ym, y2b)
-    return max(0.1, np.ceil(best[0] * 20) / 20), best[1]
+    return _round_up(best[0]), best[1]
 
 
 def _proxy(color, line, marker):
@@ -175,63 +221,94 @@ def split_keys(groups, stages, group_header=None):
     if groups:
         legend([(_proxy(col, 1, 20), lab, "l") for lab, col in groups.items()], y2=0.915, y1=0.79, x1=0.60,
                header=group_header, size=0.028)
-    legend([(_proxy(BLACK, ls, ms), lab, "lp") for lab, (ls, ms) in stages.items()], y2=0.775, y1=0.72, x1=0.19,
-           ncol=2, size=0.028)
+    if stages:
+        legend([(_proxy(BLACK, ls, ms), lab, "lp") for lab, (ls, ms) in stages.items()], y2=0.775, y1=0.72, x1=0.19,
+               ncol=2, size=0.028)
 
 
-def save(c, base, pdf=True, log=False):
+def save(c, base, pdf=True, log=False, logy=None):
+    """PNG (+ PDF); log=True adds base_log.png with points <= 0 left out, then restores the linear canvas.
+    logy = (min, max) of the log copy; default 1e-3..5 when every series is an eff_graph, else from the data."""
     base = Path(base); base.parent.mkdir(parents=True, exist_ok=True)
     c.Modified(); c.SaveAs(str(base) + ".png")
     if pdf:
         c.SaveAs(str(base) + ".pdf")
-    if log:  # extra copy; points with y <= 0 are left out (ROOT would pin them to the axis floor)
-        prims = list(c.GetListOfPrimitives())
-        fr = [p for p in prims if p.InheritsFrom("TH1")][0]
-        lin = (fr.GetMinimum(), fr.GetMaximum())
-        graphs, clones = [p for p in prims if p.InheritsFrom("TGraph")], []
-        for g in graphs:
-            c.GetListOfPrimitives().Remove(g)
-            pos = g.Clone(); _keep.append(pos); clones.append(pos)
-            for i in range(pos.GetN() - 1, -1, -1):
-                if pos.GetPointY(i) <= 0:
+    if not log:
+        return
+    prims = list(c.GetListOfPrimitives())
+    fr = [p for p in prims if p.InheritsFrom("TH1")][0]
+    lin = (fr.GetMinimum(), fr.GetMaximum())
+    graphs, clones = [p for p in prims if p.InheritsFrom("TGraph")], []
+    for g in graphs:
+        c.GetListOfPrimitives().Remove(g)
+        pos = g.Clone(); _keep.append(pos); clones.append(pos)
+        step = _info.get(id(g), (0, "P"))[1] == "L"
+        for i in range(pos.GetN() - 1, -1, -1):
+            if pos.GetPointY(i) <= 0:
+                if step:   # outline drops below the frame instead of bridging empty bins
+                    pos.SetPoint(i, pos.GetPointX(i), 1e-300)
+                else:
                     pos.RemovePoint(i)
-            pos.Draw("P same")
-        fr.SetMinimum(1e-3); fr.SetMaximum(5); c.SetLogy(1); c.Modified()
-        c.SaveAs(str(base) + "_log.png")
-        for pos, g in zip(clones, graphs):  # restore the linear canvas
-            c.GetListOfPrimitives().Remove(pos); g.Draw("P same")
-        fr.SetMinimum(lin[0]); fr.SetMaximum(lin[1]); c.SetLogy(0); c.Modified()
+        pos.Draw(_info.get(id(g), (None, "P"))[1] + " same")
+    if logy is None:
+        ys = [p for p in _points(clones) if p[3] > 1e-299]
+        hi = max([p[3] for p in ys] or [1])
+        if all(_info.get(id(g), (0, 0, 0, "hist"))[3] == "eff" for g in graphs):
+            logy = (1e-3, 5)
+        else:
+            pos_lo = [p[2] if p[2] > 0 else (p[2] + p[3]) / 2 for p in ys if p[3] > 0]
+            logy = (max(min(pos_lo) / 2, hi * 1e-7), hi * 50) if pos_lo else (1e-3, 1)  # nothing positive: empty copy
+    fr.SetMinimum(logy[0]); fr.SetMaximum(logy[1]); c.SetLogy(1); c.Modified()
+    c.SaveAs(str(base) + "_log.png")
+    for pos, g in zip(clones, graphs):  # restore the linear canvas
+        c.GetListOfPrimitives().Remove(pos); g.Draw(_info.get(id(g), (None, "P"))[1] + " same")
+    fr.SetMinimum(lin[0]); fr.SetMaximum(lin[1]); c.SetLogy(0); c.Modified()
 
 
-def plot(base, graphs, labels_, xtitle, ytitle, lines=(), layout="frame", xlim=None, ymax=None, x1=0.52, header=None,
-         groups=None, stages=None, group_header=None, pdf=True, log=False):
-    """One 1D overlay. frame: labels_ are per-series legend labels, y max fitted unless given. band: groups/stages keys,
-    y max 1.05 unless given. x range: the full binning unless xlim (display crop only) is given."""
+def plot(base, graphs, labels, xtitle, ytitle, lines=(), layout="frame", xlim=None, ylim=None, x1=0.52, header=None,
+         groups=None, stages=None, group_header=None, pdf=True, log=False, logy=None):
+    """One 1D overlay of graphs from eff_graph / hist_graph.
+    frame: labels are per-series legend labels (header optional); y range fitted unless ylim=(min, max) is given.
+    band: groups/stages keys (labels unused); y max 1.05 for values in [0, 1.05], else fitted with 10% headroom.
+    x range: the full binning unless xlim (display crop only). y min: 0, unless points go negative (then fitted)."""
     band = layout == "band"
     c = canvas("c_" + Path(base).name, band)
-    if xlim is None:  # full stored binning
-        xlim = (min(_xrange[id(g)][0] for g in graphs), max(_xrange[id(g)][1] for g in graphs))
+    if xlim is None:
+        xlim = (min(_info[id(g)][0][0] for g in graphs), max(_info[id(g)][0][1] for g in graphs))
+    pts = [p for p in _points(graphs) if p[1] >= xlim[0] and p[0] <= xlim[1]]
+    lo = min([p[2] for p in pts] or [0])
     y2 = 0.89
-    if ymax is None:
-        ymax, y2 = (1.05, None) if band else fit_ymax(graphs, xlim[0], xlim[1], len(graphs) + bool(header), x1, lines)
-    frame(c, xlim[0], xlim[1], 0, ymax, xtitle, ytitle)
+    if ylim is None:
+        hi = max([p[3] for p in pts] or [1])
+        if lo < 0:      # signed contents: simple symmetric headroom, legend top right
+            pad = 0.1 * ((hi - lo) or abs(lo))
+            ylim = (lo - pad, hi + 3 * pad)
+        elif band:
+            ylim = (0, 1.05 if hi <= 1.05 else _round_up(1.1 * hi))
+        else:
+            ymax, y2 = fit_ymax(graphs, xlim[0], xlim[1], len(graphs) + bool(header), x1, lines)
+            ylim = (0, ymax)
+    frame(c, xlim[0], xlim[1], ylim[0], ylim[1], xtitle, ytitle)
     c.Update()
     for g in graphs:
-        g.Draw("P same")
-    labels(c, lines, band)
+        g.Draw(_info.get(id(g), (None, "P"))[1] + " same")
+    context(c, lines, band)
     if band:
         split_keys(groups or {}, stages or {}, group_header)
     else:
-        legend([(g, lab, "lp") for g, lab in zip(graphs, labels_)], y2=y2, x1=x1, header=header)
-    save(c, base, pdf, log)
+        legend([(g, lab, _info.get(id(g), (None, None, "lp"))[2]) for g, lab in zip(graphs, labels)],
+               y2=y2, x1=x1, header=header)
+    save(c, base, pdf, log, logy)
     return c
 
 
-def map2d(base, h, xtitle, ytitle, ztitle, lines=(), zrange=None, low=None, pdf=True):
-    """TH2 as COLZ (bins with content 0 are not drawn; set efficiency 0 to 1e-9 to draw it). low: optional 2D bool
-    array [nx+2, ny+2] of bins to outline in red; only their outer border (edges not shared with another low bin)."""
+
+def map2d(base, h, xtitle, ytitle, ztitle, lines=(), zrange=None, low=None, pdf=True, logz=False):
+    """TH2 as COLZ (bins with content 0 are not drawn; set a real 0 to 1e-9 to draw it). low: optional bool array
+    [nx+2, ny+2] of bins to outline in red, outer border only (edges not shared with another flagged bin)."""
     c = ROOT.TCanvas("c_" + Path(base).name, "", 800, 700); _keep.append(c)
     c.SetLeftMargin(0.13); c.SetRightMargin(0.17); c.SetTopMargin(0.08); c.SetBottomMargin(0.13)
+    c.SetLogz(int(logz))
     h.GetXaxis().SetTitle(xtitle); h.GetYaxis().SetTitle(ytitle); h.GetZaxis().SetTitle(ztitle)
     for ax in (h.GetXaxis(), h.GetYaxis(), h.GetZaxis()):
         ax.SetTitleSize(0.045); ax.SetLabelSize(0.038)
@@ -247,10 +324,7 @@ def map2d(base, h, xtitle, ytitle, ztitle, lines=(), zrange=None, low=None, pdf=
                             ((i, j - 1), (x0, y0, x1, y0)), ((i, j + 1), (x0, y1, x1, y1))):
                 if not low[nb]:
                     ln = ROOT.TLine(*seg); ln.SetLineColor(ROOT.kRed); ln.SetLineWidth(2); ln.Draw(); _keep.append(ln)
-    t = ROOT.TLatex(); t.SetNDC(); _keep.append(t)
-    t.SetTextFont(61); t.SetTextSize(0.05); t.SetTextAlign(11); t.DrawLatex(0.13, 0.94, "CMS")
-    t.SetTextFont(52); t.SetTextSize(0.038); t.DrawLatex(0.235, 0.94, "Simulation Private Work")
-    t.SetTextFont(42); t.SetTextAlign(31); t.DrawLatex(0.83, 0.94, "2022EE (13.6 TeV)")
+    t = header(c, 0.13, 0.94, (0.05, 0.038), 0.83)
     t.SetTextSize(0.035); t.SetTextAlign(33)
     for k, line in enumerate(lines):
         t.DrawLatex(0.80, 0.89 - 0.045 * k, line)
