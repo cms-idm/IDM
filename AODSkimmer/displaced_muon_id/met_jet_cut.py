@@ -25,15 +25,20 @@ import numpy as np
 MET_CUT, JET_PT_CUT, JET_ETA_CUT = 80., 80., 2.4
 
 
-def scan_sample(job):
+COLUMNS = ["run", "lumi", "event", "pfMet", "pfMetPhi", "nJet", "jetPt", "jetEta", "jetPhi"]
+CHUNK_FILES = 20  # FWLite virtual memory grows ~270 MB per looped file and is not released; ulimit -v is 16 GB
+
+
+def scan_chunk(job):
+    """Scan a chunk of one sample's files in a fresh process; returns the columns and per-file event counts."""
     import ROOT
     ROOT.gROOT.SetBatch(True)
     ROOT.gSystem.Load("libFWCoreFWLite")
     ROOT.FWLiteEnabler.enable()
     from DataFormats.FWLite import Events, Handle
-    sample, files, outdir = job
+    sample, files = job
     hm, hj = Handle("std::vector<pat::MET>"), Handle("std::vector<pat::Jet>")
-    cols = {k: [] for k in ["run", "lumi", "event", "pfMet", "pfMetPhi", "nJet", "jetPt", "jetEta", "jetPhi"]}
+    cols = {k: [] for k in COLUMNS}
     processed = []
     try:
         for filename in files:
@@ -61,42 +66,49 @@ def scan_sample(job):
             if seen != expected or seen == 0:
                 raise RuntimeError("Incomplete/empty input: %s: %d/%d" % (filename, seen, expected))
             processed.append((filename, seen))
-        import uproot
-        out = Path(outdir) / (sample + ".root")
-        if out.exists():
-            raise RuntimeError("Refusing to overwrite " + str(out))
-        tree = {k: np.asarray(v, dtype=np.int64 if k in ("run", "lumi", "event", "nJet") else np.float64)
-                for k, v in cols.items()}
-        with uproot.recreate(out) as f:
-            f["scan"] = tree
-            f["inputs"] = "\n".join("%s\t%d" % p for p in processed)
-        return sample, processed, None
+        arrays = {k: np.asarray(v, dtype=np.int64 if k in ("run", "lumi", "event", "nJet") else np.float64)
+                  for k, v in cols.items()}
+        return sample, arrays, processed, None
     except Exception:
-        return sample, processed, traceback.format_exc()
+        return sample, None, processed, traceback.format_exc()
 
 
 def scan(args):
+    import uproot
     outdir = Path(args.out_dir)
     outdir.mkdir(parents=True, exist_ok=True)
-    jobs = []
+    samples, jobs = {}, []
     for flist in sorted(Path(args.flist_dir).glob("*.txt")):
         files = [l.strip() for l in flist.read_text().splitlines() if l.strip() and not l.lstrip().startswith("#")]
-        jobs.append((flist.stem, files, str(outdir)))
+        samples[flist.stem] = files
+        jobs += [(flist.stem, files[i:i + CHUNK_FILES]) for i in range(0, len(files), CHUNK_FILES)]
     start = time.monotonic()
-    # One sample per worker process: FWLite memory grows across samples in one process (bad_alloc after ~4).
+    # Each chunk in a fresh worker process (see CHUNK_FILES).
     with multiprocessing.Pool(args.workers, maxtasksperchild=1) as pool:
-        res = pool.map(scan_sample, jobs, chunksize=1)
-    for (sample, files, _), r in zip(jobs, res):
-        ok = not r[2] and [f for f, _ in r[1]] == files
-        print("SAMPLE %s files=%d/%d events=%d %s" % (sample, len(r[1]), len(files), sum(n for _, n in r[1]),
+        res = pool.map(scan_chunk, jobs, chunksize=1)
+    failed, total = [], 0
+    for sample, files in samples.items():
+        chunks = [r for r in res if r[0] == sample]  # pool.map keeps job order, so chunks are in file order
+        processed = [p for r in chunks for p in r[2]]
+        errors = [r[3] for r in chunks if r[3]]
+        ok = not errors and [f for f, _ in processed] == files
+        print("SAMPLE %s files=%d/%d events=%d %s" % (sample, len(processed), len(files), sum(n for _, n in processed),
                                                        "OK" if ok else "FAIL"), flush=True)
-        if r[2]:
-            print(r[2], flush=True)
-    failed = [r[0] for (s, files, _), r in zip(jobs, res) if r[2] or [f for f, _ in r[1]] != files]
+        for e in errors:
+            print(e, flush=True)
+        if not ok:
+            failed.append(sample)
+            continue
+        out = outdir / (sample + ".root")
+        if out.exists():
+            raise RuntimeError("Refusing to overwrite " + str(out))
+        with uproot.recreate(out) as f:
+            f["scan"] = {k: np.concatenate([r[1][k] for r in chunks]) for k in COLUMNS}
+            f["inputs"] = "\n".join("%s\t%d" % p for p in processed)
+        total += sum(n for _, n in processed)
     if failed:
         raise RuntimeError("Failed samples: %r" % failed)
-    print("SCAN COMPLETE samples=%d events=%d elapsed=%.1fs" % (len(res), sum(n for r in res for _, n in r[1]),
-                                                                time.monotonic() - start))
+    print("SCAN COMPLETE samples=%d events=%d elapsed=%.1fs" % (len(samples), total, time.monotonic() - start))
 
 
 def keyed(arrays, what):
