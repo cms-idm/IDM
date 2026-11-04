@@ -303,7 +303,7 @@ def main():
                 if not pts:
                     zero.setdefault(g, set()).add(tag)
                 series[tag] = pts
-            lines = ["Background: " + bkg_label[g], FOM_LINE]
+            lines = [("Background: " + bkg_label[g]) if g != "overall" else BKG_POP, FOM_LINE]
             if not series["cut"] or not series["uncut"]:
                 lines.append("No background events survive the %s selection" % ("cut" if not series["cut"] else "uncut"))
             gr, labs = [], []
