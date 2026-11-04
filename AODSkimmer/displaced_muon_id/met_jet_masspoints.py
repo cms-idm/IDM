@@ -251,7 +251,7 @@ def plot(args):
             for k in masses}
     groups = {"%g GeV" % m: colors[i] for i, m in enumerate(fam)}
     keys = dict(zip(M_KEYS, styles))
-    BKGS = [("overall", "bkg_all", "All %d" % n_bkg)] + [("group/" + g, "bkg_" + g, g) for g in GROUPS]
+    BKGS = [("overall", "bkg_all", "all %d" % n_bkg)] + [("group/" + g, "bkg_" + g, g) for g in GROUPS]
     sl = {"selected": 7, "cut": 8}
     nall = {("signal", k): sig[k][0] for k in masses}
     nall.update({("background", b): bkg[b][0] for b, _, _ in BKGS})
@@ -283,7 +283,13 @@ def plot(args):
         c = cs.canvas("c_" + str(base).replace("/", "_"), band=True)
         c.SetTopMargin(top)
         hi = max([p[3] for p in cs._points(graphs)] or [1])
-        cs.frame(c, xr[0], xr[1], 0, cs._round_up(1.1 * hi), xtitle, ytitle)
+        ymax = cs._round_up(1.1 * hi)
+        if ymax < 0.1:  # 5-character tick labels: room for the y title (as met_jet_plots.py)
+            c.SetLeftMargin(0.19)
+        fr = cs.frame(c, xr[0], xr[1], 0, ymax, xtitle, ytitle)
+        if ymax < 0.1:
+            fr.GetYaxis().SetTitleOffset(1.75)
+        fr.GetYaxis().SetTitleSize(0.045)
         c.Update()
         for g in graphs:
             g.Draw(cs._info[id(g)][1] + " same")
@@ -341,7 +347,7 @@ def plot(args):
         for tag in TAGS:
             for b, name, lab in BKGS:
                 for mode, sfx, yt in (("raw", "", "Pairs / "), ("norm", "_norm", "Fraction of pairs / "),
-                                      ("frac", "_frac", "Pairs / all events, per ")):
+                                      ("frac", "_frac", "Pairs per event / ")):
                     gr = [graph("signal/%s/%s/%s" % (k, tag, view), nall[("signal", k)], look[k][0], look[k][1], mode)
                           for k in masses]
                     gr.append(graph("background/%s/%s/%s" % (b, tag, view), nall[("background", b)], cs.BLACK, (1, 21), mode))
@@ -391,14 +397,13 @@ def plot(args):
                             r = fom(cs_[i], ns, cb[i], nb_) if cs_[i] > 0 else None
                             if r:
                                 j = g.GetN()
-                                g.SetPoint(j, x, r[0]); g.SetPointError(j, 0, 0, min(r[2], r[0]), r[1])
-                        cs._style(g, look[k][0], look[k][1][0], look[k][1][1], [edges[0], edges[-1]], opt="LP")
-                        g.SetMarkerSize(0.4)
+                                g.SetPoint(j, x, r[0]); g.SetPointError(j, 0, 0, 0, 0)  # lines only; legible with six curves
+                        cs._style(g, look[k][0], look[k][1][0], look[k][1][1], [edges[0], edges[-1]], opt="L")
                         gr.append(g)
                         curves[(b, k)] = (cs_, cb, ns, nb_)
                     band_plot(out / "fom_scan" / scan / tag / ("%s_%s" % (name, direction)), gr, (edges[0], edges[-1]), xt,
                               "#varepsilon_{s} / #sqrt{#varepsilon_{b}}",
-                              ["Pass: variable %s threshold, %s" % (sign, lab), FOM_LINE])
+                              ["Background: %s; pass: variable %s threshold" % (lab, sign), FOM_LINE])
                 for k in masses:  # F(x) / F(reference): best x against the pooled background, then the groups there
                     best, bestr = None, 0
                     cs0, cb0, ns, nb0 = curves[("overall", k)]
@@ -423,7 +428,8 @@ def plot(args):
         caps.add("fom_scan/%s/<selected|cut>/bkg_<all|ZJets|WJets|QCD>_<up|down>.png" % scan,
                  "F vs threshold x, event level, %g-%g. up: an event passes if >= 1 passing pair has v >= x; down: if >= 1 has "
                  "v < x. eps(x) = passing events / all events of the slice. Reference (the fixed F): up at x = 0; down above "
-                 "all values, overflow included. Points with no surviving background or signal event are not drawn."
+                 "all values, overflow included. Thresholds with no surviving background or signal event are not drawn. Lines only, "
+                 "no error bars (six curves); the statistical precision worsens where few background events remain."
                  % (edges[0], edges[-1]))
     caps.add("fom_scan (F(x) / F(reference))", "Thresholds passing the Part 6 pointer: at the x that maximizes the ratio against "
              "the pooled background (with >= %d pooled-background events), the ratio is > 1 against the pooled background and "
