@@ -179,7 +179,7 @@ def plot(args):
     masses = sorted(("mass/" + n for n in names("signal/mass")), key=mkey)
     num = lambda x: x.replace("p", ".")
     label = {"overall": "all 72 samples", **{k: "c#tau = %s mm" % k.split("-")[1] for k in taus},
-             **{k: "%s / %s GeV" % tuple(num(x) for x in re.fullmatch(
+             **{k: "m_{#chi} / #Deltam = %s / %s GeV" % tuple(num(x) for x in re.fullmatch(
                  r"mass/Mchi-([\dp]+)_dMchi-([\dp]+)", k).groups()) for k in masses}}
     B_SEL, B_CUT = cs.OPEN_DASHED, cs.FILLED_SOLID
     cov = f.Get("coverage")
@@ -188,6 +188,8 @@ def plot(args):
     n_bkg = int(cov.GetTitle().split()[-1])
     BKGN = "Bkg (all 50)" if n_bkg == 50 else "Bkg (%d of 50)" % n_bkg
     norm_line = lambda norm: [cs.STYLE["norm_label"]] if norm else []
+    upcase = lambda t: t if t.startswith("pT") else t[0].upper() + t[1:]
+    nbkg_text = "all 50" if n_bkg == 50 else "%d of the 50" % n_bkg
     plain = {"pt_pca": "pT(mumu) at the PCA (pPcaMuMuPt, the vector sum of the two muon momenta propagated to the vertex)",
              "pt_reco": "pT(mumu) from the reco legs (pRecoMuMuPt: the two paired component tracks at their reference "
                         "point)",
@@ -200,9 +202,9 @@ def plot(args):
         "Population: every pair passing the full reco-only chain (eligible pair, opposite sign, valid vertex, "
         "chi2/ndof < 4, PCA valid, PCA dR < 0.9, |dphi(Type-1 PF MET, mumu PCA)| < 0.5), pair-level: every passing pair "
         "of an event enters. Raw MC pair counts, unweighted.",
-        "Samples: signal = the 72 iDM 2022EE samples (2026-09-28 production); background = %d of the 50 2022EE "
+        "Samples: signal = the 72 iDM 2022EE samples (2026-09-28 production); background = %s 2022EE "
         "background MC samples. A c-tau slice pools the 18 masses, a mass slice pools the 4 lifetimes, all unweighted; "
-        "'Bkg' is the pooled background." % n_bkg,
+        "'Bkg' is the pooled background." % nbkg_text,
         "Selections: 'selected' = all passing pairs; '+ MET, jet' = passing pairs in events with Type-1 PF MET > 80 GeV "
         "and highest-pT slimmedJets jet pT > 80 GeV, |eta| < 2.4 (no jet ID, no muon cleaning; no jet fails).",
         "Variables here: " + "; ".join("%s = %s, %g-%g in bins of %s" % (v, plain[v], VARS[v][1][0], VARS[v][1][-1],
@@ -342,23 +344,23 @@ def plot(args):
                       ["+ MET, jet; signal pooled over lifetimes"] + norm_line(norm),
                       groups, dict(zip(M_KEYS, fstyle)), M_HEADER)
         sels = ["cut"] if args.cut_only else ["selected", "cut"]
-        rows = [[label[s].replace("#tau", "tau")] + ["%.1f%%" % in_range("signal/%s/%s" % (s, sel), var) for sel in sels]
+        rows = [[label[s].replace("#tau", "tau").replace("m_{#chi} / #Deltam = ", "")] + ["%.1f%%" % in_range("signal/%s/%s" % (s, sel), var) for sel in sels]
                 for s in ["overall"] + taus + masses]
         rows.append([BKGN] + ["%.1f%%" % in_range("background/overall/" + sel, var) for sel in sels])
         caps.add("%s/<slice>/signal_bkg[_norm].png" % var,
                  "%s for one signal slice (<slice> = overall, lifetime/ctau-<1|10|100|1000> or mass/Mchi-<m>_dMchi-<dm>) "
                  "and the pooled background, %s. Fraction of each curve's passing pairs inside the plotted range "
-                 "(the unit-area copies are normalized to this part):" % (plain[var][0].upper() + plain[var][1:],
+                 "(the unit-area copies are normalized to this part):" % (upcase(plain[var]),
                                                                          "+ MET, jet only" if args.cut_only else
                                                                          "selected and + MET, jet"),
                  ["signal slice / bkg"] + ["in range, " + ("selected" if s == "selected" else "+ MET, jet") for s in sels],
                  rows)
         caps.add("%s/background/<%s>[_norm].png" % (var, "|".join(sels)),
                  "%s for the pooled background and its three largest groups (ZJets, WJets, QCD), one plot per selection."
-                 % (plain[var][0].upper() + plain[var][1:]))
+                 % (upcase(plain[var])))
         caps.add("%s/overlays/<ctau|mass>[_norm].png" % var,
                  "%s, + MET, jet: the four lifetimes (each pooled over masses), or the 18 mass points (each pooled over "
-                 "lifetimes), with the pooled background." % (plain[var][0].upper() + plain[var][1:]))
+                 "lifetimes), with the pooled background." % (upcase(plain[var])))
         if var == "lxy_500":
             cumulative(edges, xtitle)
     print("CAPTIONS", caps.write(out))

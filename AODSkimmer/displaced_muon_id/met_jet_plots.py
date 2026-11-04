@@ -227,8 +227,8 @@ def main():
     S, B = cs.FILLED_SOLID, cs.OPEN_DASHED
     caps = cs.Captions("Cutflow, selected-fraction and figure-of-merit plots (kb/studies/bkg-reco-dimuons.md Part 3)", [
         "Samples: signal = the 72 iDM 2022EE samples (2026-09-28 production; 18 mass points x 4 lifetimes, 10,000 events "
-        "each); background = %d of the 50 2022EE background MC samples. Raw MC event counts, unweighted: no cross "
-        "sections, generator weights or luminosity." % n_bkg,
+        "each); background = %s 2022EE background MC samples. Raw MC event counts, unweighted: no cross "
+        "sections, generator weights or luminosity." % ("all 50" if n_bkg == 50 else "%d of the 50" % n_bkg),
         "Pooling: a signal c-tau slice pools the 18 masses, a mass slice pools the 4 lifetimes, overall pools all 72, "
         "unweighted. A background group pools its samples (name prefix); the pooled background is all %d." % n_bkg,
         "Reco-only dimuon chain (cumulative; an event passes a stage if >= 1 pair reaches it): eligible pair (two "
