@@ -122,7 +122,7 @@ def fill(args):
                 pr = f["preselectedVertexing/pairs"].arrays(PAIR_BRANCHES + LEG_BRANCHES, library="np")
             pr.update(derived(pr))
             with uproot.open(Path(scan_dir) / (name + ".root")) as f:
-                sc = f["scan"].arrays(["run", "lumi", "event", "pfMet", "jetPt", "jetEta"], library="np")
+                sc = f["scan"].arrays(["run", "lumi", "event", "pfMet", "pfMetPhi", "nJet", "jetPt", "jetEta", "jetPhi"], library="np")
             pkeys, _ = keyed(ev["run"], ev["lumi"], ev["event"], "producer " + name)
             _, sindex = keyed(sc["run"], sc["lumi"], sc["event"], "scan " + name)
             if len(pkeys) != len(sindex) or any(k not in sindex for k in pkeys):
