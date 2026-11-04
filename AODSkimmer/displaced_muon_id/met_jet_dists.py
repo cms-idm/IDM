@@ -19,6 +19,7 @@ import sys
 import numpy as np
 
 MET_CUT, JET_PT_CUT, JET_ETA_CUT = 80., 80., 2.4
+CUT_LAB = "MET > %g GeV, jet p_{T} > %g GeV" % (MET_CUT, JET_PT_CUT)  # on-plot name of the MET, jet cut (user 2026-11-04)
 VARS = {  # name: (branch, edges, x title, y title per bin)
     "pt_pca": ("pPcaMuMuPt", np.arange(0, 200.001, 5), "p_{T}^{#mu#mu} at the PCA [GeV]", "5 GeV"),
     "pt_reco": ("pRecoMuMuPt", np.arange(0, 200.001, 5), "p_{T}^{#mu#mu} from the reco legs [GeV]", "5 GeV"),
@@ -42,7 +43,7 @@ for _v, _t in (("pca", "at the PCA"), ("reco", "of the reco legs")):
 LEG_VARS = [v for v in VARS if VARS[v][0].endswith(("_pca", "_reco")) and VARS[v][0].split("_")[0] in ("lead", "sub", "deta", "dphi")]
 LEG_BRANCHES = ["p%s%s%s" % (v, q, l) for v in ("Pca", "Reco") for q in ("Pt", "Eta", "Phi") for l in "AB"]
 DEFAULT_VARS = ["pt_pca", "pt_reco", "lxy_short", "lxy_long", "dr_pca", "dr_reco"]
-SELECTIONS = {"selected": "Selected #mu#mu", "cut": "+ MET, jet cut"}
+SELECTIONS = {"selected": "Selected #mu#mu", "cut": CUT_LAB}
 M_HEADER, M_KEYS = "M = m_{#chi} - #Deltam/2", ("#Deltam = 0.1 M", "0.2 M", "0.4 M")
 CUM_TOP = 0.37
 GROUPS = ["ZJets", "WJets", "QCD", "TTbar", "SingleTop", "DYJets", "Multiboson", "WWZ", "WZZ", "ZZ", "ZZZ", "ZGamma"]
@@ -243,7 +244,7 @@ def plot(args):
         "Samples: signal = the 72 iDM 2022EE samples (2026-09-28 production); background = %s 2022EE "
         "background MC samples. A c-tau slice pools the 18 masses, a mass slice pools the 4 lifetimes, all unweighted; "
         "'Bkg' is the pooled background." % nbkg_text,
-        "Selections: 'selected' = all passing pairs; '+ MET, jet' = passing pairs in events with Type-1 PF MET > 80 GeV "
+        "Selections: 'selected' = all passing pairs; 'MET, jet cut' (on the plots 'MET > 80 GeV, jet pT > 80 GeV') = passing pairs in events with Type-1 PF MET > 80 GeV "
         "and highest-pT slimmedJets jet pT > 80 GeV, |eta| < 2.4 (no jet ID, no muon cleaning; no jet fails).",
         "Variables here: " + "; ".join("%s = %s, %g-%g in bins of %s" % (v, plain[v], VARS[v][1][0], VARS[v][1][-1],
                                                                          VARS[v][3]) for v in args.vars) + ".",
@@ -311,7 +312,7 @@ def plot(args):
         """Cumulative Lxy after the cut (user 2026-11-04): c-tau overlay + background, and overall signal vs background."""
         yt = "Fraction with L_{xy} #geq x"
         xt = "L_{xy} threshold x [cm]"
-        lines = ["+ MET, jet cut; passing #mu#mu pairs", "Denominator: all passing pairs"]
+        lines = [CUT_LAB + "; passing #mu#mu pairs", "Denominator: all passing pairs"]
         bstyle = (2, 24)
         series = [cum_graph("signal/%s/cut/lxy_500" % k, c, (1, 20 + i)) for i, (k, c) in enumerate(zip(taus, cs.COLORS))]
         series.append(cum_graph("background/overall/cut/lxy_500", cs.BLACK, bstyle))
@@ -334,7 +335,7 @@ def plot(args):
             rows.append([k, "%d" % n] + ["%.3f" % g.GetPointY(i) for i in (1, 2, 10, 20, 100)])
             print("cumulative Lxy >= 50 cm, %s: %.4f" % (k, g.GetPointY(10)))
         caps.add("lxy_500_cumulative/<overlay_ctau|overall_signal_bkg>.png",
-                 "Fraction of all passing pairs (+ MET, jet) with Lxy >= x, per lower bin edge x of the 0-500 cm "
+                 "Fraction of all passing pairs (MET, jet cut) with Lxy >= x, per lower bin edge x of the 0-500 cm "
                  "histogram; the last point is the overflow beyond 500 cm alone. Denominator includes all flows. "
                  "Bars: CP 68% assuming independent pairs (pairs of one event are correlated; coverage uncalibrated).",
                  ["slice", "pairs", ">= 5 cm", ">= 10 cm", ">= 50 cm", ">= 100 cm", "> 500 cm"], rows)
@@ -350,14 +351,14 @@ def plot(args):
                 if args.cut_only:
                     series = [hg("signal/%s/cut/%s" % (s, var), cs.BLUE, B_CUT),
                               hg("background/overall/cut/%s" % var, cs.BLACK, B_SEL)]
-                    cs.plot(out / var / d / ("signal_bkg" + sfx), series, ["Signal, + MET, jet", BKGN + ", + MET, jet"],
+                    cs.plot(out / var / d / ("signal_bkg" + sfx), series, ["Signal, " + CUT_LAB, BKGN + ", " + CUT_LAB],
                             xtitle, yt, lines=["Signal: " + label[s]] + norm_line(norm), x1=0.58, log=args.log)
                     continue
                 series = [hg("signal/%s/selected/%s" % (s, var), cs.BLUE, B_SEL), hg("signal/%s/cut/%s" % (s, var), cs.BLUE, B_CUT),
                           hg("background/overall/selected/%s" % var, cs.BLACK, B_SEL),
                           hg("background/overall/cut/%s" % var, cs.BLACK, B_CUT)]
                 cs.plot(out / var / d / ("signal_bkg" + sfx), series,
-                        ["Signal, selected", "Signal, + MET, jet", "Bkg, selected", "Bkg, + MET, jet"], xtitle, yt,
+                        ["Signal, selected", "Signal, " + CUT_LAB, "Bkg, selected", "Bkg, " + CUT_LAB], xtitle, yt,
                         lines=["Signal: " + label[s]] + norm_line(norm), x1=0.62, log=args.log)
             for tag, sl in SELECTIONS.items():
                 if args.cut_only and tag != "cut":
@@ -390,16 +391,15 @@ def plot(args):
                  "%s for one signal slice (<slice> = overall, lifetime/ctau-<1|10|100|1000> or mass/Mchi-<m>_dMchi-<dm>) "
                  "and the pooled background, %s. Fraction of each curve's passing pairs inside the plotted range "
                  "(the unit-area copies are normalized to this part):" % (upcase(plain[var]),
-                                                                         "+ MET, jet only" if args.cut_only else
-                                                                         "selected and + MET, jet"),
-                 ["signal slice / bkg"] + ["in range, " + ("selected" if s == "selected" else "+ MET, jet") for s in sels],
+                                                                         "MET, jet cut only" if args.cut_only else
+                                                                         "selected and with the MET, jet cut"),
+                 ["signal slice / bkg"] + ["in range, " + ("selected" if s == "selected" else "MET, jet cut") for s in sels],
                  rows)
         caps.add("%s/background/<%s>[_norm].png" % (var, "|".join(sels)),
                  "%s for the pooled background and its three largest groups (ZJets, WJets, QCD), one plot per selection."
                  % (upcase(plain[var])))
         caps.add("%s/overlays/<ctau|mass>[_norm].png" % var,
-                 "%s, + MET, jet (passing pairs in events with MET > 80 GeV and jet pT > 80 GeV; the plots themselves do not "
-                 "label the cut): the four lifetimes (each pooled over masses), or the 18 mass points (each pooled over "
+                 "%s, MET, jet cut (not labelled on these plots): the four lifetimes (each pooled over masses), or the 18 mass points (each pooled over "
                  "lifetimes), with the pooled background." % (upcase(plain[var])))
         if var == "lxy_500":
             cumulative(edges, xtitle)
@@ -420,7 +420,7 @@ def main():
         b.add_argument(k, required=True)
     b.add_argument("--log", action="store_true", help="add log-y copies (only on the user's approval)")
     b.add_argument("--vars", nargs="+", default=DEFAULT_VARS, choices=list(VARS))
-    b.add_argument("--cut-only", action="store_true", help="only the + MET, jet cut selection (signal vs background)")
+    b.add_argument("--cut-only", action="store_true", help="only the MET, jet cut selection (signal vs background)")
     args = ap.parse_args()
     (fill if args.cmd == "fill" else plot)(args)
 
