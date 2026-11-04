@@ -26,7 +26,12 @@ VARS = {  # name: (branch, edges, x title, y title per bin)
     "lxy_long": ("pLxyBS", np.arange(0, 300.001, 5), "Vertex L_{xy} to the beamspot [cm]", "5 cm"),
     "dr_pca": ("pPcaDR", np.arange(0, 0.9001, 0.02), "#DeltaR(#mu#mu) at the PCA", "0.02"),
     "dr_reco": ("pRecoDR", np.arange(0, 1.5001, 0.025), "#DeltaR(#mu#mu) from the reco legs", "0.025"),
+    # user 2026-11-04: Lxy to 500 cm, pT(mumu) 0-25 GeV, plotted with the cut only (--vars ... --cut-only)
+    "lxy_500": ("pLxyBS", np.arange(0, 500.001, 5), "Vertex L_{xy} to the beamspot [cm]", "5 cm"),
+    "pt_pca_25": ("pPcaMuMuPt", np.arange(0, 25.0001, 0.5), "p_{T}^{#mu#mu} at the PCA [GeV]", "0.5 GeV"),
+    "pt_reco_25": ("pRecoMuMuPt", np.arange(0, 25.0001, 0.5), "p_{T}^{#mu#mu} from the reco legs [GeV]", "0.5 GeV"),
 }
+DEFAULT_VARS = ["pt_pca", "pt_reco", "lxy_short", "lxy_long", "dr_pca", "dr_reco"]
 SELECTIONS = {"selected": "Selected #mu#mu", "cut": "+ MET, jet p_{T} > 80 GeV"}
 GROUPS = ["ZJets", "WJets", "QCD", "TTbar", "SingleTop", "DYJets", "Multiboson", "WWZ", "WZZ", "ZZ", "ZZZ", "ZGamma"]
 PAIR_BRANCHES = ["pEvent", "pQA", "pQB", "pStatus", "pChi2", "pNdof", "pPcaOK", "pPcaDR", "pPcaMuMuPt", "pPcaMuMuPhi",
@@ -110,7 +115,8 @@ def fill(args):
             for s in slices(kind, name):
                 for tag, mask in sel.items():
                     totals[(kind, s, tag)] = totals.get((kind, s, tag), 0) + int(mask.sum())
-                    for var, (branch, edges, _, _) in VARS.items():
+                    for var in args.vars:
+                        branch, edges = VARS[var][:2]
                         key = (kind, s, tag, var)
                         if key not in hists:
                             hists[key] = ROOT.TH1D(var, "", len(edges) - 1, np.asarray(edges, dtype=np.float64))
@@ -129,7 +135,7 @@ def fill(args):
     ROOT.TNamed("definitions", "Raw unweighted pair counts of passing pairs (reco-only chain stage 6), pair-level. "
                 "selected = all passing pairs; cut = passing pairs in events with Type-1 PF MET > 80 GeV and highest-pT "
                 "slimmedJets jet pT > 80 GeV, |eta| < 2.4. Non-finite or negative values not filled (counted in the fill log). Variables: " + ", ".join(
-                    "%s=%s" % (k, v[0]) for k, v in VARS.items()) + ". Flows kept. Inputs: %s, %s, %s, scans %s, %s" % (
+                    "%s=%s" % (k, VARS[k][0]) for k in args.vars) + ". Flows kept. Inputs: %s, %s, %s, scans %s, %s" % (
                     args.signal_summary, args.bkg_summary, args.met_jet, args.signal_scan_dir, args.bkg_scan_dir)).Write()
     for (kind, s, tag, var), h in sorted(hists.items()):
         if abs(h.Integral(0, h.GetNbinsX() + 1) + invalid[(kind, s, tag, var)] - totals[(kind, s, tag)]) > 0.5:
@@ -196,13 +202,20 @@ def plot(args):
                   x1=0.17, x2=0.47, size=0.026)
         cs.save(c, base, log=args.log)
 
-    for var, (_, edges, xtitle, per) in VARS.items():
+    for var in args.vars:
+        _, edges, xtitle, per = VARS[var]
         for norm in (False, True):
             yt = ("Fraction of pairs / " if norm else "Pairs / ") + per
             sfx = "_norm" if norm else ""
             hg = lambda key, color, style: cs.hist_graph(get(key), color, style[0], style[1], step=True, norm=norm)
             for s in ["overall"] + taus + masses:
                 d = "overall" if s == "overall" else s
+                if args.cut_only:
+                    series = [hg("signal/%s/cut/%s" % (s, var), cs.BLUE, B_CUT),
+                              hg("background/overall/cut/%s" % var, cs.BLACK, B_SEL)]
+                    cs.plot(out / var / d / ("signal_bkg" + sfx), series, ["Signal", "Background"], xtitle, yt,
+                            lines=["Signal: " + label[s], bkg, "+ MET, jet p_{T} > 80 GeV", pairs], x1=0.68, log=args.log)
+                    continue
                 series = [hg("signal/%s/selected/%s" % (s, var), cs.BLUE, B_SEL), hg("signal/%s/cut/%s" % (s, var), cs.BLUE, B_CUT),
                           hg("background/overall/selected/%s" % var, cs.BLACK, B_SEL),
                           hg("background/overall/cut/%s" % var, cs.BLACK, B_CUT)]
@@ -210,6 +223,8 @@ def plot(args):
                         ["Signal, selected", "Signal, + MET, jet", "Bkg, selected", "Bkg, + MET, jet"], xtitle, yt,
                         lines=["Signal: " + label[s], bkg, pairs], x1=0.62, log=args.log)
             for tag, sl in SELECTIONS.items():
+                if args.cut_only and tag != "cut":
+                    continue
                 series = [hg("background/overall/%s/%s" % (tag, var), cs.BLACK, B_CUT)]
                 series += [hg("background/group/%s/%s/%s" % (g, tag, var), c, B_CUT) for g, c in
                            (("ZJets", cs.BLUE), ("WJets", cs.ORANGE), ("QCD", cs.GREEN))]
@@ -241,10 +256,13 @@ def main():
     a = sub.add_parser("fill")
     for k in ("--signal-summary", "--bkg-summary", "--met-jet", "--signal-scan-dir", "--bkg-scan-dir", "--output"):
         a.add_argument(k, required=True)
+    a.add_argument("--vars", nargs="+", default=DEFAULT_VARS, choices=list(VARS))
     b = sub.add_parser("plot")
     for k in ("--input", "--style-dir", "--out-dir"):
         b.add_argument(k, required=True)
     b.add_argument("--log", action="store_true", help="add log-y copies (only on the user's approval)")
+    b.add_argument("--vars", nargs="+", default=DEFAULT_VARS, choices=list(VARS))
+    b.add_argument("--cut-only", action="store_true", help="only the + MET, jet cut selection (signal vs background)")
     args = ap.parse_args()
     (fill if args.cmd == "fill" else plot)(args)
 
