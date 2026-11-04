@@ -265,8 +265,9 @@ def fill(args):
                 two = np.flatnonzero(ev["twoAcc"].astype(bool))
                 for i in two[:CHECK_EVENTS]:  # each truth muon must be a scan muon of that event, same charge
                     here = np.flatnonzero(muons["ev"] == i)
-                    for pt, q in zip(ev["sigPt"][i], ev["sigQ"][i]):
-                        if not any(abs(muons["pt"][k] - pt) < 1e-3 * max(pt, 1) and muons["q"][k] == q for k in here):
+                    for pt, eta, phi, q in zip(ev["sigPt"][i], ev["sigEta"][i], ev["sigPhi"][i], ev["sigQ"][i]):
+                        if not any(abs(muons["pt"][k] - pt) < 1e-3 * max(pt, 1) and abs(muons["eta"][k] - eta) < 1e-3 and
+                                   wrap(muons["phi"][k] - phi) < 1e-3 and muons["q"][k] == q for k in here):
                             raise RuntimeError("Truth muon not in the gen scan: %s row %d" % (name, i))
                 g = [np.array([ev[b][i][leg] for i in two], dtype=np.float64) for leg in (0, 1) for b in ("sigPt", "sigEta", "sigPhi")]
                 if len(two) and np.any(np.array([ev["sigQ"][i][0] * ev["sigQ"][i][1] for i in two]) >= 0):
