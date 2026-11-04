@@ -271,7 +271,8 @@ def plot(args):
         cs.legend([(cs._proxy(col, *groups_style.get(lab, (1, 20))), lab, "l") for lab, col in groups.items()], y2=ytop,
                   y1=1 - top + 0.01, x1=0.50, header=header, ncol=2, size=0.026)
         if stages:
-            cs.legend([(cs._proxy(cs.BLACK, ls, ms), lab, "lp") for lab, (ls, ms) in stages.items()], y2=ytop,
+            # lines only: the distributions are step outlines without markers
+            cs.legend([(cs._proxy(cs.BLACK, ls, ms), lab, "l") for lab, (ls, ms) in stages.items()], y2=ytop,
                       y1=1 - top + 0.01, x1=0.17, x2=0.47, size=0.026)
         cs.save(c, base, log=args.log if log is None else log)
     groups_style = {}  # legend line style per group label (default solid)
