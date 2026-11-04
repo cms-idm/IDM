@@ -119,16 +119,23 @@ def keyed(arrays, what):
     return keys, index
 
 
-def load(summary, scan_dir, signal):
-    """Per summary event row: sample name, MET, jet pass, selected (and T, recovered for signal)."""
+def load(summary, scan_dir, signal, exclude=()):
+    """Per summary event row: sample name, MET, jet pass, selected (and T, recovered for signal).
+    Samples in exclude (each must be an inputs entry) are skipped whole and their summary rows counted as excluded."""
     import uproot
     with uproot.open(summary) as f:
         inputs = [l.split() for l in str(f["inputs"].member("fTitle")).splitlines() if l.strip()]
         fields = ["sample", "run", "lumi", "event", "nPassing"] + (["T", "nCorrect"] if signal else [])
         ev = f["events"].arrays(fields, library="np")
-    rows = []
+    unknown = set(exclude) - {name for name, _ in inputs}
+    if unknown:
+        raise RuntimeError("Excluded samples not in %s inputs: %r" % (summary, sorted(unknown)))
+    rows, excluded_rows = [], 0
     for index, (name, producer) in enumerate(inputs):
         sel = ev["sample"] == index
+        if name in exclude:
+            excluded_rows += int(sel.sum())
+            continue
         s = {k: v[sel] for k, v in ev.items()}
         skeys, _ = keyed(s, "summary " + name)
         with uproot.open(producer) as f:
@@ -157,7 +164,7 @@ def load(summary, scan_dir, signal):
             out["T"] = s["T"].astype(bool)
             out["recovered"] = s["nCorrect"] > 0
         rows.append(out)
-    if sum(len(r["met"]) for r in rows) != len(ev["sample"]):
+    if sum(len(r["met"]) for r in rows) + excluded_rows != len(ev["sample"]):
         raise RuntimeError("Summary rows not all assigned to an inputs entry: " + str(summary))
     return rows
 
@@ -182,9 +189,10 @@ def analyze(args):
         raise FileExistsError(output)
     import ROOT
     groups = defaultdict(Counter)
+    exclude = sorted(set(args.exclude_bkg_samples))
     for kind, summary, scan_dir in (("signal", args.signal_summary, args.signal_scan_dir),
                                     ("background", args.bkg_summary, args.bkg_scan_dir)):
-        for r in load(summary, scan_dir, kind == "signal"):
+        for r in load(summary, scan_dir, kind == "signal", exclude if kind == "background" else ()):
             c = counts(r)
             if kind == "signal":
                 m = re.fullmatch(r"(Mchi-[\dp]+_dMchi-[\dp]+)_(ctau-[\dp]+)", r["name"])
@@ -201,8 +209,9 @@ def analyze(args):
     ROOT.TNamed("definitions", "Raw unweighted event counts. Cut = Type-1 PF MET (slimmedMETs[0] corPt) > 80 GeV and highest-pT "
                 "slimmedJets jet (AK4 CHS as stored, no ID, no cleaning) pT > 80 GeV and |eta| < 2.4; no jet fails. "
                 "selected = >=1 dimuon pair passing the reco-only chain (unchanged); recovered = nCorrect > 0 (signal T events). "
-                "Inputs: %s, %s, scans %s, %s" % (args.signal_summary, args.bkg_summary, args.signal_scan_dir,
-                                                  args.bkg_scan_dir)).Write()
+                "Inputs: %s, %s, scans %s, %s. Excluded background samples (all their events left out of every group): %s"
+                % (args.signal_summary, args.bkg_summary, args.signal_scan_dir, args.bkg_scan_dir,
+                   ", ".join(exclude) or "none")).Write()
     for g, c in sorted(groups.items()):
         directory = root
         for part in g.split("/"):
@@ -215,6 +224,7 @@ def analyze(args):
             h.SetBinContent(i, c[k])
         h.Write()
     root.Close()
+    print("EXCLUDED background samples: %s" % (", ".join(exclude) or "none"))
     order = lambda g: (not g[0].startswith("signal"), g[0].split("/")[1] != "overall", g[0])
     for g, c in sorted(groups.items(), key=order):
         line = "%-58s cut/all %s | selected/all %s -> with cut %s | cut on selected %s | no jet %d" % (
@@ -235,6 +245,8 @@ def main():
     a = sub.add_parser("analyze")
     for k in ("--signal-summary", "--signal-scan-dir", "--bkg-summary", "--bkg-scan-dir", "--output"):
         a.add_argument(k, required=True)
+    a.add_argument("--exclude-bkg-samples", nargs="*", default=[],
+                   help="background samples left out whole (e.g. unreadable inputs); recorded in the output")
     args = parser.parse_args()
     (scan if args.cmd == "scan" else analyze)(args)
 
