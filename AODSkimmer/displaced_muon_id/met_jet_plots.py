@@ -135,7 +135,9 @@ class Plotter:
         two columns (frame), or colour and style keys placed above the frame (band); y max keeps the data below them."""
         cs = self.cs
         n = len(xlabels)
-        bottom = min(0.33, 0.10 + 0.0092 * max(len(re.sub(r"#\w+|[{}_^]", "", l)) for l in xlabels))
+        lsize = 0.034 if n < 15 else 0.028
+        labels_bottom = min(0.33, 0.09 + 0.30 * lsize * max(len(re.sub(r"#\w+|[{}_^]", "", l)) for l in xlabels))
+        bottom = labels_bottom + (0.07 if xtitle else 0)
         top = 0.30 if band else 0.08
         c = ROOT.TCanvas("c_" + base.replace("/", "_"), "", 900, 1000 if band else 900)
         c.SetLeftMargin(0.15); c.SetRightMargin(0.04); c.SetBottomMargin(bottom); c.SetTopMargin(top)
@@ -147,16 +149,17 @@ class Plotter:
         else:
             ncol = 1 if len(graphs) <= 3 else 2
             rows = -(-len(graphs) // ncol)
+            row = 0.042 if rows <= 4 else 0.033
             y2 = 0.89 - 0.045 * len(lines) - 0.01
-            key_bottom = y2 - 0.042 * rows
+            key_bottom = y2 - row * rows
         frac = (key_bottom - 0.02 - bottom) / (1 - top - bottom)
         ymax = cs._round_up(hi / max(frac, 0.2))
         fr = cs.frame(c, 0, n, 0, ymax, xtitle, ytitle)
         ax = fr.GetXaxis(); ax.Set(n, 0, n)
         for i, lab in enumerate(xlabels, 1):
             ax.SetBinLabel(i, lab)
-        ax.LabelsOption("v"); ax.SetLabelSize(0.034 if n < 15 else 0.028)
-        ax.SetTitleOffset(1.0 + (bottom - 0.13) * 9)
+        ax.LabelsOption("v"); ax.SetLabelSize(lsize)
+        ax.SetTitleOffset(1.0 + (labels_bottom - 0.10) * 10)
         c.Update()
         for g in graphs:
             g.Draw(cs._info[id(g)][1] + " same")
@@ -174,7 +177,7 @@ class Plotter:
                       y2=ytop, y1=0.71, x1=0.17, x2=0.47, size=0.026)
         else:
             cs.legend([(g, lab, cs._info[id(g)][2]) for g, lab in zip(graphs, labels)], y2=y2, y1=key_bottom, x1=0.18,
-                      x2=0.94, ncol=ncol, size=0.030)
+                      x2=0.94, ncol=ncol, size=0.030 if rows <= 4 else 0.026)
         logy = None
         if log:
             lo = min([p[2] for p in pts if p[2] > 0] or [1e-5])
