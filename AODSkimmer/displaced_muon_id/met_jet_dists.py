@@ -370,7 +370,7 @@ def plot(args):
             series.append(hg("background/overall/cut/%s" % var, cs.BLACK, B_SEL))
             cs.plot(out / var / "overlays" / ("ctau" + sfx), series,
                     ["Signal, " + label[k] for k in taus] + [BKGN], xtitle, yt,
-                    lines=["+ MET, jet; signal pooled over masses"] + norm_line(norm), x1=0.60, log=args.log)
+                    lines=["Signal pooled over masses"] + norm_line(norm), x1=0.60, log=args.log)
             fam = sorted({mkey(k)[0] for k in masses})
             fstyle = [(3, 25), (2, 24), (1, 20)]
             series = [hg("signal/%s/cut/%s" % (k, var), cs.COLORS[fam.index(mkey(k)[0])],
@@ -379,7 +379,7 @@ def plot(args):
             groups = {"%g GeV" % m: cs.COLORS[i] for i, m in enumerate(fam)}
             groups[BKGN] = cs.BLACK
             band_plot(out / var / "overlays" / ("mass" + sfx), series, xtitle, yt,
-                      ["+ MET, jet; signal pooled over lifetimes"] + norm_line(norm),
+                      ["Signal pooled over lifetimes"] + norm_line(norm),
                       groups, dict(zip(M_KEYS, fstyle)), M_HEADER)
         sels = ["cut"] if args.cut_only else ["selected", "cut"]
         rows = [[label[s].replace("#tau", "tau").replace("m_{#chi} / #Deltam = ", "")] + ["%.1f%%" % in_range("signal/%s/%s" % (s, sel), var) for sel in sels]
@@ -397,7 +397,8 @@ def plot(args):
                  "%s for the pooled background and its three largest groups (ZJets, WJets, QCD), one plot per selection."
                  % (upcase(plain[var])))
         caps.add("%s/overlays/<ctau|mass>[_norm].png" % var,
-                 "%s, + MET, jet: the four lifetimes (each pooled over masses), or the 18 mass points (each pooled over "
+                 "%s, + MET, jet (passing pairs in events with MET > 80 GeV and jet pT > 80 GeV; the plots themselves do not "
+                 "label the cut): the four lifetimes (each pooled over masses), or the 18 mass points (each pooled over "
                  "lifetimes), with the pooled background." % (upcase(plain[var])))
         if var == "lxy_500":
             cumulative(edges, xtitle)
