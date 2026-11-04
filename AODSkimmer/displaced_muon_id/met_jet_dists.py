@@ -153,7 +153,8 @@ def plot(args):
     import ROOT
     sys.path.insert(0, args.style_dir)
     import cms_style as cs
-    cs.setup(era="2022EE (13.6 TeV)", status="Simulation Private Work")
+    cs.setup(era="2022EE (13.6 TeV)", status="Simulation Private Work",
+             norm_label="Unit area within the plotted range (flows excluded)")
     ROOT.gErrorIgnoreLevel = ROOT.kWarning
     out = Path(args.out_dir)
     if out.exists():
@@ -172,13 +173,32 @@ def plot(args):
              **{k: "m_{#chi} / #Deltam = %s / %s GeV" % tuple(num(x) for x in re.fullmatch(
                  r"mass/Mchi-([\dp]+)_dMchi-([\dp]+)", k).groups()) for k in masses}}
     B_SEL, B_CUT = cs.OPEN_DASHED, cs.FILLED_SOLID
-    pop = ["Passing #mu#mu pairs (all per event)", "Raw MC counts, unweighted"]
-    bkg_pop = "Background: 47 of 50 2022EE samples"
+    pairs = "Passing #mu#mu pairs; raw MC, unweighted"
+    bkg = "bkg 47 of 50 samples"
+
+    def band_plot(base, graphs, xtitle, ytitle, lines, groups, stages, header):
+        """Band layout with the keys placed below the context lines (as in met_jet_plots.py)."""
+        c = cs.canvas("c_" + str(base).replace("/", "_"), band=True)
+        hi = max([p[3] for p in cs._points(graphs)] or [1])
+        cs.frame(c, edges[0], edges[-1], 0, cs._round_up(1.1 * hi), xtitle, ytitle)
+        c.Update()
+        for g in graphs:
+            g.Draw(cs._info[id(g)][1] + " same")
+        t = cs.header(c, 0.15, 0.95, (0.04, 0.031), 0.96)
+        t.SetTextSize(0.028); t.SetTextAlign(13)
+        for i, line in enumerate(lines):
+            t.DrawLatex(0.18, 0.90 - 0.035 * i, line)
+        ytop = 0.90 - 0.035 * len(lines) - 0.005
+        cs.legend([(cs._proxy(col, 1, 20), lab, "l") for lab, col in groups.items()], y2=ytop, y1=0.71, x1=0.50,
+                  header=header, ncol=2, size=0.026)
+        cs.legend([(cs._proxy(cs.BLACK, ls, ms), lab, "lp") for lab, (ls, ms) in stages.items()], y2=ytop, y1=0.71,
+                  x1=0.17, x2=0.47, size=0.026)
+        cs.save(c, base, log=args.log)
+
     for var, (_, edges, xtitle, per) in VARS.items():
         for norm in (False, True):
             yt = ("Fraction of pairs / " if norm else "Pairs / ") + per
             sfx = "_norm" if norm else ""
-            extra = ["Unit area within the plotted range (flows excluded)"] if norm else []
             hg = lambda key, color, style: cs.hist_graph(get(key), color, style[0], style[1], step=True, norm=norm)
             for s in ["overall"] + taus + masses:
                 d = "overall" if s == "overall" else s
@@ -186,30 +206,31 @@ def plot(args):
                           hg("background/overall/selected/%s" % var, cs.BLACK, B_SEL),
                           hg("background/overall/cut/%s" % var, cs.BLACK, B_CUT)]
                 cs.plot(out / var / d / ("signal_bkg" + sfx), series,
-                        ["Signal, selected #mu#mu", "Signal, + MET, jet cut", "Bkg (all 47), selected #mu#mu",
-                         "Bkg (all 47), + MET, jet cut"], xtitle, yt, lines=["Signal: " + label[s], bkg_pop] + pop + extra, log=args.log)
+                        ["Signal, selected", "Signal, + MET, jet", "Bkg, selected", "Bkg, + MET, jet"], xtitle, yt,
+                        lines=["Signal: %s; %s" % (label[s], bkg), pairs], x1=0.60, log=args.log)
             for tag, sl in SELECTIONS.items():
                 series = [hg("background/overall/%s/%s" % (tag, var), cs.BLACK, B_CUT)]
                 series += [hg("background/group/%s/%s/%s" % (g, tag, var), c, B_CUT) for g, c in
                            (("ZJets", cs.BLUE), ("WJets", cs.ORANGE), ("QCD", cs.GREEN))]
                 cs.plot(out / var / "background" / (tag + sfx), series, ["All 47", "ZJets", "WJets", "QCD"], xtitle, yt,
-                        lines=["Background, " + sl, bkg_pop] + pop + extra, log=args.log)
+                        lines=["Background (47 of 50), " + sl, pairs], x1=0.66, log=args.log)
             series = [hg("signal/%s/cut/%s" % (k, var), c, B_CUT) for k, c in zip(taus, cs.COLORS)]
             series.append(hg("background/overall/cut/%s" % var, cs.BLACK, B_SEL))
             cs.plot(out / var / "overlays" / ("ctau" + sfx), series,
-                    ["Signal, " + label[k] for k in taus] + ["Bkg (all 47)"], xtitle, yt,
-                    lines=["+ MET, jet cut", "Signal pooled over masses", bkg_pop] + pop + extra, log=args.log)
+                    ["Signal, " + label[k] for k in taus] + ["Bkg (47 of 50)"], xtitle, yt,
+                    lines=["+ MET, jet cut; signal pooled over masses", pairs], x1=0.60, log=args.log)
             fam = sorted({mkey(k)[0] for k in masses})
             fstyle = [(3, 25), (2, 24), (1, 20)]
             series = [hg("signal/%s/cut/%s" % (k, var), cs.COLORS[fam.index(mkey(k)[0])],
                          fstyle[[0.1, 0.2, 0.4].index(round(mkey(k)[1] / mkey(k)[0], 3))]) for k in masses]
             series.append(hg("background/overall/cut/%s" % var, cs.BLACK, (1, 21)))
             groups = {"%g GeV" % m: cs.COLORS[i] for i, m in enumerate(fam)}
-            groups["Bkg (all 47)"] = cs.BLACK
-            cs.plot(out / var / "overlays" / ("mass" + sfx), series, None, xtitle, yt, layout="band", groups=groups,
-                    stages={"#Deltam = 0.1 m": fstyle[0], "0.2 m": fstyle[1], "0.4 m": fstyle[2]},
-                    group_header="m = m_{#chi} - #Deltam/2",
-                    lines=["+ MET, jet cut; signal pooled over lifetimes", bkg_pop] + pop[:1] + extra, log=args.log)
+            groups["Bkg (47 of 50)"] = cs.BLACK
+            band_plot(out / var / "overlays" / ("mass" + sfx), series, xtitle, yt,
+                      ["+ MET, jet cut; signal pooled over lifetimes; " + bkg, pairs] +
+                      ([cs.STYLE["norm_label"]] if norm else []),
+                      groups, {"#Deltam = 0.1 m": fstyle[0], "0.2 m": fstyle[1], "0.4 m": fstyle[2]},
+                      "m_{#chi} - #Deltam/2")
     print("PLOTS DONE", out)
 
 
