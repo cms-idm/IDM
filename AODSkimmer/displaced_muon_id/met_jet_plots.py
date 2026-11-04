@@ -24,10 +24,11 @@ STAGES = [("events", "All events"), ("events_eligible_pair", "Eligible pair"), (
           ("events_dr", "PCA #DeltaR < 0.9"), ("events_met_angle", "|#Delta#phi(MET,#mu#mu)| < 0.5"),
           ("selected_met_and_jet", "+ MET, jet p_{T} > 80 GeV")]
 GROUPS = ["ZJets", "WJets", "QCD", "TTbar", "SingleTop", "DYJets", "Multiboson", "WWZ", "WZZ", "ZZ", "ZZZ", "ZGamma"]
+MAJOR = GROUPS[:5]  # FOM overlays split in two for legibility: the five largest groups, then the rest
 LEVEL = 0.6827
 POP = "Raw MC counts, unweighted"
 BKG_POP = "Background: 47 of 50 2022EE samples"
-FOM_LINE = "Relative, unweighted; not an expected significance"
+FOM_LINE = "Relative, unweighted; not an expected significance; bars approx."
 
 
 def counts(f, path):
@@ -126,38 +127,58 @@ class Plotter:
         """points: list of (x index, (f, up, down)) -> asymmetric graph, styled like the other series."""
         gr = ROOT.TGraphAsymmErrors()
         for i, (f, up, dn) in points:
-            j = gr.GetN(); gr.SetPoint(j, i + 0.5, f); gr.SetPointError(j, 0.5, 0.5, dn, up)
+            j = gr.GetN(); gr.SetPoint(j, i + 0.5, f); gr.SetPointError(j, 0.5, 0.5, min(dn, f), up)  # bar capped at 0
         return self.cs._style(gr, color, style[0], style[1], [0, 1], kind="hist")
 
-    def draw(self, base, graphs, labels, xlabels, ytitle, lines, band=None, log=False, ylim=None):
-        """Categorical x axis (one bin per label, vertical labels); frame or band layout from cms_style."""
+    def draw(self, base, graphs, labels, xlabels, ytitle, lines, xtitle="", band=None, log=False):
+        """Categorical x axis (one bin per label, vertical labels). Context lines top left; legend below them in up to
+        two columns (frame), or colour and style keys placed above the frame (band); y max keeps the data below them."""
         cs = self.cs
-        c = ROOT.TCanvas("c_" + base.replace("/", "_"), "", 900, 1000 if band else 900)
-        c.SetLeftMargin(0.15); c.SetRightMargin(0.04); c.SetBottomMargin(0.27); c.SetTopMargin(0.30 if band else 0.08)
-        cs._keep.append(c)
         n = len(xlabels)
-        pts = [p for p in cs._points(graphs)]
+        bottom = min(0.33, 0.10 + 0.0105 * max(len(re.sub(r"#\w+|[{}_^]", "", l)) for l in xlabels))
+        top = 0.30 if band else 0.08
+        c = ROOT.TCanvas("c_" + base.replace("/", "_"), "", 900, 1000 if band else 900)
+        c.SetLeftMargin(0.15); c.SetRightMargin(0.04); c.SetBottomMargin(bottom); c.SetTopMargin(top)
+        cs._keep.append(c)
+        pts = cs._points(graphs)
         hi = max([p[3] for p in pts] or [1])
-        if ylim is None:
-            ylim = (0, cs._round_up(hi * (1.12 if band else 1.45)))
-        fr = cs.frame(c, 0, n, ylim[0], ylim[1], "", ytitle)
+        if band:
+            key_bottom = 1 - top  # keys sit above the frame
+        else:
+            ncol = 1 if len(graphs) <= 3 else 2
+            rows = -(-len(graphs) // ncol)
+            y2 = 0.89 - 0.045 * len(lines) - 0.01
+            key_bottom = y2 - 0.042 * rows
+        frac = (key_bottom - 0.02 - bottom) / (1 - top - bottom)
+        ymax = cs._round_up(hi / max(frac, 0.2))
+        fr = cs.frame(c, 0, n, 0, ymax, xtitle, ytitle)
         ax = fr.GetXaxis(); ax.Set(n, 0, n)
         for i, lab in enumerate(xlabels, 1):
             ax.SetBinLabel(i, lab)
         ax.LabelsOption("v"); ax.SetLabelSize(0.034 if n < 15 else 0.028)
+        ax.SetTitleOffset(1.0 + (bottom - 0.13) * 9)
         c.Update()
         for g in graphs:
             g.Draw(cs._info[id(g)][1] + " same")
-        cs.context(c, lines, bool(band))
+        t = cs.header(c, 0.15, 0.95 if band else 0.94, (0.04, 0.031) if band else (0.05, 0.038), 0.96)
+        t.SetTextSize(0.028 if band else 0.032); t.SetTextAlign(13)
+        y0 = 0.90 if band else 0.89
+        for i, line in enumerate(lines):
+            t.DrawLatex(0.18, y0 - (0.035 if band else 0.045) * i, line)
         if band:
-            cs.split_keys(*band)
+            groups, stages, header = band
+            cs.legend([(cs._proxy(col, 1, 20), lab, "l") for lab, col in groups.items()], y2=0.92, y1=0.72, x1=0.56,
+                      header=header, ncol=2, size=0.026)
+            cs.legend([(cs._proxy(cs.BLACK, ls, ms), lab, "lp") for lab, (ls, ms) in stages.items()],
+                      y2=0.90 - 0.035 * len(lines) - 0.005, y1=0.90 - 0.035 * len(lines) - 0.045, x1=0.18, x2=0.55,
+                      ncol=3, size=0.026)
         else:
-            cs.legend([(g, lab, cs._info[id(g)][2]) for g, lab in zip(graphs, labels)], y2=0.89, x1=0.50,
-                      size=0.028 if len(graphs) > 6 else 0.033)
+            cs.legend([(g, lab, cs._info[id(g)][2]) for g, lab in zip(graphs, labels)], y2=y2, y1=key_bottom, x1=0.18,
+                      x2=0.94, ncol=ncol, size=0.030)
         logy = None
         if log:
             lo = min([p[2] for p in pts if p[2] > 0] or [1e-5])
-            logy = (10 ** math.floor(math.log10(lo / 2)), 20 if band else 60)
+            logy = (10 ** math.floor(math.log10(lo / 2)), 10 ** math.ceil(math.log10(hi) + 2.5))
         cs.save(c, self.out / base, log=log, logy=logy)
 
 
@@ -225,34 +246,34 @@ def main():
     groups["Background, all 47"] = cs.BLACK
     stages = {"#Deltam = 0.1 m": fstyle[0], "0.2 m": fstyle[1], "0.4 m": fstyle[2]}
     P.draw("cutflow/overlay_mass", gr, None, stage_labels, "Fraction of all events",
-           cut_lines + [BKG_POP, "Signal pooled over lifetimes; m = m_{#chi} - #Deltam/2"],
+           ["Reco-only #mu#mu chain, cumulative; " + POP.lower(), BKG_POP + "; signal pooled over lifetimes"],
            band=(groups, stages, "m_{#chi} - #Deltam/2"), log=args.log)
 
     # 2. Selected / all events, uncut and with the cut.
     axes = {"ctau": ["overall"] + taus, "mass": ["overall"] + masses}
     xl = {"ctau": ["All"] + [k.split("-")[1] + " mm" for k in taus],
           "mass": ["All"] + [mass_label(k[5:]) for k in masses]}
-    xt = {"ctau": "c#tau (pooled over masses)", "mass": "m_{#chi} / #Deltam [GeV] (pooled over lifetimes)"}
+    xt = {"ctau": "Signal c#tau (pooled over masses)", "mass": "Signal m_{#chi} / #Deltam [GeV] (pooled over lifetimes)"}
     for a, keys in axes.items():
         ns = [sig[k][0] for k in keys]
         unc, cut = [sig[k][7] for k in keys], [sig[k][8] for k in keys]
         b = bkg["overall"]
         s_unc, s_cut = P.eff(unc, ns, cs.BLUE, B, "f%su" % a), P.eff(cut, ns, cs.BLUE, S, "f%sc" % a)
-        lines = ["x: " + xt[a], POP]
+        lines = [POP]
         P.draw("fraction/signal_vs_%s" % a, [s_unc, s_cut], ["Signal, selected #mu#mu", "Signal, + MET, jet cut"], xl[a],
-               "Events / all events", lines)
+               "Events / all events", lines, xtitle=xt[a])
         P.draw("fraction/signal_bkg_vs_%s" % a,
                [P.eff(unc, ns, cs.BLUE, B, "g%su" % a), P.eff(cut, ns, cs.BLUE, S, "g%sc" % a),
                 P.eff([b[7]] * len(keys), b[0], cs.BLACK, B, "g%sbu" % a),
                 P.eff([b[8]] * len(keys), b[0], cs.BLACK, S, "g%sbc" % a)],
                ["Signal, selected #mu#mu", "Signal, + MET, jet cut", "Bkg (all 47), selected #mu#mu",
-                "Bkg (all 47), + MET, jet cut"], xl[a], "Events / all events", lines + [BKG_POP])
+                "Bkg (all 47), + MET, jet cut"], xl[a], "Events / all events", lines + [BKG_POP], xtitle=xt[a])
     bkeys = ["overall"] + ["group/" + g for g in GROUPS]
     nb = [bkg[g][0] for g in bkeys]
     P.draw("fraction/background_vs_group",
            [P.eff([bkg[g][7] for g in bkeys], nb, cs.BLACK, B, "fbu"), P.eff([bkg[g][8] for g in bkeys], nb, cs.BLACK, S, "fbc")],
            ["Bkg, selected #mu#mu", "Bkg, + MET, jet cut"], ["All 47"] + GROUPS, "Events / all events",
-           ["x: background process group", POP, BKG_POP])
+           [POP, BKG_POP], xtitle="Background process group")
 
     # 3. F = eps_s / sqrt(eps_b).
     print("F = eps_s/sqrt(eps_b) (value +up -down), uncut | cut:")
@@ -277,7 +298,7 @@ def main():
                 if not pts:
                     zero.setdefault(g, set()).add(tag)
                 series[tag] = pts
-            lines = ["x: " + xt[a], "Background: " + bkg_label[g], FOM_LINE]
+            lines = ["Background: " + bkg_label[g], FOM_LINE]
             if not series["cut"] or not series["uncut"]:
                 lines.append("No background events survive the %s selection" % ("cut" if not series["cut"] else "uncut"))
             gr, labs = [], []
@@ -285,17 +306,19 @@ def main():
                 if series[tag]:
                     gr.append(P.graph(series[tag], cs.BLUE, sty)); labs.append(lab)
             P.draw("fom/%s_vs_%s" % (g.replace("group/", "bkg_") if g != "overall" else "bkg_all", a), gr, labs, xl[a],
-                   "#varepsilon_{s} / #sqrt{#varepsilon_{b}}", lines)
+                   "#varepsilon_{s} / #sqrt{#varepsilon_{b}}", lines, xtitle=xt[a])
             for tag in over:
                 if series[tag]:
                     color, sty = (cs.BLACK, (1, 20)) if g == "overall" else bstyle[g[6:]]
-                    over[tag].append((P.graph(series[tag], color, sty), bkg_label[g]))
+                    over[tag].append((g, P.graph(series[tag], color, sty), bkg_label[g]))
         for tag in over:
-            missing = [g[6:] for g in bkeys if g != "overall" and tag in zero.get(g, ())]
-            lines = ["x: " + xt[a], "Signal " + ("selected #mu#mu" if tag == "uncut" else "and bkg: + MET, jet cut"),
-                     FOM_LINE] + (["No surviving background: " + ", ".join(missing)] if missing else [])
-            P.draw("fom/overlay_%s_vs_%s" % (tag, a), [g for g, _ in over[tag]], [l for _, l in over[tag]], xl[a],
-                   "#varepsilon_{s} / #sqrt{#varepsilon_{b}}", lines)
+            for part, members in (("major", MAJOR), ("minor", [g for g in GROUPS if g not in MAJOR])):
+                keep = [o for o in over[tag] if o[0] == "overall" or o[0][6:] in members]
+                missing = [g for g in members if tag in zero.get("group/" + g, ())]
+                lines = ["Signal and bkg: " + ("selected #mu#mu" if tag == "uncut" else "+ MET, jet cut"),
+                         FOM_LINE] + (["No surviving background: " + ", ".join(missing)] if missing else [])
+                P.draw("fom/overlay_%s_%s_vs_%s" % (tag, part, a), [o[1] for o in keep], [o[2] for o in keep], xl[a],
+                       "#varepsilon_{s} / #sqrt{#varepsilon_{b}}", lines, xtitle=xt[a])
     print("PLOTS DONE", out)
 
 
