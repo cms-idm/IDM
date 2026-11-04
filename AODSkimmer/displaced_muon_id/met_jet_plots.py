@@ -27,7 +27,7 @@ GROUPS = ["ZJets", "WJets", "QCD", "TTbar", "SingleTop", "DYJets", "Multiboson",
 MAJOR = GROUPS[:5]  # FOM overlays split in two for legibility: the five largest groups, then the rest
 LEVEL = 0.6827
 POP = "Raw MC counts, unweighted"
-BKG_POP = "Background: 47 of 50 2022EE samples"
+BKG_POP = None  # set in main() from the background samples present in --met-jet
 FOM_LINE = "Relative, unweighted, not a significance; bars approx."
 CUT_LINE = "Last step: Type-1 PF MET > 80 GeV, leading jet p_{T} > 80 GeV, |#eta| < 2.4"  # band / above layout
 CUT_LINES = ["MET, jet cut: Type-1 PF MET > 80 GeV,", "leading jet p_{T} > 80 GeV, |#eta| < 2.4"]  # frame layout
@@ -80,7 +80,7 @@ def load(args):
     for name, v in list(sig.items()) + list(bkg.items()):
         if any(b > a for a, b in zip(v, v[1:])) or v[-1] > v[-2] or any(x != round(x) or x < 0 for x in v):
             raise RuntimeError("Cutflow not non-increasing or not integer: %s %r" % (name, v))
-    return sig, bkg
+    return sig, bkg, len(included)
 
 
 def cp(k, n, up):
@@ -217,7 +217,10 @@ def main():
     out = Path(args.out_dir)
     if out.exists():
         raise FileExistsError(out)
-    sig, bkg = load(args)
+    global BKG_POP
+    sig, bkg, n_bkg = load(args)
+    ALLB = "all %d" % n_bkg
+    BKG_POP = "Background: %s 2022EE samples" % ("all 50" if n_bkg == 50 else "%d of 50" % n_bkg)
     P = Plotter(cs, out, args.log)
     stage_labels = [lab for _, lab in STAGES]
     taus = sorted((k for k in sig if k.startswith("lifetime/")), key=lambda k: float(k.split("-")[1]))
@@ -225,7 +228,7 @@ def main():
     tau_label = lambda k: "c#tau = %s mm" % k.split("-")[1]
     sig_label = {"overall": "Signal, all 72 samples", **{k: "Signal, " + tau_label(k) for k in taus},
                  **{k: "Signal, m_{#chi} / #Deltam = %s GeV" % mass_label(k[5:]) for k in masses}}
-    bkg_label = {"overall": "Background, all 47", **{"group/" + g: g for g in GROUPS}}
+    bkg_label = {"overall": "Background, " + ALLB, **{"group/" + g: g for g in GROUPS}}
     S, B = cs.FILLED_SOLID, cs.OPEN_DASHED
     cut_lines = ["Reco-only #mu#mu chain, cumulative; " + POP, CUT_LINE]
     print("Cutflows (event counts per stage):")
@@ -265,7 +268,7 @@ def main():
                         "cmo" + k))
     gr.append(P.eff(bkg["overall"], bkg["overall"][0], cs.BLACK, (1, 21), "cmob"))
     groups = {"%g GeV" % m: palette[i] for i, m in enumerate(fam)}
-    groups["Background, all 47"] = cs.BLACK
+    groups["Background, " + ALLB] = cs.BLACK
     stages = dict(zip(M_KEYS, fstyle))
     P.draw("cutflow/overlay_mass", gr, None, stage_labels, "Fraction of all events",
            ["Reco-only #mu#mu chain, cumulative; raw MC counts, unweighted", BKG_POP + "; signal pooled over lifetimes",
@@ -290,13 +293,13 @@ def main():
                [P.eff(unc, ns, cs.BLUE, B, "g%su" % a), P.eff(cut, ns, cs.BLUE, S, "g%sc" % a),
                 P.eff([b[7]] * len(keys), b[0], cs.BLACK, B, "g%sbu" % a),
                 P.eff([b[8]] * len(keys), b[0], cs.BLACK, S, "g%sbc" % a)],
-               ["Signal, selected #mu#mu", "Signal, + MET, jet cut", "Bkg (all 47), selected #mu#mu",
-                "Bkg (all 47), + MET, jet cut"], xl[a], "Events / all events", lines + [BKG_POP], xtitle=xt[a])
+               ["Signal, selected #mu#mu", "Signal, + MET, jet cut", "Bkg (%s), selected #mu#mu" % ALLB,
+                "Bkg (%s), + MET, jet cut" % ALLB], xl[a], "Events / all events", lines + [BKG_POP], xtitle=xt[a])
     bkeys = ["overall"] + ["group/" + g for g in GROUPS]
     nb = [bkg[g][0] for g in bkeys]
     P.draw("fraction/background_vs_group",
            [P.eff([bkg[g][7] for g in bkeys], nb, cs.BLACK, B, "fbu"), P.eff([bkg[g][8] for g in bkeys], nb, cs.BLACK, S, "fbc")],
-           ["Bkg, selected #mu#mu", "Bkg, + MET, jet cut"], ["All 47"] + GROUPS, "Events / all events",
+           ["Bkg, selected #mu#mu", "Bkg, + MET, jet cut"], [ALLB.capitalize()] + GROUPS, "Events / all events",
            [POP, BKG_POP] + CUT_LINES, xtitle="Background process group")
 
     # 3. F = eps_s / sqrt(eps_b).

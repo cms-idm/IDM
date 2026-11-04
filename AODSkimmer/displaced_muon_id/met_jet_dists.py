@@ -135,7 +135,9 @@ def fill(args):
             raise RuntimeError("%s samples processed %d (unique %d) != met_jet_cut.root %d" % (
                 kind, len(names), len(set(names)), len(expected[kind])))
     print("COVERAGE signal %d, background %d samples" % (len(processed["signal"]), len(processed["background"])))
+    coverage = "signal %d background %d" % (len(processed["signal"]), len(processed["background"]))
     root = ROOT.TFile.Open(str(out), "CREATE")
+    ROOT.TNamed("coverage", coverage).Write()
     ROOT.TNamed("definitions", "Raw unweighted pair counts of passing pairs (reco-only chain stage 6), pair-level. "
                 "selected = all passing pairs; cut = passing pairs in events with Type-1 PF MET > 80 GeV and highest-pT "
                 "slimmedJets jet pT > 80 GeV, |eta| < 2.4. Non-finite or negative values not filled (counted in the fill log). Variables: " + ", ".join(
@@ -184,7 +186,12 @@ def plot(args):
                  r"mass/Mchi-([\dp]+)_dMchi-([\dp]+)", k).groups()) for k in masses}}
     B_SEL, B_CUT = cs.OPEN_DASHED, cs.FILLED_SOLID
     pairs = "Passing #mu#mu pairs, unweighted"
-    bkg = "Bkg: 47 of 50 samples"
+    cov = f.Get("coverage")
+    if not cov:
+        raise RuntimeError("Input lacks the coverage record (refill with this version)")
+    n_bkg = int(cov.GetTitle().split()[-1])
+    BKGN = "Bkg (all 50)" if n_bkg == 50 else "Bkg (%d of 50)" % n_bkg
+    bkg = "Bkg: all 50 samples" if n_bkg == 50 else "Bkg: %d of 50 samples" % n_bkg
 
     def band_plot(base, graphs, xtitle, ytitle, lines, groups, stages, header, ymax=None, log=None, top=0.34):
         """Band layout with the keys placed below the context lines (as in met_jet_plots.py)."""
@@ -250,14 +257,14 @@ def plot(args):
         series = [cum_graph("signal/%s/cut/lxy_500" % k, c, (1, 20 + i)) for i, (k, c) in enumerate(zip(taus, cs.COLORS))]
         series.append(cum_graph("background/overall/cut/lxy_500", cs.BLACK, bstyle))
         groups = {label[k]: c for k, c in zip(taus, cs.COLORS)}
-        groups["Bkg (47 of 50)"] = cs.BLACK
-        groups_style.clear(); groups_style["Bkg (47 of 50)"] = bstyle
+        groups[BKGN] = cs.BLACK
+        groups_style.clear(); groups_style[BKGN] = bstyle
         band_plot(out / "lxy_500_cumulative" / "overlay_ctau", series, xt, yt, lines, groups, {},
                   "Signal, pooled over masses", ymax=1.05, log=False, top=CUM_TOP)
         series = [cum_graph("signal/overall/cut/lxy_500", cs.BLUE, (1, 20)),
                   cum_graph("background/overall/cut/lxy_500", cs.BLACK, bstyle)]
         band_plot(out / "lxy_500_cumulative" / "overall_signal_bkg", series, xt, yt, lines,
-                  {"Signal, all 72 samples": cs.BLUE, "Bkg (47 of 50)": cs.BLACK}, {}, None, ymax=1.05, log=False,
+                  {"Signal, all 72 samples": cs.BLUE, BKGN: cs.BLACK}, {}, None, ymax=1.05, log=False,
                   top=CUM_TOP)
         groups_style.clear()
         for k in taus + ["overall"]:
@@ -298,12 +305,12 @@ def plot(args):
                 series = [hg("background/overall/%s/%s" % (tag, var), cs.BLACK, B_CUT)]
                 series += [hg("background/group/%s/%s/%s" % (g, tag, var), c, B_CUT) for g, c in
                            (("ZJets", cs.BLUE), ("WJets", cs.ORANGE), ("QCD", cs.GREEN))]
-                cs.plot(out / var / "background" / (tag + sfx), series, ["All 47", "ZJets", "WJets", "QCD"], xtitle, yt,
+                cs.plot(out / var / "background" / (tag + sfx), series, ["All %d" % n_bkg, "ZJets", "WJets", "QCD"], xtitle, yt,
                         lines=[bkg] + (CUT_LINES if tag == "cut" else [sl]) + [pairs], x1=0.66, log=args.log)
             series = [hg("signal/%s/cut/%s" % (k, var), c, B_CUT) for k, c in zip(taus, cs.COLORS)]
             series.append(hg("background/overall/cut/%s" % var, cs.BLACK, B_SEL))
             cs.plot(out / var / "overlays" / ("ctau" + sfx), series,
-                    ["Signal, " + label[k] for k in taus] + ["Bkg (47 of 50)"], xtitle, yt,
+                    ["Signal, " + label[k] for k in taus] + [BKGN], xtitle, yt,
                     lines=CUT_LINES + ["Signal pooled over masses", bkg, pairs], x1=0.60, log=args.log)
             fam = sorted({mkey(k)[0] for k in masses})
             fstyle = [(3, 25), (2, 24), (1, 20)]
@@ -311,7 +318,7 @@ def plot(args):
                          fstyle[[0.1, 0.2, 0.4].index(round(mkey(k)[1] / mkey(k)[0], 3))]) for k in masses]
             series.append(hg("background/overall/cut/%s" % var, cs.BLACK, (1, 21)))
             groups = {"%g GeV" % m: cs.COLORS[i] for i, m in enumerate(fam)}
-            groups["Bkg (47 of 50)"] = cs.BLACK
+            groups[BKGN] = cs.BLACK
             band_plot(out / var / "overlays" / ("mass" + sfx), series, xtitle, yt,
                       [CUT_LINE, "Signal pooled over lifetimes; " + bkg,
                        pairs + ("; " + cs.STYLE["norm_label"] if norm else "")],
