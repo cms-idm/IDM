@@ -13,8 +13,8 @@ own 'inputs' metadata), the producer outputs listed there (pfMetPt) and the scan
 cut = pfMetPt > 80 and leading jet pT > 80 and |eta| < 2.4 (no jet fails). Raw unweighted event counts.
 """
 import argparse
-import concurrent.futures
 from collections import Counter, defaultdict
+import multiprocessing
 from pathlib import Path
 import re
 import time
@@ -83,8 +83,9 @@ def scan(args):
         files = [l.strip() for l in flist.read_text().splitlines() if l.strip() and not l.lstrip().startswith("#")]
         jobs.append((flist.stem, files, str(outdir)))
     start = time.monotonic()
-    with concurrent.futures.ProcessPoolExecutor(max_workers=args.workers) as pool:
-        res = list(pool.map(scan_sample, jobs))
+    # One sample per worker process: FWLite memory grows across samples in one process (bad_alloc after ~4).
+    with multiprocessing.Pool(args.workers, maxtasksperchild=1) as pool:
+        res = pool.map(scan_sample, jobs, chunksize=1)
     for (sample, files, _), r in zip(jobs, res):
         ok = not r[2] and [f for f, _ in r[1]] == files
         print("SAMPLE %s files=%d/%d events=%d %s" % (sample, len(r[1]), len(files), sum(n for _, n in r[1]),
