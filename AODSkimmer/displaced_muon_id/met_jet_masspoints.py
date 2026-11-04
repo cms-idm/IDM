@@ -29,6 +29,7 @@ MASSES = ["Mchi-5p25_dMchi-0p5", "Mchi-5p5_dMchi-1p0", "Mchi-6p0_dMchi-2p0",
           "Mchi-52p5_dMchi-5p0", "Mchi-55p0_dMchi-10p0", "Mchi-60p0_dMchi-20p0"]
 GROUPS = ["ZJets", "WJets", "QCD"]
 TAGS = ("selected", "cut")
+STAGE = {"selected": "Selected", "cut": "Selected, after cut"}
 PT_T, LEAD_T, SUB_T, LXY_T = ("p_{T}^{#mu#mu} from the reco legs [GeV]", "Leading muon p_{T} of the reco legs [GeV]",
                               "Subleading muon p_{T} of the reco legs [GeV]", "Vertex L_{xy} to the beamspot [cm]")
 VIEWS = {  # name: (variable, edges, x title, per-bin text)
@@ -338,10 +339,11 @@ def plot(args):
         c.SetTopMargin(top)
         hi = max([p[3] for p in cs._points(graphs)] or [1])
         ymax = cs._round_up(1.1 * hi)
-        if ymax < 0.1:  # 5-character tick labels: room for the y title (as met_jet_plots.py)
+        wide = ymax < 0.1 or ymax >= 1000  # long tick labels: room for the y title (as met_jet_plots.py)
+        if wide:
             c.SetLeftMargin(0.19)
         fr = cs.frame(c, xr[0], xr[1], 0, ymax, xtitle, ytitle)
-        if ymax < 0.1:
+        if wide:
             fr.GetYaxis().SetTitleOffset(1.75)
         fr.GetYaxis().SetTitleSize(0.045)
         c.Update()
@@ -400,12 +402,12 @@ def plot(args):
         var, edges, xt, per = VIEWS[view]
         for tag in TAGS:
             for b, name, lab in BKGS:
-                for mode, sfx, yt in (("raw", "", "Events / "), ("norm", "_norm", "Fraction of selected events / "),
+                for mode, sfx, yt in (("raw", "", "Events / "), ("norm", "_norm", "Fraction of events / "),
                                       ("frac", "_frac", "Fraction of all events / ")):
                     gr = [graph("signal/%s/%s/%s" % (k, tag, view), nall[("signal", k)], look[k][0], look[k][1], mode)
                           for k in masses]
                     gr.append(graph("background/%s/%s/%s" % (b, tag, view), nall[("background", b)], cs.BLACK, (1, 21), mode))
-                    lines = ["Signal pooled over lifetimes"] + (["Unit area"] if mode == "norm" else [])
+                    lines = [STAGE[tag] + "; signal pooled over lifetimes"] + (["Unit area"] if mode == "norm" else [])
                     band_plot(out / "dists" / view / tag / (name + sfx), gr, (edges[0], edges[-1]), xt, yt + per, lines,
                               extra={"Bkg, " + lab: cs.BLACK})
         rows = []
@@ -508,7 +510,7 @@ def plot(args):
                 for logz, sfx in ((False, ""), (True, "_log")):
                     d = h.Clone(); cs._keep.append(d)
                     base.parent.mkdir(parents=True, exist_ok=True)
-                    cs.map2d(str(base) + sfx, d, LXY_T, PT_T, "Events / bin", lines=[lab], logz=logz)
+                    cs.map2d(str(base) + sfx, d, LXY_T, PT_T, "Events / bin", lines=[lab, STAGE[tag]], logz=logz)
             rows.append(row)
         ly = MAPS[mp]
         caps.add("maps/%s/<selected|cut>/<slice>[_log].png" % mp,
