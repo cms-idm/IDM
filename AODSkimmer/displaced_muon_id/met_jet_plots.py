@@ -28,7 +28,7 @@ MAJOR = GROUPS[:5]  # FOM overlays split in two for legibility: the five largest
 LEVEL = 0.6827
 POP = "Raw MC counts, unweighted"
 BKG_POP = "Background: 47 of 50 2022EE samples"
-FOM_LINE = "Relative, unweighted; not an expected significance; bars approx."
+FOM_LINE = "Relative, unweighted, not a significance; bars approx."
 
 
 def counts(f, path):
@@ -135,7 +135,7 @@ class Plotter:
         two columns (frame), or colour and style keys placed above the frame (band); y max keeps the data below them."""
         cs = self.cs
         n = len(xlabels)
-        bottom = min(0.33, 0.10 + 0.0105 * max(len(re.sub(r"#\w+|[{}_^]", "", l)) for l in xlabels))
+        bottom = min(0.33, 0.10 + 0.0092 * max(len(re.sub(r"#\w+|[{}_^]", "", l)) for l in xlabels))
         top = 0.30 if band else 0.08
         c = ROOT.TCanvas("c_" + base.replace("/", "_"), "", 900, 1000 if band else 900)
         c.SetLeftMargin(0.15); c.SetRightMargin(0.04); c.SetBottomMargin(bottom); c.SetTopMargin(top)
@@ -167,18 +167,20 @@ class Plotter:
             t.DrawLatex(0.18, y0 - (0.035 if band else 0.045) * i, line)
         if band:
             groups, stages, header = band
-            cs.legend([(cs._proxy(col, 1, 20), lab, "l") for lab, col in groups.items()], y2=0.92, y1=0.72, x1=0.56,
+            ytop = 0.90 - 0.035 * len(lines) - 0.005  # keys go below the context lines
+            cs.legend([(cs._proxy(col, 1, 20), lab, "l") for lab, col in groups.items()], y2=ytop, y1=0.71, x1=0.50,
                       header=header, ncol=2, size=0.026)
             cs.legend([(cs._proxy(cs.BLACK, ls, ms), lab, "lp") for lab, (ls, ms) in stages.items()],
-                      y2=0.90 - 0.035 * len(lines) - 0.005, y1=0.90 - 0.035 * len(lines) - 0.045, x1=0.18, x2=0.55,
-                      ncol=3, size=0.026)
+                      y2=ytop, y1=0.71, x1=0.17, x2=0.47, size=0.026)
         else:
             cs.legend([(g, lab, cs._info[id(g)][2]) for g, lab in zip(graphs, labels)], y2=y2, y1=key_bottom, x1=0.18,
                       x2=0.94, ncol=ncol, size=0.030)
         logy = None
         if log:
             lo = min([p[2] for p in pts if p[2] > 0] or [1e-5])
-            logy = (10 ** math.floor(math.log10(lo / 2)), 10 ** math.ceil(math.log10(hi) + 2.5))
+            ylo = 10 ** math.floor(math.log10(lo / 2))
+            f = max(frac, 0.2)  # same fraction of the frame height for the data as in the linear plot
+            logy = (ylo, ylo * (hi * 1.05 / ylo) ** (1 / f))
         cs.save(c, self.out / base, log=log, logy=logy)
 
 
@@ -246,7 +248,7 @@ def main():
     groups["Background, all 47"] = cs.BLACK
     stages = {"#Deltam = 0.1 m": fstyle[0], "0.2 m": fstyle[1], "0.4 m": fstyle[2]}
     P.draw("cutflow/overlay_mass", gr, None, stage_labels, "Fraction of all events",
-           ["Reco-only #mu#mu chain, cumulative; " + POP.lower(), BKG_POP + "; signal pooled over lifetimes"],
+           ["Reco-only #mu#mu chain, cumulative; raw MC counts, unweighted", BKG_POP + "; signal pooled over lifetimes"],
            band=(groups, stages, "m_{#chi} - #Deltam/2"), log=args.log)
 
     # 2. Selected / all events, uncut and with the cut.
