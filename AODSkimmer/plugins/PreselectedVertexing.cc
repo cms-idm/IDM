@@ -360,6 +360,8 @@ public:
       "station-2 position eta/phi, dR<0.06 (I,G) <0.10 (O), same charge, whole-object claim, no fallback. "
       "Best-best = fit of the hierarchy-matched components' tracks (one set). Typed combos: independent per-type matching, ordered (gen0 type a, gen1 type b), types 0 I,1 O,2 G; "
       "Pairs = all unordered pairs of distinct eligible-object best components in configured hierarchy order. Legacy mode: twoAcc only. recoOnly mode: all events, fixed component charges, OS before fit, no fit fallback; legacy best-best/typed/hf fits disabled. pIsBB/pMatchedLegs label objects via staged truth matching independently of reco selection; the labeling component may differ from the fitted component. pPcaOK/DR/MuMuPt/MuMuPhi use original-track momentum at 3D PCA to the fitted vertex; -999 on failure. "
+      "pPcaPt/Eta/PhiA/B: the same per-leg momenta at the PCA, -999 unless pPcaOK. pRecoPt/Eta/PhiA/B: per-leg paired component "
+      "track at its reference point (as pRecoDR/MuMuPt), every pair. "
       "KalmanVertexFitter(refit), status 0 not fitted,1 shared,2 failed,3 valid. *NoEta = cross-check without reco-eta gate. "
       "Reco dR/pT from track reference-point momenta. dPhi = phi(MET)-phi(mumu) wrapped. "
       "puppiMet* = slimmedMETsPuppi[0] corPt/corPhi(Type1); -999 if the collection is empty. "
@@ -404,6 +406,8 @@ public:
     P(pEvent); P(pObjA); P(pObjB); P(pTypeA); P(pTypeB); P(pCat); P(pIsBB); P(pStatus); P(pChi2); P(pNdof); P(pProb);
     P(pQA); P(pQB); P(pMatchedLegs); P(pPcaOK); P(pPcaDR); P(pPcaMuMuPt); P(pPcaMuMuPhi);
     P(pVx); P(pVy); P(pVz); P(pLxyBS); P(pMass); P(pRecoDR); P(pRecoMuMuPt); P(pRecoMuMuPhi);
+    P(pPcaPtA); P(pPcaEtaA); P(pPcaPhiA); P(pPcaPtB); P(pPcaEtaB); P(pPcaPhiB);
+    P(pRecoPtA); P(pRecoEtaA); P(pRecoPhiA); P(pRecoPtB); P(pRecoEtaB); P(pRecoPhiB);
 #undef P
 #define K(x) combo_->Branch(#x, &x##_)
     K(kEvent); K(kTypeA); K(kTypeB); K(kStatus); K(kChi2); K(kNdof); K(kProb); K(kVx); K(kVy); K(kVz); K(kLxyBS);
@@ -883,6 +887,7 @@ public:
                           (b.obj == labels.obj[0] || b.obj == labels.obj[1]);
           pPcaOK_ = false;
           pPcaDR_ = pPcaMuMuPt_ = pPcaMuMuPhi_ = -999.f;
+          pPcaPtA_ = pPcaEtaA_ = pPcaPhiA_ = pPcaPtB_ = pPcaEtaB_ = pPcaPhiB_ = -999.f;  // every pair; set only if pPcaOK
           if (recoOnly_ && f.status == kValid) {
             const auto* prop = dynamic_cast<const SteppingHelixPropagator*>(&es.getData(vertexPropagator_));
             if (!prop) throw cms::Exception("PreselectedVertexing") << "Expected SteppingHelixPropagatorAny";
@@ -908,6 +913,10 @@ public:
               pPcaMuMuPt_ = sum.perp();
               pPcaMuMuPhi_ = sum.phi();
               pPcaOK_ = std::isfinite(pPcaDR_) && std::isfinite(pPcaMuMuPt_) && std::isfinite(pPcaMuMuPhi_);
+              if (pPcaOK_) {
+                pPcaPtA_ = momenta[0].perp(); pPcaEtaA_ = momenta[0].eta(); pPcaPhiA_ = momenta[0].phi();
+                pPcaPtB_ = momenta[1].perp(); pPcaEtaB_ = momenta[1].eta(); pPcaPhiB_ = momenta[1].phi();
+              }
             }
           }
           pStatus_ = f.status; pChi2_ = f.chi2; pNdof_ = f.ndof; pProb_ = f.prob; pVx_ = f.vx; pVy_ = f.vy;
@@ -915,6 +924,8 @@ public:
           pRecoDR_ = reco::deltaR(a.ref->eta(), a.ref->phi(), b.ref->eta(), b.ref->phi());
           pRecoMuMuPt_ = std::hypot(rx, ry);
           pRecoMuMuPhi_ = std::atan2(ry, rx);
+          pRecoPtA_ = a.ref->pt(); pRecoEtaA_ = a.ref->eta(); pRecoPhiA_ = a.ref->phi();
+          pRecoPtB_ = b.ref->pt(); pRecoEtaB_ = b.ref->eta(); pRecoPhiB_ = b.ref->phi();
           pair_->Fill();
         }
     }
@@ -1013,6 +1024,8 @@ private:
   int pQA_ = 0, pQB_ = 0, pMatchedLegs_ = 0;
   bool pPcaOK_ = false;
   float pPcaDR_ = -999, pPcaMuMuPt_ = -999, pPcaMuMuPhi_ = -999;
+  float pPcaPtA_ = -999, pPcaEtaA_ = -999, pPcaPhiA_ = -999, pPcaPtB_ = -999, pPcaEtaB_ = -999, pPcaPhiB_ = -999;
+  float pRecoPtA_ = -999, pRecoEtaA_ = -999, pRecoPhiA_ = -999, pRecoPtB_ = -999, pRecoEtaB_ = -999, pRecoPhiB_ = -999;
   bool pIsBB_ = false;
   float pChi2_ = 0, pNdof_ = 0, pProb_ = 0, pVx_ = 0, pVy_ = 0, pVz_ = 0, pLxyBS_ = 0, pMass_ = 0, pRecoDR_ = 0,
         pRecoMuMuPt_ = 0, pRecoMuMuPhi_ = 0;
