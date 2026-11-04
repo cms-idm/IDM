@@ -244,7 +244,7 @@ def plot(args):
         "Samples: signal = the 72 iDM 2022EE samples (2026-09-28 production); background = %s 2022EE "
         "background MC samples. A c-tau slice pools the 18 masses, a mass slice pools the 4 lifetimes, all unweighted; "
         "'Bkg' is the pooled background." % nbkg_text,
-        "Selections: 'selected' = all passing pairs; 'MET, jet cut' (on the plots 'MET > 80 GeV, jet pT > 80 GeV') = passing pairs in events with Type-1 PF MET > 80 GeV "
+        "Selections: 'selected' = all passing pairs; 'MET, jet cut' ('after cut' in the legends; not labelled on single-selection plots) = passing pairs in events with Type-1 PF MET > 80 GeV "
         "and highest-pT slimmedJets jet pT > 80 GeV, |eta| < 2.4 (no jet ID, no muon cleaning; no jet fails).",
         "Variables here: " + "; ".join("%s = %s, %g-%g in bins of %s" % (v, plain[v], VARS[v][1][0], VARS[v][1][-1],
                                                                          VARS[v][3]) for v in args.vars) + ".",
@@ -312,7 +312,7 @@ def plot(args):
         """Cumulative Lxy after the cut (user 2026-11-04): c-tau overlay + background, and overall signal vs background."""
         yt = "Fraction with L_{xy} #geq x"
         xt = "L_{xy} threshold x [cm]"
-        lines = [CUT_LAB + "; passing #mu#mu pairs", "Denominator: all passing pairs"]
+        lines = ["Passing #mu#mu pairs", "Denominator: all passing pairs"]  # cut stated in the caption (user 2026-11-04)
         bstyle = (2, 24)
         series = [cum_graph("signal/%s/cut/lxy_500" % k, c, (1, 20 + i)) for i, (k, c) in enumerate(zip(taus, cs.COLORS))]
         series.append(cum_graph("background/overall/cut/lxy_500", cs.BLACK, bstyle))
@@ -351,14 +351,14 @@ def plot(args):
                 if args.cut_only:
                     series = [hg("signal/%s/cut/%s" % (s, var), cs.BLUE, B_CUT),
                               hg("background/overall/cut/%s" % var, cs.BLACK, B_SEL)]
-                    cs.plot(out / var / d / ("signal_bkg" + sfx), series, ["Signal, " + CUT_LAB, BKGN + ", " + CUT_LAB],
+                    cs.plot(out / var / d / ("signal_bkg" + sfx), series, ["Signal", BKGN],
                             xtitle, yt, lines=["Signal: " + label[s]] + norm_line(norm), x1=0.58, log=args.log)
                     continue
                 series = [hg("signal/%s/selected/%s" % (s, var), cs.BLUE, B_SEL), hg("signal/%s/cut/%s" % (s, var), cs.BLUE, B_CUT),
                           hg("background/overall/selected/%s" % var, cs.BLACK, B_SEL),
                           hg("background/overall/cut/%s" % var, cs.BLACK, B_CUT)]
                 cs.plot(out / var / d / ("signal_bkg" + sfx), series,
-                        ["Signal, selected", "Signal, " + CUT_LAB, "Bkg, selected", "Bkg, " + CUT_LAB], xtitle, yt,
+                        ["Signal, selected", "Signal, after cut", "Bkg, selected", "Bkg, after cut"], xtitle, yt,
                         lines=["Signal: " + label[s]] + norm_line(norm), x1=0.62, log=args.log)
             for tag, sl in SELECTIONS.items():
                 if args.cut_only and tag != "cut":
@@ -367,7 +367,7 @@ def plot(args):
                 series += [hg("background/group/%s/%s/%s" % (g, tag, var), c, B_CUT) for g, c in
                            (("ZJets", cs.BLUE), ("WJets", cs.ORANGE), ("QCD", cs.GREEN))]
                 cs.plot(out / var / "background" / (tag + sfx), series, ["All %d" % n_bkg, "ZJets", "WJets", "QCD"], xtitle, yt,
-                        lines=["Background, " + sl] + norm_line(norm), x1=0.66, log=args.log)
+                        lines=["Background"] + norm_line(norm), x1=0.66, log=args.log)
             series = [hg("signal/%s/cut/%s" % (k, var), c, B_CUT) for k, c in zip(taus, cs.COLORS)]
             series.append(hg("background/overall/cut/%s" % var, cs.BLACK, B_SEL))
             cs.plot(out / var / "overlays" / ("ctau" + sfx), series,
@@ -396,7 +396,8 @@ def plot(args):
                  ["signal slice / bkg"] + ["in range, " + ("selected" if s == "selected" else "MET, jet cut") for s in sels],
                  rows)
         caps.add("%s/background/<%s>[_norm].png" % (var, "|".join(sels)),
-                 "%s for the pooled background and its three largest groups (ZJets, WJets, QCD), one plot per selection."
+                 "%s for the pooled background and its three largest groups (ZJets, WJets, QCD), one plot per selection: selected.png without and cut.png with the "
+                 "MET, jet cut (not labelled on the plots)."
                  % (upcase(plain[var])))
         caps.add("%s/overlays/<ctau|mass>[_norm].png" % var,
                  "%s, MET, jet cut (not labelled on these plots): the four lifetimes (each pooled over masses), or the 18 mass points (each pooled over "

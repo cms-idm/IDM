@@ -236,7 +236,7 @@ def main():
         "cleanedDisplacedMuons objects, each at its G > I > DSA component), opposite sign, valid vertex fit, "
         "chi2/ndof < 4, PCA valid, PCA dR < 0.9, |dphi(Type-1 PF MET, mumu at the PCA)| < 0.5. 'Selected mumu' = all "
         "of these.",
-        "MET, jet cut ('MET > 80 GeV, jet pT > 80 GeV' on the plots): Type-1 PF MET (slimmedMETs[0]) > 80 GeV and highest-pT slimmedJets jet pT > 80 GeV "
+        "MET, jet cut ('after cut' in the legends, spelled out as the last cutflow stage, not labelled on single-selection plots): Type-1 PF MET (slimmedMETs[0]) > 80 GeV and highest-pT slimmedJets jet pT > 80 GeV "
         "with |eta| < 2.4 (as stored: no jet ID, no muon cleaning); an event without jets fails.",
         "Fractions are over all events of the slice. Error bars: Clopper-Pearson 68%.",
         "F = eps_s / sqrt(eps_b), eps = selected (or selected and cut) / all events. Relative only: S/sqrt(B) is "
@@ -313,16 +313,16 @@ def main():
         unc, cut = [sig[k][7] for k in keys], [sig[k][8] for k in keys]
         b = bkg["overall"]
         s_unc, s_cut = P.eff(unc, ns, cs.BLUE, B, "f%su" % a), P.eff(cut, ns, cs.BLUE, S, "f%sc" % a)
-        P.draw("fraction/signal_vs_%s" % a, [s_unc, s_cut], ["Signal, selected #mu#mu", "Signal, " + CUT_LAB], xl[a],
-               "Events / all events", ["Unweighted MC"], xtitle=xt[a])
+        P.draw("fraction/signal_vs_%s" % a, [s_unc, s_cut], ["Signal, selected #mu#mu", "Signal, after cut"], xl[a],
+               "Events / all events", ["Unweighted MC", "Cut: " + CUT_LAB], xtitle=xt[a])
         if a == "mass":  # background reference squashed at 0 next to signal; the background plot shows it (user 2026-11-04)
             continue
         P.draw("fraction/signal_bkg_vs_%s" % a,
                [P.eff(unc, ns, cs.BLUE, B, "g%su" % a), P.eff(cut, ns, cs.BLUE, S, "g%sc" % a),
                 P.eff([b[7]] * len(keys), b[0], cs.BLACK, B, "g%sbu" % a),
                 P.eff([b[8]] * len(keys), b[0], cs.BLACK, S, "g%sbc" % a)],
-               ["Signal, selected #mu#mu", "Signal, " + CUT_LAB, "Bkg (%s), selected #mu#mu" % ALLB,
-                "Bkg (%s), " % ALLB + CUT_LAB], xl[a], "Events / all events", ["Unweighted MC"], xtitle=xt[a])
+               ["Signal, selected #mu#mu", "Signal, after cut", "Bkg (%s), selected #mu#mu" % ALLB,
+                "Bkg (%s), after cut" % ALLB], xl[a], "Events / all events", ["Unweighted MC", "Cut: " + CUT_LAB], xtitle=xt[a])
     caps.add("fraction/signal_vs_<ctau|mass>.png", "Fraction of all signal events that are selected (open) and that are "
              "selected and pass the MET, jet cut (filled), per lifetime or mass point; 'All' = all 72 samples.")
     caps.add("fraction/signal_bkg_vs_ctau.png", "As fraction/signal_vs_ctau.png, with the pooled background fractions as "
@@ -331,8 +331,8 @@ def main():
     nb = [bkg[g][0] for g in bkeys]
     P.draw("fraction/background_vs_group",
            [P.eff([bkg[g][7] for g in bkeys], nb, cs.BLACK, B, "fbu"), P.eff([bkg[g][8] for g in bkeys], nb, cs.BLACK, S, "fbc")],
-           ["Bkg, selected #mu#mu", "Bkg, " + CUT_LAB], [ALLB.capitalize()] + GROUPS, "Events / all events",
-           ["Unweighted MC"], xtitle="Background process group")
+           ["Bkg, selected #mu#mu", "Bkg, after cut"], [ALLB.capitalize()] + GROUPS, "Events / all events",
+           ["Unweighted MC", "Cut: " + CUT_LAB], xtitle="Background process group")
     caps.add("fraction/background_vs_group.png", "Fraction of all background events that are selected (open) and that "
              "are selected and pass the cut (filled), pooled and per group:",
              ["background", "events", "selected", "selected and cut", "cut / selected"],
@@ -364,7 +364,7 @@ def main():
                     zero.setdefault(g, set()).add(tag)
                 series[tag] = pts
             gr, labs = [], []
-            for tag, sty, lab in (("uncut", B, "Selected #mu#mu"), ("cut", S, CUT_LAB)):
+            for tag, sty, lab in (("uncut", B, "Selected #mu#mu"), ("cut", S, "After cut")):
                 if series[tag]:
                     gr.append(P.graph(series[tag], cs.BLUE, sty)); labs.append(lab)
             P.draw("fom/%s_vs_%s" % (g.replace("group/", "bkg_") if g != "overall" else "bkg_all", a), gr, labs, xl[a],
@@ -379,15 +379,14 @@ def main():
             for part, members in (("major", MAJOR), ("minor", [g for g in GROUPS if g not in MAJOR])):
                 keep = [o for o in over[tag] if o[0] == "overall" or o[0][6:] in members]
                 missing = [g for g in members if tag in zero.get("group/" + g, ())]
-                lines = ["Signal and bkg: " + ("selected #mu#mu" if tag == "uncut" else CUT_LAB),
-                         ("No surviving bkg: " + ", ".join(missing)) if missing else FOM_LINE]
+                lines = [("No surviving bkg: " + ", ".join(missing)) if missing else FOM_LINE]
                 P.draw("fom/overlay_%s_%s_vs_%s" % (tag, part, a), [o[1] for o in keep], [o[2] for o in keep], xl[a],
                        "#varepsilon_{s} / #sqrt{#varepsilon_{b}}", lines, xtitle=xt[a])
     caps.add("fom/bkg_<all|group>_vs_<ctau|mass>.png", "F against one background (pooled, or one group), without the cut "
              "(open) and with it (filled), per signal lifetime or mass point and 'All'. F for the overall signal:",
              ["background", "F, selected mumu", "F, MET, jet cut"], [[g, fr[g]["uncut"], fr[g]["cut"]] for g in bkeys])
     caps.add("fom/overlay_<uncut|cut>_<major|minor>_vs_<ctau|mass>.png", "F against the pooled background and the "
-             "groups, one plot per selection. 'major' = %s; 'minor' = the other seven. Groups with no surviving "
+             "groups, one plot per selection (uncut = selected mumu, cut = after the MET, jet cut; not labelled on the plots). 'major' = %s; 'minor' = the other seven. Groups with no surviving "
              "background event are listed on the plot and not drawn." % ", ".join(MAJOR))
     print("CAPTIONS", caps.write(out))
     print("PLOTS DONE", out)
