@@ -380,17 +380,16 @@ def plot(args):
             for direction, sign in (("up", "#geq"), ("down", "<")):
                 curves = {}
                 for b, name, lab in BKGS:
-                    cb, _, nb_ = scan_points("background/%s/%s" % (b, tag), nall[("background", b)], len(edges), direction)
+                    cb, hb, nb_ = scan_points("background/%s/%s" % (b, tag), nall[("background", b)], len(edges), direction)
+                    if (cb[0] if direction == "up" else tot(hb)) != bkg[b][sl[tag]]:
+                        raise RuntimeError("Scan end point differs from the selected count: %s %s" % (b, tag))
                     gr = []
                     for k in masses:
                         cs_, h, ns = scan_points("signal/%s/%s" % (k, tag), nall[("signal", k)], len(edges), direction)
                         d = np.diff(cs_)
                         if (direction == "up" and (d > 0).any()) or (direction == "down" and (d < 0).any()):
                             raise RuntimeError("Scan not monotonic: " + k)
-                        c = stored("signal/" + k)
-                        ref_ks = sig[k][sl[tag]]
-                        full = cs_[0] if direction == "up" else tot(h)
-                        if full + c["%s_novalid_%s" % (tag, var)] != ref_ks:
+                        if (cs_[0] if direction == "up" else tot(h)) != sig[k][sl[tag]]:  # no no-valid events allowed
                             raise RuntimeError("Scan end point differs from the selected count: %s %s" % (k, tag))
                         g = ROOT.TGraphAsymmErrors()
                         for i, x in enumerate(edges):
