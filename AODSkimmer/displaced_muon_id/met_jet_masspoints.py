@@ -8,8 +8,10 @@ python3 -I met_jet_masspoints.py plot --input mp.root --signal-summary ... --bkg
     --style-dir RUNDIR --out-dir RUNDIR/plots [--views ...] [--scans ...] [--maps ...]
 
 fill (uproot, awkward): one pass over the producer outputs. Raw unweighted counts in ROOT, flows kept: pair histograms
-per view, event histograms of the per-event max and min over passing pairs (threshold scans), TH2 pT vs Lxy (pair level).
-Every threshold pass from max/min is compared event by event with the direct "any passing pair passes" predicate.
+per view and TH2 pT vs Lxy, one entry per event from its representative pair (lowest chi2/ndof, then lowest pair index;
+Part 7; the Part 6 pair-level version is commit d6802a3); event histograms of the per-event max and min over passing pairs
+(threshold scans); |dphi(leading jet, MET)| per event. Every threshold pass from max/min is compared event by event with
+the direct "any passing pair passes" predicate.
 plot (PyROOT, cms_style): linear and log copies; no change to the stored histograms.
 """
 import argparse
@@ -47,6 +49,8 @@ SCANS = {  # name: (variable, edges = thresholds, x title)
 MAPS = {"map_500": np.arange(0, 500.001, 10), "map_2": np.arange(0, 2.0001, 0.1)}  # Lxy edges
 MAP_PT = np.arange(0, 100.001, 2.5)
 VARS = ("pt", "lead", "sub", "lxy")
+DPHI_EDGES = np.linspace(0, np.pi, 33)
+DPHI_T = "|#Delta#phi(leading jet, MET)|"
 MIN_BKG_RATIO = 10  # scan points with fewer pooled-background events are left out of the F(x)/F(reference) table
 
 
@@ -56,6 +60,21 @@ def sample_slices(kind, name):
         return ["mass/" + mass] if mass in MASSES else []
     g = name.split("_")[0]
     return ["overall"] + (["group/" + g] if g in GROUPS else [])
+
+
+def representative(idx, row, chi):
+    """Pair indices, one per event: among pairs idx, lowest chi (chi2/ndof), then lowest pair index. Verified against an
+    independent per-event loop."""
+    order = idx[np.lexsort((idx, chi[idx], row[idx]))]
+    rep = order[np.r_[True, row[order][1:] != row[order][:-1]]] if len(order) else order
+    best = {}
+    for i in idx.tolist():
+        k = (chi[i], i)
+        if row[i] not in best or k < best[row[i]]:
+            best[row[i]] = k
+    if sorted(rep.tolist()) != sorted(v[1] for v in best.values()):
+        raise RuntimeError("Representative pair differs from the independent minimum")
+    return rep
 
 
 def threshold_check(name, nev, rows, x, emax, emin, thresholds):
@@ -132,8 +151,34 @@ def fill(args):
             values = {"pt": pr["pRecoMuMuPt"].astype(np.float64), "lead": pr["lead_pt_reco"], "sub": pr["sub_pt_reco"],
                       "lxy": pr["pLxyBS"].astype(np.float64)}
             per_slice = [("events", nev)]  # (name, x) with counts, once per sample
+            chi = pr["pChi2"].astype(np.float64) / pr["pNdof"].astype(np.float64)
+            if not np.all(np.isfinite(chi[passing])):
+                raise RuntimeError("Non-finite chi2/ndof on a passing pair in " + name)
+            rep_sel = representative(np.flatnonzero(passing), row, chi)
+            if not set(representative(np.flatnonzero(sel["cut"]), row, chi).tolist()) <= set(rep_sel.tolist()):
+                raise RuntimeError("Cut representative differs from the selected one in " + name)
+            jphi, mphi = sc["jetPhi"][si].astype(np.float64), ev["pfMetPhi"].astype(np.float64)
+            if np.abs(np.remainder(sc["pfMetPhi"][si] - mphi + np.pi, 2 * np.pi) - np.pi).max() > 1e-3:
+                raise RuntimeError("PF MET phi mismatch scan vs producer in " + name)
+            has_jet = sc["nJet"][si] > 0
+            defined = has_jet & np.isfinite(jphi) & np.isfinite(mphi) & (met > 0)
+            d = jphi - mphi
+            dphi = np.abs(d - 2 * np.pi * np.round(d / (2 * np.pi)))
+            cut_ev = np.zeros(nev, bool)
+            cut_ev[row[sel["cut"]]] = True
+            if not defined[cut_ev].all():
+                raise RuntimeError("Undefined dphi in a selected event after cuts: " + name)
+            per_slice += [("no_jet", int((~has_jet).sum())), ("dphi_undefined", int((has_jet & ~defined).sum()))]
+            for s in sample_slices(kind, name):
+                for tag, x in (("all", dphi[defined]), ("cut", dphi[cut_ev])):
+                    h = hist((kind, s, tag, "dphi_jet_met"), DPHI_EDGES)
+                    if len(x):
+                        h.FillN(len(x), x, np.ones(len(x)))
             for tag, mask in sel.items():
                 rows = row[mask]
+                rep = rep_sel[mask[rep_sel]]
+                if len(rep) != n_ev[tag]:
+                    raise RuntimeError("Not one pair per event: %s %s" % (name, tag))
                 per_slice += [("%s_events" % tag, n_ev[tag]), ("%s_pairs" % tag, len(rows))]
                 extremes = {}
                 for var in VARS:
@@ -150,11 +195,14 @@ def fill(args):
                         if scan[0] == var:
                             probes = np.concatenate([probes, scan[1]])
                     threshold_check("%s %s %s" % (name, tag, var), nev, rows[ok], x[ok], emax, emin, probes)
-                x_p, y_l = values["pt"][mask], values["lxy"][mask]
+                    x = values[var][rep]
+                    per_slice.append(("%s_repinvalid_%s" % (tag, var), int((~(np.isfinite(x) & (x >= 0))).sum())))
+                x_p, y_l = values["pt"][rep], values["lxy"][rep]
                 both = np.isfinite(x_p) & (x_p >= 0) & np.isfinite(y_l) & (y_l >= 0)
                 for s in sample_slices(kind, name):
                     for view, (var, edges, *_) in VIEWS.items():
-                        x, ok = extremes[var][:2]
+                        x = values[var][rep]
+                        ok = np.isfinite(x) & (x >= 0)
                         if ok.any():
                             hist((kind, s, tag, view), edges).FillN(int(ok.sum()), x[ok], np.ones(int(ok.sum())))
                         else:
@@ -180,7 +228,8 @@ def fill(args):
     print("COVERAGE signal %d, background %d samples" % (len(processed["signal"]), len(processed["background"])))
     root = ROOT.TFile.Open(str(out), "CREATE")
     ROOT.TNamed("coverage", "signal %d background %d" % (len(processed["signal"]), len(processed["background"]))).Write()
-    ROOT.TNamed("definitions", "Raw unweighted counts. Pair histograms = VIEWS, map_* = pair TH2 (x Lxy, y reco pT(mumu)); "
+    ROOT.TNamed("definitions", "Raw unweighted counts, one entry per event. VIEWS and map_* (x Lxy, y reco pT(mumu)) from the representative pair "
+                "(lowest chi2/ndof among passing pairs, then lowest pair index); dphi_jet_met per event (all = before anything); "
                 "max_<scan>/min_<scan> = per-event max/min over passing pairs with a valid value. selected = passing pairs; "
                 "cut = passing pairs in events with the MET, jet cut. Inputs: %s, %s, %s, %s, %s, %s" % (
                     args.signal_summary, args.bkg_summary, args.met_jet, args.signal_scan_dir, args.bkg_scan_dir,
@@ -195,15 +244,19 @@ def fill(args):
     for (kind, s, tag, name), h in sorted(hists.items()):
         c = counts[(kind, s)]
         if name.startswith("map_"):
-            pass  # closure below
+            pass  # closure in plot
+        elif name == "dphi_jet_met":
+            want = c["cut_events"] if tag == "cut" else c["events"] - c["no_jet"] - c["dphi_undefined"]
+            if abs(h.GetEntries() - want) > 0.5:
+                raise RuntimeError("dphi closure failed: %s %s %s" % (kind, s, tag))
         elif name.startswith(("max_", "min_")):
             var = SCANS[name[4:]][0]
             if abs(h.GetEntries() + c["%s_novalid_%s" % (tag, var)] - c[tag + "_events"]) > 0.5:
                 raise RuntimeError("Event histogram closure failed: %s %s %s %s" % (kind, s, tag, name))
         else:
             var = VIEWS[name][0]
-            if abs(h.GetEntries() + c["%s_invalid_%s" % (tag, var)] - c[tag + "_pairs"]) > 0.5:
-                raise RuntimeError("Pair histogram closure failed: %s %s %s %s" % (kind, s, tag, name))
+            if abs(h.GetEntries() + c["%s_repinvalid_%s" % (tag, var)] - c[tag + "_events"]) > 0.5:
+                raise RuntimeError("Event histogram closure failed: %s %s %s %s" % (kind, s, tag, name))
         cd(kind, *s.split("/"), tag)
         h.Write()
     for (kind, s), c in sorted(counts.items()):
@@ -269,11 +322,12 @@ def plot(args):
         "and highest-pT slimmedJets jet pT > 80 GeV, |eta| < 2.4. Directory names give the selection.",
         "Variables, reco legs (paired component tracks at their reference point): pT(mumu) = pRecoMuMuPt; leading, "
         "subleading = larger, smaller leg pT; Lxy = pLxyBS, vertex to beamspot at the vertex z.",
-        "Three versions of each distribution: raw (pairs/bin; heights reflect the generated event counts, not a physical "
+        "Every event counts once. Distributions and maps use one representative pair per event: among its passing pairs, "
+        "lowest chi2/ndof, then lowest pair index. The same pair enters all variables, with and without the cut.",
+        "Three versions of each distribution: raw (events/bin; heights reflect the generated event counts, not a physical "
         "rate); *_norm ('Unit area': shape, normalized within the plotted range, flows excluded; efficiency removed); "
-        "*_frac (passing pairs in the bin / all events of the slice; efficiency kept). The fraction numerator is pairs: an "
-        "event with several passing pairs counts several times, so the bins sum to passing pairs per event. "
-        "Log-y copies: *_log.png.",
+        "*_frac (events in the bin / all events of the slice; efficiency kept). Bins plus flows sum to selected / all "
+        "or selected and cut / all. Log-y copies: *_log.png.",
         "F = eps_s / sqrt(eps_b), relative and unweighted, not an expected significance; the pooled eps_b weights every MC "
         "event equally. Bars: first-order propagation of Clopper-Pearson 68% intervals (approximate)."])
     P = Plotter(cs, out, True)
@@ -346,8 +400,8 @@ def plot(args):
         var, edges, xt, per = VIEWS[view]
         for tag in TAGS:
             for b, name, lab in BKGS:
-                for mode, sfx, yt in (("raw", "", "Pairs / "), ("norm", "_norm", "Fraction of pairs / "),
-                                      ("frac", "_frac", "Pairs per event / ")):
+                for mode, sfx, yt in (("raw", "", "Events / "), ("norm", "_norm", "Fraction of selected events / "),
+                                      ("frac", "_frac", "Fraction of all events / ")):
                     gr = [graph("signal/%s/%s/%s" % (k, tag, view), nall[("signal", k)], look[k][0], look[k][1], mode)
                           for k in masses]
                     gr.append(graph("background/%s/%s/%s" % (b, tag, view), nall[("background", b)], cs.BLACK, (1, 21), mode))
@@ -359,11 +413,13 @@ def plot(args):
             row = [n]
             for tag in TAGS:
                 h = get("%s/%s/%s/%s" % (kind, k, tag, view))
+                if tot(h) != (sig if kind == "signal" else bkg)[k][sl[tag]]:
+                    raise RuntimeError("Event closure failed: %s %s %s" % (k, tag, view))
                 row.append("%.1f%%" % (100. * h.Integral(1, h.GetNbinsX()) / tot(h)))
             rows.append(row)
         caps.add("dists/%s/<selected|cut>/bkg_<all|ZJets|WJets|QCD>[_norm|_frac].png" % view,
-                 "Passing pairs: six mass points and one background, %g-%g in bins of %s. Fraction of each curve's pairs "
-                 "inside the plotted range (what the unit-area copy is normalized to):" % (edges[0], edges[-1], per),
+                 "Selected events, one entry per event: six mass points and one background, %g-%g in bins of %s. Fraction of each "
+                 "curve's events inside the plotted range (what the unit-area copy is normalized to):" % (edges[0], edges[-1], per),
                  ["slice", "in range, selected", "in range, cut"], rows)
 
     # Threshold scans.
@@ -427,7 +483,7 @@ def plot(args):
         caps.add("fom_scan/%s/<selected|cut>/bkg_<all|ZJets|WJets|QCD>_<up|down>.png" % scan,
                  "F vs threshold x, event level, %g-%g. up: an event passes if >= 1 passing pair has v >= x; down: if >= 1 has "
                  "v < x. eps(x) = passing events / all events of the slice. Reference (the fixed F): up at x = 0; down above "
-                 "all values, overflow included. Thresholds with no surviving background or signal event are not drawn. Lines only, "
+                 "all values, overflow included. Scans use any passing pair, not only the representative pair, so a scan need not equal the integral of a distribution. Thresholds with no surviving background or signal event are not drawn. Lines only, "
                  "no error bars (six curves); the statistical precision worsens where few background events remain."
                  % (edges[0], edges[-1]))
     caps.add("fom_scan (F(x) / F(reference))", "Thresholds passing the Part 6 pointer: at the x that maximizes the ratio against "
@@ -446,20 +502,38 @@ def plot(args):
                 h = get("%s/%s/%s/%s" % (kind, k, tag, mp))
                 base = out / "maps" / mp / tag / name
                 total = h.Integral(0, h.GetNbinsX() + 1, 0, h.GetNbinsY() + 1)
-                if abs(total - stored("%s/%s" % (kind, k))[tag + "_pairs"]) > 0.5:
+                if abs(total - stored("%s/%s" % (kind, k))[tag + "_events"]) > 0.5:
                     raise RuntimeError("Map closure failed: %s %s %s" % (k, tag, mp))
                 row.append("%.1f%%" % (100. * h.Integral(1, h.GetNbinsX(), 1, h.GetNbinsY()) / total))
                 for logz, sfx in ((False, ""), (True, "_log")):
                     d = h.Clone(); cs._keep.append(d)
                     base.parent.mkdir(parents=True, exist_ok=True)
-                    cs.map2d(str(base) + sfx, d, LXY_T, PT_T, "Passing pairs / bin", lines=[lab], logz=logz)
+                    cs.map2d(str(base) + sfx, d, LXY_T, PT_T, "Events / bin", lines=[lab], logz=logz)
             rows.append(row)
         ly = MAPS[mp]
         caps.add("maps/%s/<selected|cut>/<slice>[_log].png" % mp,
-                 "Reco pT(mumu) vs vertex Lxy of passing pairs, raw pair counts, one map per mass point or background. Lxy "
-                 "%g-%g cm in %g cm bins, pT 0-100 GeV in 2.5 GeV bins; empty bins are white. _log = log colour scale. An "
-                 "event with several passing pairs enters once per pair. Fraction of pairs inside the map:"
+                 "Reco pT(mumu) vs vertex Lxy of the representative pair, raw event counts, one map per mass point or background. "
+                 "Lxy %g-%g cm in %g cm bins, pT 0-100 GeV in 2.5 GeV bins; empty bins are white. _log = log colour scale. "
+                 "Fraction of events inside the map:"
                  % (ly[0], ly[-1], ly[1] - ly[0]), ["slice", "in map, selected", "in map, cut"], rows)
+    # |dphi(leading jet, MET)|, all background only.
+    per = "#pi/32"
+    for tag, line in (("all", "All events"), ("cut", "Selected, after cut")):
+        for mode, sfx, yt in (("raw", "", "Events / "), ("norm", "_norm", "Fraction of events / "),
+                              ("frac", "_frac", "Fraction of all events / ")):
+            gr = [graph("signal/%s/%s/dphi_jet_met" % (k, tag), nall[("signal", k)], look[k][0], look[k][1], mode) for k in masses]
+            gr.append(graph("background/overall/%s/dphi_jet_met" % tag, nall[("background", "overall")], cs.BLACK, (1, 21), mode))
+            band_plot(out / "dphi_jet_met" / tag / ("bkg_all" + sfx), gr, (0, np.pi), DPHI_T, yt + per,
+                      [line] + (["Unit area"] if mode == "norm" else []), extra={"Bkg, all %d" % n_bkg: cs.BLACK})
+    rows = []
+    for k, kind, n in [(k, "signal", k[5:]) for k in masses] + [("overall", "background", "all %d" % n_bkg)]:
+        c = stored("%s/%s" % (kind, k))
+        rows.append([n, "%d" % c["events"], "%d" % c["no_jet"], "%d" % c["dphi_undefined"], "%d" % c["cut_events"]])
+    caps.add("dphi_jet_met/<all|cut>/bkg_all[_norm|_frac].png",
+             "|dphi| between the highest-pT slimmedJets jet (any eta; no ID, no muon cleaning) and Type-1 PF MET, wrapped to "
+             "[0, pi], 32 bins, one entry per event. all = before anything; cut = selected events passing the MET, jet cut. In "
+             "the 'all' plots, events with no jet or no defined angle are not filled but stay in the *_frac denominator.",
+             ["slice", "all events", "no jet", "undefined angle", "selected after cut"], rows)
     print("CAPTIONS", caps.write(out))
     print("PLOTS DONE", out)
 
