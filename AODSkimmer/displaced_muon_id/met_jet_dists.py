@@ -242,8 +242,8 @@ def plot(args):
 
     def cumulative(edges, xtitle):
         """Cumulative Lxy after the cut (user 2026-11-04): c-tau overlay + background, and overall signal vs background."""
-        yt = "Fraction of passing pairs with L_{xy} #geq x"
-        xt = xtitle.replace("[cm]", "x [cm]")
+        yt = "Fraction with L_{xy} #geq x"
+        xt = "L_{xy} threshold x [cm]"
         lines = [CUT_LINE, pairs + "; " + bkg, "Denominator: all passing pairs, incl. L_{xy} > %g cm" % edges[-1],
                  "Bars: 68% CP assuming independent pairs; coverage uncalibrated"]
         bstyle = (2, 24)
@@ -280,7 +280,8 @@ def plot(args):
                     extra = ["In range: signal %.1f%%, bkg %.1f%% of passing pairs" % (
                         in_range("signal/%s/cut" % s, var), in_range("background/overall/cut", var))] if norm else []
                     cs.plot(out / var / d / ("signal_bkg" + sfx), series, ["Signal", "Background"], xtitle, yt,
-                            lines=["Signal: %s; %s" % (label[s], bkg)] + CUT_LINES + [pairs] + extra, x1=0.68, log=args.log)
+                            lines=["Signal: " + label[s], bkg] + CUT_LINES + [pairs] + ([cs.STYLE["norm_label"]] if norm else []) + extra,
+                            x1=0.68, log=args.log)
                     continue
                 series = [hg("signal/%s/selected/%s" % (s, var), cs.BLUE, B_SEL), hg("signal/%s/cut/%s" % (s, var), cs.BLUE, B_CUT),
                           hg("background/overall/selected/%s" % var, cs.BLACK, B_SEL),
@@ -290,7 +291,7 @@ def plot(args):
                          for t, sel in (("selected", "selected"), ("+ cut", "cut"))] if norm and var == "lxy_short" else []
                 cs.plot(out / var / d / ("signal_bkg" + sfx), series,
                         ["Signal, selected", "Signal, + MET, jet", "Bkg, selected", "Bkg, + MET, jet"], xtitle, yt,
-                        lines=["Signal: " + label[s], bkg, pairs] + extra, x1=0.62, log=args.log)
+                        lines=["Signal: " + label[s], bkg, pairs] + ([cs.STYLE["norm_label"]] if norm else []) + extra, x1=0.62, log=args.log)
             for tag, sl in SELECTIONS.items():
                 if args.cut_only and tag != "cut":
                     continue

@@ -180,7 +180,7 @@ class Plotter:
         t.SetTextSize(0.028 if hb else 0.032); t.SetTextAlign(13)
         y0 = 0.90 if hb else 0.89
         for i, line in enumerate(lines):
-            t.DrawLatex(0.18, y0 - (0.035 if hb else 0.045) * i, line)
+            t.DrawLatex(c.GetLeftMargin() + 0.03, y0 - (0.035 if hb else 0.045) * i, line)
         if band:
             groups, stages, header = band
             ytop = 0.90 - 0.035 * len(lines) - 0.005  # keys go below the context lines
