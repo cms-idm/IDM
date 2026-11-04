@@ -179,7 +179,7 @@ class Plotter:
         if log:
             lo = min([p[2] for p in pts if p[2] > 0] or [1e-5])
             ylo = 10 ** math.floor(math.log10(lo / 2))
-            f = max(frac, 0.2)  # same fraction of the frame height for the data as in the linear plot
+            f = max(frac, 0.45)  # data below the legend as in the linear plot, but at least 45% of the frame
             logy = (ylo, ylo * (hi * 1.05 / ylo) ** (1 / f))
         cs.save(c, self.out / base, log=log, logy=logy)
 
