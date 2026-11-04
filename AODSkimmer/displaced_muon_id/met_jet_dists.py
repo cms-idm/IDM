@@ -31,6 +31,16 @@ VARS = {  # name: (branch, edges, x title, y title per bin)
     "pt_pca_25": ("pPcaMuMuPt", np.arange(0, 25.0001, 0.5), "p_{T}^{#mu#mu} at the PCA [GeV]", "0.5 GeV"),
     "pt_reco_25": ("pRecoMuMuPt", np.arange(0, 25.0001, 0.5), "p_{T}^{#mu#mu} from the reco legs [GeV]", "0.5 GeV"),
 }
+# Per-leg variables (Part 5; need the producer rerun with pPca/pReco Pt/Eta/Phi A/B, via --producer-dir). Derived per
+# pair in derived(): leading/subleading = larger/smaller leg pT; |deta| = |eta_A - eta_B|; |dphi| wrapped to [0, pi].
+for _v, _t in (("pca", "at the PCA"), ("reco", "of the reco legs")):
+    VARS["lead_pt_%s_50" % _v] = ("lead_pt_" + _v, np.arange(0, 50.0001, 1), "Leading muon p_{T} %s [GeV]" % _t, "1 GeV")
+    VARS["lead_pt_%s_25" % _v] = ("lead_pt_" + _v, np.arange(0, 25.0001, 0.5), "Leading muon p_{T} %s [GeV]" % _t, "0.5 GeV")
+    VARS["sub_pt_%s_25" % _v] = ("sub_pt_" + _v, np.arange(0, 25.0001, 0.5), "Subleading muon p_{T} %s [GeV]" % _t, "0.5 GeV")
+    VARS["deta_%s" % _v] = ("deta_" + _v, np.arange(0, 1.2001, 0.02), "|#Delta#eta(#mu#mu)| %s" % _t, "0.02")
+    VARS["dphi_%s" % _v] = ("dphi_" + _v, np.arange(0, 1.2001, 0.02), "|#Delta#phi(#mu#mu)| %s" % _t, "0.02")
+LEG_VARS = [v for v in VARS if VARS[v][0].endswith(("_pca", "_reco")) and VARS[v][0].split("_")[0] in ("lead", "sub", "deta", "dphi")]
+LEG_BRANCHES = ["p%s%s%s" % (v, q, l) for v in ("Pca", "Reco") for q in ("Pt", "Eta", "Phi") for l in "AB"]
 DEFAULT_VARS = ["pt_pca", "pt_reco", "lxy_short", "lxy_long", "dr_pca", "dr_reco"]
 SELECTIONS = {"selected": "Selected #mu#mu", "cut": "+ MET, jet cut"}
 M_HEADER, M_KEYS = "M = m_{#chi} - #Deltam/2", ("#Deltam = 0.1 M", "0.2 M", "0.4 M")
@@ -59,6 +69,22 @@ def slices(kind, name):
     return ["overall", "group/" + name.split("_")[0]]
 
 
+def derived(pr):
+    """Per-pair leading/subleading pT, |deta|, |dphi| from the per-leg branches; NaN where a leg is a -999 sentinel
+    (PCA legs of pairs without pPcaOK), so such pairs count as invalid, never as a fake 0."""
+    out = {}
+    for v, V in (("pca", "Pca"), ("reco", "Reco")):
+        pa, pb, ea, eb, fa, fb = (pr["p%s%s%s" % (V, q, l)].astype(np.float64) for q in ("Pt", "Eta", "Phi") for l in "AB")
+        bad = (pa == -999) | (pb == -999) | (ea == -999) | (eb == -999) | (fa == -999) | (fb == -999)
+        d = fa - fb
+        vals = {"lead_pt": np.maximum(pa, pb), "sub_pt": np.minimum(pa, pb), "deta": np.abs(ea - eb),
+                "dphi": np.abs(d - 2 * np.pi * np.round(d / (2 * np.pi)))}
+        for k, x in vals.items():
+            x[bad] = np.nan
+            out["%s_%s" % (k, v)] = x
+    return out
+
+
 def fill(args):
     import ROOT
     import uproot
@@ -83,11 +109,16 @@ def fill(args):
                 print("SKIP %s (not in met_jet_cut.root)" % name)
                 continue
             processed[kind].append(name)
+            if args.producer_dir:  # e.g. the per-leg rerun; same sample, same events (verified separately)
+                producer = str(Path(args.producer_dir) / (name + ".root"))
+            legs = any(v in LEG_VARS for v in args.vars)
             with uproot.open(producer) as f:
                 if str(f["preselectedVertexing/sample"].member("fTitle")) != name:
                     raise RuntimeError("Producer sample mismatch: " + producer)
                 ev = f["preselectedVertexing/events"].arrays(["run", "lumi", "event", "pfMetPt", "pfMetPhi"], library="np")
-                pr = f["preselectedVertexing/pairs"].arrays(PAIR_BRANCHES, library="np")
+                pr = f["preselectedVertexing/pairs"].arrays(PAIR_BRANCHES + (LEG_BRANCHES if legs else []), library="np")
+            if legs:
+                pr.update(derived(pr))
             with uproot.open(Path(scan_dir) / (name + ".root")) as f:
                 sc = f["scan"].arrays(["run", "lumi", "event", "pfMet", "jetPt", "jetEta"], library="np")
             pkeys, _ = keyed(ev["run"], ev["lumi"], ev["event"], "producer " + name)
@@ -198,6 +229,13 @@ def plot(args):
              "pt_reco_25": "pT(mumu) from the reco legs, 0-25 GeV view",
              "dr_pca": "dR between the two muons at the PCA (pPcaDR, the < 0.9 cut variable)",
              "dr_reco": "dR between the two reco legs (pRecoDR)"}
+    for v, t in (("pca", "at the PCA (leg momenta propagated to the vertex)"),
+                 ("reco", "of the reco legs (paired component tracks at their reference point)")):
+        plain["lead_pt_%s_50" % v] = "leading (higher-pT) muon pT %s, 0-50 GeV view" % t
+        plain["lead_pt_%s_25" % v] = "leading muon pT %s, 0-25 GeV view" % t
+        plain["sub_pt_%s_25" % v] = "subleading (lower-pT) muon pT %s, 0-25 GeV view" % t
+        plain["deta_%s" % v] = "|deta| between the two muons %s" % t
+        plain["dphi_%s" % v] = "|dphi| between the two muons %s, wrapped to [0, pi]" % t
     caps = cs.Captions("Dimuon distributions of passing pairs (kb/studies/bkg-reco-dimuons.md Part 4)", [
         "Population: every pair passing the full reco-only chain (eligible pair, opposite sign, valid vertex, "
         "chi2/ndof < 4, PCA valid, PCA dR < 0.9, |dphi(Type-1 PF MET, mumu PCA)| < 0.5), pair-level: every passing pair "
@@ -374,6 +412,7 @@ def main():
     for k in ("--signal-summary", "--bkg-summary", "--met-jet", "--signal-scan-dir", "--bkg-scan-dir", "--output"):
         a.add_argument(k, required=True)
     a.add_argument("--vars", nargs="+", default=DEFAULT_VARS, choices=list(VARS))
+    a.add_argument("--producer-dir", help="read <dir>/<sample>.root instead of the producer paths in the summaries")
     b = sub.add_parser("plot")
     for k in ("--input", "--style-dir", "--out-dir"):
         b.add_argument(k, required=True)
