@@ -26,11 +26,8 @@ STAGES = [("events", "All events"), ("events_eligible_pair", "Eligible pair"), (
 GROUPS = ["ZJets", "WJets", "QCD", "TTbar", "SingleTop", "DYJets", "Multiboson", "WWZ", "WZZ", "ZZ", "ZZZ", "ZGamma"]
 MAJOR = GROUPS[:5]  # FOM overlays split in two for legibility: the five largest groups, then the rest
 LEVEL = 0.6827
-POP = "Raw MC counts, unweighted"
-BKG_POP = None  # set in main() from the background samples present in --met-jet
-FOM_LINE = "Relative, unweighted, not a significance; bars approx."
-CUT_LINE = "Last step: Type-1 PF MET > 80 GeV, leading jet p_{T} > 80 GeV, |#eta| < 2.4"  # band / above layout
-CUT_LINES = ["MET, jet cut: Type-1 PF MET > 80 GeV,", "leading jet p_{T} > 80 GeV, |#eta| < 2.4"]  # frame layout
+CHAIN = "Cumulative #mu#mu selection, unweighted MC"  # on-plot text: at most two short lines (AGENTS.md);
+FOM_LINE = "Relative figure of merit"                  # full definitions are in the script-written CAPTIONS.md
 M_HEADER, M_KEYS = "M = m_{#chi} - #Deltam/2", ("#Deltam = 0.1 M", "0.2 M", "0.4 M")
 
 
@@ -217,10 +214,8 @@ def main():
     out = Path(args.out_dir)
     if out.exists():
         raise FileExistsError(out)
-    global BKG_POP
     sig, bkg, n_bkg = load(args)
     ALLB = "all %d" % n_bkg
-    BKG_POP = "Background: %s 2022EE samples" % ("all 50" if n_bkg == 50 else "%d of 50" % n_bkg)
     P = Plotter(cs, out, args.log)
     stage_labels = [lab for _, lab in STAGES]
     taus = sorted((k for k in sig if k.startswith("lifetime/")), key=lambda k: float(k.split("-")[1]))
@@ -230,7 +225,24 @@ def main():
                  **{k: "Signal, m_{#chi} / #Deltam = %s GeV" % mass_label(k[5:]) for k in masses}}
     bkg_label = {"overall": "Background, " + ALLB, **{"group/" + g: g for g in GROUPS}}
     S, B = cs.FILLED_SOLID, cs.OPEN_DASHED
-    cut_lines = ["Reco-only #mu#mu chain, cumulative; " + POP, CUT_LINE]
+    caps = cs.Captions("Cutflow, selected-fraction and figure-of-merit plots (kb/studies/bkg-reco-dimuons.md Part 3)", [
+        "Samples: signal = the 72 iDM 2022EE samples (2026-09-28 production; 18 mass points x 4 lifetimes, 10,000 events "
+        "each); background = %d of the 50 2022EE background MC samples. Raw MC event counts, unweighted: no cross "
+        "sections, generator weights or luminosity." % n_bkg,
+        "Pooling: a signal c-tau slice pools the 18 masses, a mass slice pools the 4 lifetimes, overall pools all 72, "
+        "unweighted. A background group pools its samples (name prefix); the pooled background is all %d." % n_bkg,
+        "Reco-only dimuon chain (cumulative; an event passes a stage if >= 1 pair reaches it): eligible pair (two "
+        "cleanedDisplacedMuons objects, each at its G > I > DSA component), opposite sign, valid vertex fit, "
+        "chi2/ndof < 4, PCA valid, PCA dR < 0.9, |dphi(Type-1 PF MET, mumu at the PCA)| < 0.5. 'Selected mumu' = all "
+        "of these.",
+        "MET, jet cut ('+ MET, jet'): Type-1 PF MET (slimmedMETs[0]) > 80 GeV and highest-pT slimmedJets jet pT > 80 GeV "
+        "with |eta| < 2.4 (as stored: no jet ID, no muon cleaning); an event without jets fails.",
+        "Fractions are over all events of the slice. Error bars: Clopper-Pearson 68%.",
+        "F = eps_s / sqrt(eps_b), eps = selected (or selected and cut) / all events. Relative only: S/sqrt(B) is "
+        "proportional to F at fixed cross sections and luminosity, but F is not an expected significance, and the pooled "
+        "eps_b weights every MC event equally. F bars: first-order propagation of the CP intervals (approximate; lower "
+        "bar capped at 0). F is not drawn where no background event survives.",
+        "Log-y copies (*_log.png) exist for the cutflows only (user approval)."])
     print("Cutflows (event counts per stage):")
     for k, v in list(sig.items()) + list(bkg.items()):
         print("  %-40s %s" % (k, " ".join("%d" % x for x in v)))
@@ -240,25 +252,39 @@ def main():
         d = "cutflow/" + ("overall" if k == "overall" else k)
         v = sig[k]
         P.draw(d + "_signal", [P.eff(v, v[0], cs.BLUE, S, d + "s")], [sig_label[k]], stage_labels,
-               "Fraction of all events", cut_lines, log=args.log, above=True)
+               "Fraction of all events", [CHAIN], log=args.log, above=True)
         b = bkg["overall"]
         P.draw(d + "_signal_bkg", [P.eff(v, v[0], cs.BLUE, S, d + "s2"), P.eff(b, b[0], cs.BLACK, B, d + "b")],
-               [sig_label[k], bkg_label["overall"]], stage_labels, "Fraction of all events", cut_lines + [BKG_POP],
+               [sig_label[k], bkg_label["overall"]], stage_labels, "Fraction of all events", [CHAIN],
                log=args.log, above=True)
+    slices = "<slice> = overall, lifetime/ctau-<1|10|100|1000> or mass/Mchi-<m>_dMchi-<dm>."
+    caps.add("cutflow/<slice>_signal.png", "Fraction of the signal slice's events passing each cumulative stage, ending "
+             "with the MET, jet cut. " + slices)
+    caps.add("cutflow/<slice>_signal_bkg.png", "As cutflow/<slice>_signal.png, with the pooled background overlaid. "
+             "Event counts per stage (all plotted slices and background groups):",
+             ["slice"] + [k.replace("events_", "") for k, _ in STAGES],
+             [[k] + ["%d" % x for x in sig[k]] for k in ["overall"] + taus + masses] +
+             [["background " + g] + ["%d" % x for x in bkg[g]] for g in ["overall"] + ["group/" + x for x in GROUPS]])
     palette = [cs.BLUE, cs.ORANGE, cs.GREEN, cs.YELLOW, cs.SKY, cs.PURPLE]
     bstyle = {g: (palette[i % 6], (1, 20 + i % 6) if i < 6 else (2, 24 + i % 6)) for i, g in enumerate(GROUPS)}
     for g in ["overall"] + ["group/" + x for x in GROUPS]:
         b = bkg[g]
         P.draw("cutflow/background_" + g.replace("group/", ""), [P.eff(b, b[0], cs.BLACK, S, "cb" + g)], [bkg_label[g]],
-               stage_labels, "Fraction of all events", cut_lines + [BKG_POP], log=args.log, above=True)
+               stage_labels, "Fraction of all events", [CHAIN], log=args.log, above=True)
+    caps.add("cutflow/background_<overall|group>.png", "Background cutflow, pooled over all background samples (overall) "
+             "or over one process group (counts in the table above).")
     gr = [P.eff(bkg["overall"], bkg["overall"][0], cs.BLACK, S, "cbo")]
     gr += [P.eff(bkg["group/" + g], bkg["group/" + g][0], bstyle[g][0], bstyle[g][1], "cbg" + g) for g in GROUPS]
     P.draw("cutflow/overlay_background_groups", gr, [bkg_label["overall"]] + GROUPS, stage_labels,
-           "Fraction of all events", cut_lines + [BKG_POP], log=args.log, above=True)
+           "Fraction of all events", [CHAIN], log=args.log, above=True)
+    caps.add("cutflow/overlay_background_groups.png", "Cutflows of the 12 background process groups and of the pooled "
+             "background, overlaid.")
     gr = [P.eff(sig[k], sig[k][0], palette[i], (1, 20 + i), "cto" + k) for i, k in enumerate(taus)]
     gr.append(P.eff(bkg["overall"], bkg["overall"][0], cs.BLACK, B, "ctob"))
     P.draw("cutflow/overlay_ctau", gr, ["Signal, " + tau_label(k) for k in taus] + [bkg_label["overall"]], stage_labels,
-           "Fraction of all events", cut_lines + [BKG_POP + "; signal pooled over masses"], log=args.log, above=True)
+           "Fraction of all events", [CHAIN, "Signal pooled over masses"], log=args.log, above=True)
+    caps.add("cutflow/overlay_ctau.png", "Signal cutflows of the four lifetimes (each pooled over the 18 masses) and of the "
+             "pooled background.")
     fam = sorted({mass_key(k[5:])[0] for k in masses})
     fstyle = [(3, 25), (2, 24), (1, 20)]  # Delta = 0.1, 0.2, 0.4 x (Mchi - Delta/2)
     gr = []
@@ -271,8 +297,10 @@ def main():
     groups["Background, " + ALLB] = cs.BLACK
     stages = dict(zip(M_KEYS, fstyle))
     P.draw("cutflow/overlay_mass", gr, None, stage_labels, "Fraction of all events",
-           ["Reco-only #mu#mu chain, cumulative; raw MC counts, unweighted", BKG_POP + "; signal pooled over lifetimes",
-            CUT_LINE], band=(groups, stages, M_HEADER), log=args.log)
+           [CHAIN, "Signal pooled over lifetimes"], band=(groups, stages, M_HEADER), log=args.log)
+    caps.add("cutflow/overlay_mass.png", "Signal cutflows of the 18 mass points (each pooled over the 4 lifetimes) and of "
+             "the pooled background. Colour = mass family M = m_chi - dm/2 (5, 10, 20, 30, 40, 50 GeV); line style = "
+             "splitting dm = 0.1, 0.2 or 0.4 x M.")
 
     # 2. Selected / all events, uncut and with the cut.
     axes = {"ctau": ["overall"] + taus, "mass": ["overall"] + masses}
@@ -284,9 +312,8 @@ def main():
         unc, cut = [sig[k][7] for k in keys], [sig[k][8] for k in keys]
         b = bkg["overall"]
         s_unc, s_cut = P.eff(unc, ns, cs.BLUE, B, "f%su" % a), P.eff(cut, ns, cs.BLUE, S, "f%sc" % a)
-        lines = [POP] + CUT_LINES
         P.draw("fraction/signal_vs_%s" % a, [s_unc, s_cut], ["Signal, selected #mu#mu", "Signal, + MET, jet cut"], xl[a],
-               "Events / all events", lines, xtitle=xt[a])
+               "Events / all events", ["Unweighted MC"], xtitle=xt[a])
         if a == "mass":  # background reference squashed at 0 next to signal; the background plot shows it (user 2026-11-04)
             continue
         P.draw("fraction/signal_bkg_vs_%s" % a,
@@ -294,17 +321,26 @@ def main():
                 P.eff([b[7]] * len(keys), b[0], cs.BLACK, B, "g%sbu" % a),
                 P.eff([b[8]] * len(keys), b[0], cs.BLACK, S, "g%sbc" % a)],
                ["Signal, selected #mu#mu", "Signal, + MET, jet cut", "Bkg (%s), selected #mu#mu" % ALLB,
-                "Bkg (%s), + MET, jet cut" % ALLB], xl[a], "Events / all events", lines + [BKG_POP], xtitle=xt[a])
+                "Bkg (%s), + MET, jet cut" % ALLB], xl[a], "Events / all events", ["Unweighted MC"], xtitle=xt[a])
+    caps.add("fraction/signal_vs_<ctau|mass>.png", "Fraction of all signal events that are selected (open) and that are "
+             "selected and pass the MET, jet cut (filled), per lifetime or mass point; 'All' = all 72 samples.")
+    caps.add("fraction/signal_bkg_vs_ctau.png", "As fraction/signal_vs_ctau.png, with the pooled background fractions as "
+             "constant references. There is no per-mass version: the background would sit on the axis.")
     bkeys = ["overall"] + ["group/" + g for g in GROUPS]
     nb = [bkg[g][0] for g in bkeys]
     P.draw("fraction/background_vs_group",
            [P.eff([bkg[g][7] for g in bkeys], nb, cs.BLACK, B, "fbu"), P.eff([bkg[g][8] for g in bkeys], nb, cs.BLACK, S, "fbc")],
            ["Bkg, selected #mu#mu", "Bkg, + MET, jet cut"], [ALLB.capitalize()] + GROUPS, "Events / all events",
-           [POP, BKG_POP] + CUT_LINES, xtitle="Background process group")
+           ["Unweighted MC"], xtitle="Background process group")
+    caps.add("fraction/background_vs_group.png", "Fraction of all background events that are selected (open) and that "
+             "are selected and pass the cut (filled), pooled and per group:",
+             ["background", "events", "selected", "selected and cut", "cut / selected"],
+             [[g, "%d" % bkg[g][0], "%d" % bkg[g][7], "%d" % bkg[g][8],
+               "%.1f%%" % (100 * bkg[g][8] / bkg[g][7]) if bkg[g][7] else "-"] for g in bkeys])
 
     # 3. F = eps_s / sqrt(eps_b).
     print("F = eps_s/sqrt(eps_b) (value +up -down), uncut | cut:")
-    zero = {}
+    zero, fr = {}, {}
     for a, keys in axes.items():
         over = {"uncut": [], "cut": []}
         for g in bkeys:
@@ -322,18 +358,18 @@ def main():
                     if a == "ctau" and k == "overall":
                         print("  bkg %-12s %-5s %s" % (g, tag, "no background events survive" if not r else
                                                      "%.4f +%.4f -%.4f" % r))
+                        fr.setdefault(g, {})[tag] = "%.3f +%.3f -%.3f" % r if r else "not drawn (no bkg survives)"
                 if not pts:
                     zero.setdefault(g, set()).add(tag)
                 series[tag] = pts
-            lines = [("Background: " + bkg_label[g]) if g != "overall" else BKG_POP, FOM_LINE] + CUT_LINES
-            if not series["cut"] or not series["uncut"]:
-                lines.append("No background events survive the %s selection" % ("cut" if not series["cut"] else "uncut"))
             gr, labs = [], []
             for tag, sty, lab in (("uncut", B, "Selected #mu#mu"), ("cut", S, "+ MET, jet cut")):
                 if series[tag]:
                     gr.append(P.graph(series[tag], cs.BLUE, sty)); labs.append(lab)
             P.draw("fom/%s_vs_%s" % (g.replace("group/", "bkg_") if g != "overall" else "bkg_all", a), gr, labs, xl[a],
-                   "#varepsilon_{s} / #sqrt{#varepsilon_{b}}", lines, xtitle=xt[a])
+                   "#varepsilon_{s} / #sqrt{#varepsilon_{b}}",
+                   ["Background: " + (ALLB if g == "overall" else g[6:]),
+                    FOM_LINE if series["cut"] else "No bkg survives the cut"], xtitle=xt[a])
             for tag in over:
                 if series[tag]:
                     color, sty = (cs.BLACK, (1, 20)) if g == "overall" else bstyle[g[6:]]
@@ -343,9 +379,16 @@ def main():
                 keep = [o for o in over[tag] if o[0] == "overall" or o[0][6:] in members]
                 missing = [g for g in members if tag in zero.get("group/" + g, ())]
                 lines = ["Signal and bkg: " + ("selected #mu#mu" if tag == "uncut" else "+ MET, jet cut"),
-                         FOM_LINE] + CUT_LINES + (["No surviving background: " + ", ".join(missing)] if missing else [])
+                         ("No surviving bkg: " + ", ".join(missing)) if missing else FOM_LINE]
                 P.draw("fom/overlay_%s_%s_vs_%s" % (tag, part, a), [o[1] for o in keep], [o[2] for o in keep], xl[a],
                        "#varepsilon_{s} / #sqrt{#varepsilon_{b}}", lines, xtitle=xt[a])
+    caps.add("fom/bkg_<all|group>_vs_<ctau|mass>.png", "F against one background (pooled, or one group), without the cut "
+             "(open) and with it (filled), per signal lifetime or mass point and 'All'. F for the overall signal:",
+             ["background", "F, selected mumu", "F, + MET, jet cut"], [[g, fr[g]["uncut"], fr[g]["cut"]] for g in bkeys])
+    caps.add("fom/overlay_<uncut|cut>_<major|minor>_vs_<ctau|mass>.png", "F against the pooled background and the "
+             "groups, one plot per selection. 'major' = %s; 'minor' = the other seven. Groups with no surviving "
+             "background event are listed on the plot and not drawn." % ", ".join(MAJOR))
+    print("CAPTIONS", caps.write(out))
     print("PLOTS DONE", out)
 
 
