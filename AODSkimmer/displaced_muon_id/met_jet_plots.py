@@ -22,13 +22,16 @@ import ROOT
 STAGES = [("events", "All events"), ("events_eligible_pair", "Eligible pair"), ("events_opposite_sign", "Opposite sign"),
           ("events_valid_vertex", "Valid vertex"), ("events_chi2", "#chi^{2}/ndof < 4"), ("events_pca_valid", "PCA valid"),
           ("events_dr", "PCA #DeltaR < 0.9"), ("events_met_angle", "|#Delta#phi(MET,#mu#mu)| < 0.5"),
-          ("selected_met_and_jet", "+ MET, jet p_{T} > 80 GeV")]
+          ("selected_met_and_jet", "+ MET, jet")]
 GROUPS = ["ZJets", "WJets", "QCD", "TTbar", "SingleTop", "DYJets", "Multiboson", "WWZ", "WZZ", "ZZ", "ZZZ", "ZGamma"]
 MAJOR = GROUPS[:5]  # FOM overlays split in two for legibility: the five largest groups, then the rest
 LEVEL = 0.6827
 POP = "Raw MC counts, unweighted"
 BKG_POP = "Background: 47 of 50 2022EE samples"
 FOM_LINE = "Relative, unweighted, not a significance; bars approx."
+CUT_LINE = "Last step: Type-1 PF MET > 80 GeV, leading jet p_{T} > 80 GeV, |#eta| < 2.4"  # band / above layout
+CUT_LINES = ["MET, jet cut: Type-1 PF MET > 80 GeV,", "leading jet p_{T} > 80 GeV, |#eta| < 2.4"]  # frame layout
+M_HEADER, M_KEYS = "M = m_{#chi} - #Deltam/2", ("#Deltam = 0.1 M", "0.2 M", "0.4 M")
 
 
 def counts(f, path):
@@ -130,21 +133,26 @@ class Plotter:
             j = gr.GetN(); gr.SetPoint(j, i + 0.5, f); gr.SetPointError(j, 0.5, 0.5, min(dn, f), up)  # bar capped at 0
         return self.cs._style(gr, color, style[0], style[1], [0, 1], kind="hist")
 
-    def draw(self, base, graphs, labels, xlabels, ytitle, lines, xtitle="", band=None, log=False):
+    def draw(self, base, graphs, labels, xlabels, ytitle, lines, xtitle="", band=None, log=False, above=False):
         """Categorical x axis (one bin per label, vertical labels). Context lines top left; legend below them in up to
-        two columns (frame), or colour and style keys placed above the frame (band); y max keeps the data below them."""
+        two columns (frame), or colour and style keys placed above the frame (band); y max keeps the data below them.
+        above=True (cutflows): context lines and legend in a band above the frame, so the frame holds only data."""
         cs = self.cs
         n = len(xlabels)
         lsize = 0.034 if n < 15 else 0.028
         labels_bottom = min(0.33, 0.09 + 0.30 * lsize * max(len(re.sub(r"#\w+|[{}_^]", "", l)) for l in xlabels))
         bottom = labels_bottom + (0.07 if xtitle else 0)
-        top = 0.30 if band else 0.08
-        c = ROOT.TCanvas("c_" + base.replace("/", "_"), "", 900, 1000 if band else 900)
+        top = 0.335 if band else 0.08
+        if above:
+            ncol = 1 if len(graphs) <= 2 else (2 if len(graphs) <= 8 else 3)
+            rows = -(-len(graphs) // ncol)
+            top = 0.10 + 0.035 * len(lines) + 0.032 * rows + 0.02
+        c = ROOT.TCanvas("c_" + base.replace("/", "_"), "", 900, 1000 if band else (1100 if above else 900))
         c.SetLeftMargin(0.15); c.SetRightMargin(0.04); c.SetBottomMargin(bottom); c.SetTopMargin(top)
         cs._keep.append(c)
         pts = cs._points(graphs)
         hi = max([p[3] for p in pts] or [1])
-        if band:
+        if band or above:
             key_bottom = 1 - top  # keys sit above the frame
         else:
             ncol = 1 if len(graphs) <= 3 else 2
@@ -154,7 +162,11 @@ class Plotter:
             key_bottom = y2 - row * rows
         frac = (key_bottom - 0.02 - bottom) / (1 - top - bottom)
         ymax = cs._round_up(hi / max(frac, 0.2))
+        if ymax < 0.1:  # 5-character tick labels: room for the y title
+            c.SetLeftMargin(0.18)
         fr = cs.frame(c, 0, n, 0, ymax, xtitle, ytitle)
+        if ymax < 0.1:
+            fr.GetYaxis().SetTitleOffset(1.75)
         ax = fr.GetXaxis(); ax.Set(n, 0, n)
         for i, lab in enumerate(xlabels, 1):
             ax.SetBinLabel(i, lab)
@@ -163,18 +175,23 @@ class Plotter:
         c.Update()
         for g in graphs:
             g.Draw(cs._info[id(g)][1] + " same")
-        t = cs.header(c, 0.15, 0.95 if band else 0.94, (0.04, 0.031) if band else (0.05, 0.038), 0.96)
-        t.SetTextSize(0.028 if band else 0.032); t.SetTextAlign(13)
-        y0 = 0.90 if band else 0.89
+        hb = band or above
+        t = cs.header(c, 0.15, 0.95 if hb else 0.94, (0.04, 0.031) if hb else (0.05, 0.038), 0.96)
+        t.SetTextSize(0.028 if hb else 0.032); t.SetTextAlign(13)
+        y0 = 0.90 if hb else 0.89
         for i, line in enumerate(lines):
-            t.DrawLatex(0.18, y0 - (0.035 if band else 0.045) * i, line)
+            t.DrawLatex(0.18, y0 - (0.035 if hb else 0.045) * i, line)
         if band:
             groups, stages, header = band
             ytop = 0.90 - 0.035 * len(lines) - 0.005  # keys go below the context lines
-            cs.legend([(cs._proxy(col, 1, 20), lab, "l") for lab, col in groups.items()], y2=ytop, y1=0.71, x1=0.50,
-                      header=header, ncol=2, size=0.026)
+            cs.legend([(cs._proxy(col, 1, 20), lab, "l") for lab, col in groups.items()], y2=ytop, y1=1 - top + 0.01,
+                      x1=0.50, header=header, ncol=2, size=0.026)
             cs.legend([(cs._proxy(cs.BLACK, ls, ms), lab, "lp") for lab, (ls, ms) in stages.items()],
-                      y2=ytop, y1=0.71, x1=0.17, x2=0.47, size=0.026)
+                      y2=ytop, y1=1 - top + 0.01, x1=0.17, x2=0.47, size=0.026)
+        elif above:
+            ytop = 0.90 - 0.035 * len(lines) - 0.005
+            cs.legend([(g, lab, cs._info[id(g)][2]) for g, lab in zip(graphs, labels)], y2=ytop, y1=1 - top + 0.01,
+                      x1=0.17, x2=0.96, ncol=ncol, size=0.026)
         else:
             cs.legend([(g, lab, cs._info[id(g)][2]) for g, lab in zip(graphs, labels)], y2=y2, y1=key_bottom, x1=0.18,
                       x2=0.94, ncol=ncol, size=0.030 if rows <= 4 else 0.026)
@@ -210,7 +227,7 @@ def main():
                  **{k: "Signal, m_{#chi} / #Deltam = %s GeV" % mass_label(k[5:]) for k in masses}}
     bkg_label = {"overall": "Background, all 47", **{"group/" + g: g for g in GROUPS}}
     S, B = cs.FILLED_SOLID, cs.OPEN_DASHED
-    cut_lines = ["Reco-only #mu#mu chain, cumulative", POP]
+    cut_lines = ["Reco-only #mu#mu chain, cumulative; " + POP, CUT_LINE]
     print("Cutflows (event counts per stage):")
     for k, v in list(sig.items()) + list(bkg.items()):
         print("  %-40s %s" % (k, " ".join("%d" % x for x in v)))
@@ -220,25 +237,25 @@ def main():
         d = "cutflow/" + ("overall" if k == "overall" else k)
         v = sig[k]
         P.draw(d + "_signal", [P.eff(v, v[0], cs.BLUE, S, d + "s")], [sig_label[k]], stage_labels,
-               "Fraction of all events", cut_lines, log=args.log)
+               "Fraction of all events", cut_lines, log=args.log, above=True)
         b = bkg["overall"]
         P.draw(d + "_signal_bkg", [P.eff(v, v[0], cs.BLUE, S, d + "s2"), P.eff(b, b[0], cs.BLACK, B, d + "b")],
                [sig_label[k], bkg_label["overall"]], stage_labels, "Fraction of all events", cut_lines + [BKG_POP],
-               log=args.log)
+               log=args.log, above=True)
     palette = [cs.BLUE, cs.ORANGE, cs.GREEN, cs.YELLOW, cs.SKY, cs.PURPLE]
     bstyle = {g: (palette[i % 6], (1, 20 + i % 6) if i < 6 else (2, 24 + i % 6)) for i, g in enumerate(GROUPS)}
     for g in ["overall"] + ["group/" + x for x in GROUPS]:
         b = bkg[g]
         P.draw("cutflow/background_" + g.replace("group/", ""), [P.eff(b, b[0], cs.BLACK, S, "cb" + g)], [bkg_label[g]],
-               stage_labels, "Fraction of all events", cut_lines + [BKG_POP], log=args.log)
+               stage_labels, "Fraction of all events", cut_lines + [BKG_POP], log=args.log, above=True)
     gr = [P.eff(bkg["overall"], bkg["overall"][0], cs.BLACK, S, "cbo")]
     gr += [P.eff(bkg["group/" + g], bkg["group/" + g][0], bstyle[g][0], bstyle[g][1], "cbg" + g) for g in GROUPS]
     P.draw("cutflow/overlay_background_groups", gr, [bkg_label["overall"]] + GROUPS, stage_labels,
-           "Fraction of all events", cut_lines + [BKG_POP], log=args.log)
+           "Fraction of all events", cut_lines + [BKG_POP], log=args.log, above=True)
     gr = [P.eff(sig[k], sig[k][0], palette[i], (1, 20 + i), "cto" + k) for i, k in enumerate(taus)]
     gr.append(P.eff(bkg["overall"], bkg["overall"][0], cs.BLACK, B, "ctob"))
     P.draw("cutflow/overlay_ctau", gr, ["Signal, " + tau_label(k) for k in taus] + [bkg_label["overall"]], stage_labels,
-           "Fraction of all events", cut_lines + [BKG_POP, "Signal pooled over masses"], log=args.log)
+           "Fraction of all events", cut_lines + [BKG_POP + "; signal pooled over masses"], log=args.log, above=True)
     fam = sorted({mass_key(k[5:])[0] for k in masses})
     fstyle = [(3, 25), (2, 24), (1, 20)]  # Delta = 0.1, 0.2, 0.4 x (Mchi - Delta/2)
     gr = []
@@ -249,10 +266,10 @@ def main():
     gr.append(P.eff(bkg["overall"], bkg["overall"][0], cs.BLACK, (1, 21), "cmob"))
     groups = {"%g GeV" % m: palette[i] for i, m in enumerate(fam)}
     groups["Background, all 47"] = cs.BLACK
-    stages = {"#Deltam = 0.1 m": fstyle[0], "0.2 m": fstyle[1], "0.4 m": fstyle[2]}
+    stages = dict(zip(M_KEYS, fstyle))
     P.draw("cutflow/overlay_mass", gr, None, stage_labels, "Fraction of all events",
-           ["Reco-only #mu#mu chain, cumulative; raw MC counts, unweighted", BKG_POP + "; signal pooled over lifetimes"],
-           band=(groups, stages, "m_{#chi} - #Deltam/2"), log=args.log)
+           ["Reco-only #mu#mu chain, cumulative; raw MC counts, unweighted", BKG_POP + "; signal pooled over lifetimes",
+            CUT_LINE], band=(groups, stages, M_HEADER), log=args.log)
 
     # 2. Selected / all events, uncut and with the cut.
     axes = {"ctau": ["overall"] + taus, "mass": ["overall"] + masses}
@@ -264,9 +281,11 @@ def main():
         unc, cut = [sig[k][7] for k in keys], [sig[k][8] for k in keys]
         b = bkg["overall"]
         s_unc, s_cut = P.eff(unc, ns, cs.BLUE, B, "f%su" % a), P.eff(cut, ns, cs.BLUE, S, "f%sc" % a)
-        lines = [POP]
+        lines = [POP] + CUT_LINES
         P.draw("fraction/signal_vs_%s" % a, [s_unc, s_cut], ["Signal, selected #mu#mu", "Signal, + MET, jet cut"], xl[a],
                "Events / all events", lines, xtitle=xt[a])
+        if a == "mass":  # background reference squashed at 0 next to signal; the background plot shows it (user 2026-11-04)
+            continue
         P.draw("fraction/signal_bkg_vs_%s" % a,
                [P.eff(unc, ns, cs.BLUE, B, "g%su" % a), P.eff(cut, ns, cs.BLUE, S, "g%sc" % a),
                 P.eff([b[7]] * len(keys), b[0], cs.BLACK, B, "g%sbu" % a),
@@ -278,7 +297,7 @@ def main():
     P.draw("fraction/background_vs_group",
            [P.eff([bkg[g][7] for g in bkeys], nb, cs.BLACK, B, "fbu"), P.eff([bkg[g][8] for g in bkeys], nb, cs.BLACK, S, "fbc")],
            ["Bkg, selected #mu#mu", "Bkg, + MET, jet cut"], ["All 47"] + GROUPS, "Events / all events",
-           [POP, BKG_POP], xtitle="Background process group")
+           [POP, BKG_POP] + CUT_LINES, xtitle="Background process group")
 
     # 3. F = eps_s / sqrt(eps_b).
     print("F = eps_s/sqrt(eps_b) (value +up -down), uncut | cut:")
@@ -303,7 +322,7 @@ def main():
                 if not pts:
                     zero.setdefault(g, set()).add(tag)
                 series[tag] = pts
-            lines = [("Background: " + bkg_label[g]) if g != "overall" else BKG_POP, FOM_LINE]
+            lines = [("Background: " + bkg_label[g]) if g != "overall" else BKG_POP, FOM_LINE] + CUT_LINES
             if not series["cut"] or not series["uncut"]:
                 lines.append("No background events survive the %s selection" % ("cut" if not series["cut"] else "uncut"))
             gr, labs = [], []
@@ -321,7 +340,7 @@ def main():
                 keep = [o for o in over[tag] if o[0] == "overall" or o[0][6:] in members]
                 missing = [g for g in members if tag in zero.get("group/" + g, ())]
                 lines = ["Signal and bkg: " + ("selected #mu#mu" if tag == "uncut" else "+ MET, jet cut"),
-                         FOM_LINE] + (["No surviving background: " + ", ".join(missing)] if missing else [])
+                         FOM_LINE] + CUT_LINES + (["No surviving background: " + ", ".join(missing)] if missing else [])
                 P.draw("fom/overlay_%s_%s_vs_%s" % (tag, part, a), [o[1] for o in keep], [o[2] for o in keep], xl[a],
                        "#varepsilon_{s} / #sqrt{#varepsilon_{b}}", lines, xtitle=xt[a])
     print("PLOTS DONE", out)

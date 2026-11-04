@@ -32,7 +32,11 @@ VARS = {  # name: (branch, edges, x title, y title per bin)
     "pt_reco_25": ("pRecoMuMuPt", np.arange(0, 25.0001, 0.5), "p_{T}^{#mu#mu} from the reco legs [GeV]", "0.5 GeV"),
 }
 DEFAULT_VARS = ["pt_pca", "pt_reco", "lxy_short", "lxy_long", "dr_pca", "dr_reco"]
-SELECTIONS = {"selected": "Selected #mu#mu", "cut": "+ MET, jet p_{T} > 80 GeV"}
+SELECTIONS = {"selected": "Selected #mu#mu", "cut": "+ MET, jet cut"}
+CUT_LINES = ["+ Type-1 PF MET > 80 GeV,", "leading jet p_{T} > 80 GeV, |#eta| < 2.4"]  # spelled out on the plots
+CUT_LINE = "+ Type-1 PF MET > 80 GeV, leading jet p_{T} > 80 GeV, |#eta| < 2.4"
+M_HEADER, M_KEYS = "M = m_{#chi} - #Deltam/2", ("#Deltam = 0.1 M", "0.2 M", "0.4 M")
+CUM_TOP = 0.37
 GROUPS = ["ZJets", "WJets", "QCD", "TTbar", "SingleTop", "DYJets", "Multiboson", "WWZ", "WZZ", "ZZ", "ZZZ", "ZGamma"]
 PAIR_BRANCHES = ["pEvent", "pQA", "pQB", "pStatus", "pChi2", "pNdof", "pPcaOK", "pPcaDR", "pPcaMuMuPt", "pPcaMuMuPhi",
                  "pRecoDR", "pRecoMuMuPt", "pLxyBS"]
@@ -182,12 +186,12 @@ def plot(args):
     pairs = "Passing #mu#mu pairs, unweighted"
     bkg = "Bkg: 47 of 50 samples"
 
-    def band_plot(base, graphs, xtitle, ytitle, lines, groups, stages, header):
+    def band_plot(base, graphs, xtitle, ytitle, lines, groups, stages, header, ymax=None, log=None, top=0.34):
         """Band layout with the keys placed below the context lines (as in met_jet_plots.py)."""
         c = cs.canvas("c_" + str(base).replace("/", "_"), band=True)
-        c.SetTopMargin(0.34)
+        c.SetTopMargin(top)
         hi = max([p[3] for p in cs._points(graphs)] or [1])
-        cs.frame(c, edges[0], edges[-1], 0, cs._round_up(1.1 * hi), xtitle, ytitle)
+        cs.frame(c, edges[0], edges[-1], 0, ymax or cs._round_up(1.1 * hi), xtitle, ytitle)
         c.Update()
         for g in graphs:
             g.Draw(cs._info[id(g)][1] + " same")
@@ -196,11 +200,71 @@ def plot(args):
         for i, line in enumerate(lines):
             t.DrawLatex(0.18, 0.90 - 0.035 * i, line)
         ytop = 0.90 - 0.035 * len(lines) - 0.005
-        cs.legend([(cs._proxy(col, 1, 20), lab, "l") for lab, col in groups.items()], y2=ytop, y1=0.67, x1=0.50,
-                  header=header, ncol=2, size=0.026)
-        cs.legend([(cs._proxy(cs.BLACK, ls, ms), lab, "lp") for lab, (ls, ms) in stages.items()], y2=ytop, y1=0.67,
-                  x1=0.17, x2=0.47, size=0.026)
-        cs.save(c, base, log=args.log)
+        cs.legend([(cs._proxy(col, *groups_style.get(lab, (1, 20))), lab, "l") for lab, col in groups.items()], y2=ytop,
+                  y1=1 - top + 0.01, x1=0.50, header=header, ncol=2, size=0.026)
+        if stages:
+            cs.legend([(cs._proxy(cs.BLACK, ls, ms), lab, "lp") for lab, (ls, ms) in stages.items()], y2=ytop,
+                      y1=1 - top + 0.01, x1=0.17, x2=0.47, size=0.026)
+        cs.save(c, base, log=args.log if log is None else log)
+    groups_style = {}  # legend line style per group label (default solid)
+
+    tot = lambda h: h.Integral(0, h.GetNbinsX() + 1)
+
+    def checked(prefix):
+        """All variables stored under prefix: zero underflow and one common total (all passing pairs; no invalid
+        values), so in-window fractions and cumulative fractions use the full passing-pair denominator."""
+        hs = {v: f.Get(prefix + "/" + v) for v in VARS if f.Get(prefix + "/" + v)}
+        totals = {v: tot(h) for v, h in hs.items()}
+        if any(h.GetBinContent(0) != 0 for h in hs.values()) or len(set(totals.values())) != 1:
+            raise RuntimeError("Closure failed for %s: totals %s, underflow %s" % (
+                prefix, totals, {v: h.GetBinContent(0) for v, h in hs.items()}))
+        return hs
+
+    def in_range(prefix, var):
+        h = checked(prefix)[var]
+        return 100. * h.Integral(1, h.GetNbinsX()) / tot(h)
+
+    def cum_graph(key, color, style):
+        """Fraction of all passing pairs (incl. flows) with Lxy >= x at each lower bin edge; at the last edge the
+        overflow alone. 68% Clopper-Pearson under the independent-pair assumption."""
+        h = checked(key.rsplit("/", 1)[0])[key.rsplit("/", 1)[1]]
+        nb, n = h.GetNbinsX(), int(tot(h))
+        gr = ROOT.TGraphAsymmErrors()
+        for i in range(1, nb + 2):
+            k = int(h.Integral(i, nb + 1)); x = h.GetXaxis().GetBinLowEdge(i)
+            lo = ROOT.TEfficiency.ClopperPearson(n, k, cs.STYLE["level"], False)
+            up = ROOT.TEfficiency.ClopperPearson(n, k, cs.STYLE["level"], True)
+            gr.SetPoint(i - 1, x, k / n); gr.SetPointError(i - 1, 0, 0, k / n - lo, up - k / n)
+        g = cs._style(gr, color, style[0], style[1], [h.GetXaxis().GetXmin(), h.GetXaxis().GetXmax()], opt="LP",
+                      kind="eff")
+        g.SetMarkerSize(0.5)
+        return g
+
+    def cumulative(edges, xtitle):
+        """Cumulative Lxy after the cut (user 2026-11-04): c-tau overlay + background, and overall signal vs background."""
+        yt = "Fraction of passing pairs with L_{xy} #geq x"
+        xt = xtitle.replace("[cm]", "x [cm]")
+        lines = [CUT_LINE, pairs + "; " + bkg, "Denominator: all passing pairs, incl. L_{xy} > %g cm" % edges[-1],
+                 "Bars: 68% CP assuming independent pairs; coverage uncalibrated"]
+        bstyle = (2, 24)
+        series = [cum_graph("signal/%s/cut/lxy_500" % k, c, (1, 20 + i)) for i, (k, c) in enumerate(zip(taus, cs.COLORS))]
+        series.append(cum_graph("background/overall/cut/lxy_500", cs.BLACK, bstyle))
+        groups = {label[k]: c for k, c in zip(taus, cs.COLORS)}
+        groups["Bkg (47 of 50)"] = cs.BLACK
+        groups_style.clear(); groups_style["Bkg (47 of 50)"] = bstyle
+        band_plot(out / "lxy_500_cumulative" / "overlay_ctau", series, xt, yt, lines, groups, {},
+                  "Signal, pooled over masses", ymax=1.05, log=False, top=CUM_TOP)
+        series = [cum_graph("signal/overall/cut/lxy_500", cs.BLUE, (1, 20)),
+                  cum_graph("background/overall/cut/lxy_500", cs.BLACK, bstyle)]
+        band_plot(out / "lxy_500_cumulative" / "overall_signal_bkg", series, xt, yt, lines,
+                  {"Signal, all 72 samples": cs.BLUE, "Bkg (47 of 50)": cs.BLACK}, {}, None, ymax=1.05, log=False,
+                  top=CUM_TOP)
+        groups_style.clear()
+        for k in taus + ["overall"]:
+            g = cum_graph("signal/%s/cut/lxy_500" % k, cs.BLUE, (1, 20))
+            print("cumulative Lxy >= 50 cm, %s: %.4f" % (k, g.GetPointY(10)))
+        print("cumulative Lxy >= 50 cm, background: %.4f" %
+              cum_graph("background/overall/cut/lxy_500", cs.BLACK, bstyle).GetPointY(10))
 
     for var in args.vars:
         _, edges, xtitle, per = VARS[var]
@@ -213,15 +277,20 @@ def plot(args):
                 if args.cut_only:
                     series = [hg("signal/%s/cut/%s" % (s, var), cs.BLUE, B_CUT),
                               hg("background/overall/cut/%s" % var, cs.BLACK, B_SEL)]
+                    extra = ["In range: signal %.1f%%, bkg %.1f%% of passing pairs" % (
+                        in_range("signal/%s/cut" % s, var), in_range("background/overall/cut", var))] if norm else []
                     cs.plot(out / var / d / ("signal_bkg" + sfx), series, ["Signal", "Background"], xtitle, yt,
-                            lines=["Signal: " + label[s], bkg, "+ MET, jet p_{T} > 80 GeV", pairs], x1=0.68, log=args.log)
+                            lines=["Signal: %s; %s" % (label[s], bkg)] + CUT_LINES + [pairs] + extra, x1=0.68, log=args.log)
                     continue
                 series = [hg("signal/%s/selected/%s" % (s, var), cs.BLUE, B_SEL), hg("signal/%s/cut/%s" % (s, var), cs.BLUE, B_CUT),
                           hg("background/overall/selected/%s" % var, cs.BLACK, B_SEL),
                           hg("background/overall/cut/%s" % var, cs.BLACK, B_CUT)]
+                extra = ["In range, %s: signal %.1f%%, bkg %.1f%%" % (t, in_range("signal/%s/%s" % (s, sel), var),
+                                                                    in_range("background/overall/" + sel, var))
+                         for t, sel in (("selected", "selected"), ("+ cut", "cut"))] if norm and var == "lxy_short" else []
                 cs.plot(out / var / d / ("signal_bkg" + sfx), series,
                         ["Signal, selected", "Signal, + MET, jet", "Bkg, selected", "Bkg, + MET, jet"], xtitle, yt,
-                        lines=["Signal: " + label[s], bkg, pairs], x1=0.62, log=args.log)
+                        lines=["Signal: " + label[s], bkg, pairs] + extra, x1=0.62, log=args.log)
             for tag, sl in SELECTIONS.items():
                 if args.cut_only and tag != "cut":
                     continue
@@ -229,12 +298,12 @@ def plot(args):
                 series += [hg("background/group/%s/%s/%s" % (g, tag, var), c, B_CUT) for g, c in
                            (("ZJets", cs.BLUE), ("WJets", cs.ORANGE), ("QCD", cs.GREEN))]
                 cs.plot(out / var / "background" / (tag + sfx), series, ["All 47", "ZJets", "WJets", "QCD"], xtitle, yt,
-                        lines=[bkg, sl, pairs], x1=0.66, log=args.log)
+                        lines=[bkg] + (CUT_LINES if tag == "cut" else [sl]) + [pairs], x1=0.66, log=args.log)
             series = [hg("signal/%s/cut/%s" % (k, var), c, B_CUT) for k, c in zip(taus, cs.COLORS)]
             series.append(hg("background/overall/cut/%s" % var, cs.BLACK, B_SEL))
             cs.plot(out / var / "overlays" / ("ctau" + sfx), series,
                     ["Signal, " + label[k] for k in taus] + ["Bkg (47 of 50)"], xtitle, yt,
-                    lines=["+ MET, jet cut", "Signal pooled over masses", bkg, pairs], x1=0.60, log=args.log)
+                    lines=CUT_LINES + ["Signal pooled over masses", bkg, pairs], x1=0.60, log=args.log)
             fam = sorted({mkey(k)[0] for k in masses})
             fstyle = [(3, 25), (2, 24), (1, 20)]
             series = [hg("signal/%s/cut/%s" % (k, var), cs.COLORS[fam.index(mkey(k)[0])],
@@ -243,10 +312,11 @@ def plot(args):
             groups = {"%g GeV" % m: cs.COLORS[i] for i, m in enumerate(fam)}
             groups["Bkg (47 of 50)"] = cs.BLACK
             band_plot(out / var / "overlays" / ("mass" + sfx), series, xtitle, yt,
-                      ["+ MET, jet cut; signal pooled over lifetimes; " + bkg,
+                      [CUT_LINE, "Signal pooled over lifetimes; " + bkg,
                        pairs + ("; " + cs.STYLE["norm_label"] if norm else "")],
-                      groups, {"#Deltam = 0.1 m": fstyle[0], "0.2 m": fstyle[1], "0.4 m": fstyle[2]},
-                      "m_{#chi} - #Deltam/2")
+                      groups, dict(zip(M_KEYS, fstyle)), M_HEADER)
+        if var == "lxy_500":
+            cumulative(edges, xtitle)
     print("PLOTS DONE", out)
 
 
