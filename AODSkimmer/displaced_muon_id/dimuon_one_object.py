@@ -3,6 +3,7 @@
 
 python3 -I dimuon_one_object.py analyze --input-dir RUN/inputs --output OUT.root --revision <sha> [--samples a,b]
 python3 -I dimuon_one_object.py validate --input-dir RUN/inputs --output OUT.root --samples a,b
+python3 -I dimuon_one_object.py crosstab --input-dir RUN/inputs --output TAB.root --reference OUT.root --revision <sha>
 python3 -I dimuon_one_object.py plot --output OUT.root --plot-dir DIR --style-dir DIR_WITH_cms_style [--log]
 
 Study note: kb/studies/dimuon-one-object.md. Inputs: met_proxy_20261022 (hierarchy G > I > DSA, 5a2b10e).
@@ -300,6 +301,57 @@ def analyze(args):
     print("DECISION", decision, "(%.1f s)" % (time.time() - t0))
 
 
+def crosstab(args):
+    """s2 x genDR table of supported pairs, same map as analyze. Row and column sums are checked against --reference."""
+    import ROOT
+    ROOT.gROOT.SetBatch(True)
+    names, ev, total = load(args)
+    c, m = cells(ev), ev["m"]
+    both = m.all(axis=1)
+    defined = np.isfinite(ev["s2"])
+    s2 = np.where(defined, ev["s2"], -1.0)
+    num, den = build_map(c, m, s2 >= SEPARATED)
+    e = eff(num, den)
+    k = defined & (den[c[:, 0]] > 0) & (den[c[:, 1]] > 0)
+    p = e[c[:, 0]] * e[c[:, 1]]
+    nb = len(S_EDGES) + 1  # index 0 is unused for s2 (defined only), last is overflow
+    key = np.searchsorted(S_EDGES, s2[k], side="right") * nb + np.searchsorted(S_EDGES, ev["genDR"][k], side="right")
+    tab = {"pairs": np.bincount(key, minlength=nb * nb).astype(float).reshape(nb, nb),
+           "obs": np.bincount(key, weights=both[k].astype(float), minlength=nb * nb).reshape(nb, nb),
+           "pred": np.bincount(key, weights=p[k], minlength=nb * nb).reshape(nb, nb)}
+    ref = ROOT.TFile.Open(args.reference)
+    for st, name in (("pairs", "supp"), ("obs", "supp2"), ("pred", "pred")):
+        for ax, sums in (("s2", tab[st].sum(axis=1)), ("genDR", tab[st].sum(axis=0))):
+            h = ref.Get("overall__%s__%s" % (ax, name))
+            saved = np.array([h.GetBinContent(b) for b in range(nb)])
+            if not args.samples and not np.allclose(saved, sums, atol=1e-6, rtol=0):
+                raise RuntimeError("Marginal differs from the saved %s %s" % (ax, name))
+    print("marginals agree with", args.reference if not args.samples else "(skipped, subset)")
+    f = ROOT.TFile.Open(args.output, "RECREATE")
+    ROOT.TNamed("revision", args.revision).Write()
+    for st, t in tab.items():
+        h = ROOT.TH2D(st, st + ";s2;genDR", len(S_EDGES) - 1, array("d", S_EDGES), len(S_EDGES) - 1, array("d", S_EDGES))
+        for i in range(nb):
+            for j in range(nb):
+                h.SetBinContent(i, j, float(t[i, j]))
+        h.Write()
+    f.Close()
+    lab = ["<0"] + ["%g-%g" % x for x in zip(S_EDGES[:-1], S_EDGES[1:])] + [">=%g" % S_EDGES[-1]]
+    for title, fn in (("pairs", lambda i, j: "%d" % tab["pairs"][i, j]),
+                      ("observed 2-leg fraction", lambda i, j: "%.3f" % (tab["obs"][i, j] / tab["pairs"][i, j]) if tab["pairs"][i, j] >= 20 else "-"),
+                      ("predicted 2-leg fraction", lambda i, j: "%.3f" % (tab["pred"][i, j] / tab["pairs"][i, j]) if tab["pairs"][i, j] >= 20 else "-"),
+                      ("predicted - observed (events)", lambda i, j: "%.0f" % (tab["pred"][i, j] - tab["obs"][i, j]))):
+        print("\n" + title + ": rows s2, columns genDR")
+        print("%-9s" % "s2" + "".join("%9s" % x for x in lab[1:]))
+        for i in range(1, nb):
+            print("%-9s" % lab[i] + "".join("%9s" % fn(i, j) for j in range(1, nb)))
+    low = k & (s2 < 0.1)
+    q = np.percentile(ev["genDR"][low], (16, 50, 84))
+    print("\ns2 < 0.1: %d pairs; genDR 16/50/84%% %.3f %.3f %.3f; ratio genDR/s2 median %.2f; fraction genDR > s2 %.3f; fraction genDR >= 0.1 %.3f, >= 0.3 %.3f" % (
+        low.sum(), q[0], q[1], q[2], np.median(ev["genDR"][low] / np.maximum(s2[low], 1e-6)), (ev["genDR"][low] > s2[low]).mean(),
+        (ev["genDR"][low] >= 0.1).mean(), (ev["genDR"][low] >= 0.3).mean()))
+
+
 def scalar_cell(pt, eta, lxy):
     ipt = 0 if pt < 3 else 1 if pt < 5 else 2 if pt < 10 else 3 if pt < 20 else 4
     il = 0 if lxy < 10 else 1 if lxy < 60 else 2
@@ -552,11 +604,15 @@ def main():
     a.add_argument("--seed", type=int, default=20261106)
     v = sub.add_parser("validate")
     v.add_argument("--input-dir", required=True); v.add_argument("--output", required=True)
+    x = sub.add_parser("crosstab")
+    x.add_argument("--input-dir", required=True); x.add_argument("--output", required=True)
+    x.add_argument("--reference", required=True); x.add_argument("--revision", required=True)
+    x.add_argument("--samples", default=""); x.add_argument("--expected-samples", type=int, default=72)
     p = sub.add_parser("plot")
     p.add_argument("--output", required=True); p.add_argument("--plot-dir", required=True)
     p.add_argument("--style-dir", required=True); p.add_argument("--log", action="store_true")
     args = ap.parse_args()
-    {"analyze": analyze, "validate": validate, "plot": plot}[args.cmd](args)
+    {"analyze": analyze, "crosstab": crosstab, "validate": validate, "plot": plot}[args.cmd](args)
 
 
 if __name__ == "__main__":
