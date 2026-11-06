@@ -387,6 +387,20 @@ def validate(args):
                     pred[key] += eps[c0] * eps[c1]; obs[key] += m0 and m1
         return pred, obs
 
+    def saved_map(name, lo):
+        k, n = defaultdict(int), defaultdict(int)
+        for _, s, c0, m0, c1, m1 in pairs:
+            if s is not None and s >= lo:
+                for c, m in ((c0, m0), (c1, m1)):
+                    b = 6 * c[0] + 2 * c[1] + int(c[2])
+                    n[b] += 1; k[b] += m
+        hn, hd = out.Get(name + "_num"), out.Get(name + "_den")
+        for b in range(NCELL):
+            if hn.GetBinContent(b + 1) != k[b] or hd.GetBinContent(b + 1) != n[b]:
+                raise RuntimeError("Map %s differs in cell %d" % (name, b))
+
+    saved_map("map", SEPARATED)
+    saved_map("closure_map", CLOSURE_MAP)
     res = out.Get("result_frac")
     N = defaultdict(int)
     for g, *_ in pairs:
@@ -396,9 +410,10 @@ def validate(args):
     for b in range(1, res.GetNbinsX() + 1):
         g = res.GetXaxis().GetBinLabel(b)
         frac, bias = (p[g] - o[g]) / N[g], abs(cp_[g] - co[g]) / N[g]
-        if abs(frac - res.GetBinContent(b)) > 1e-9 or abs(bias - out.Get("result_b").GetBinContent(b)) > 1e-9:
+        if abs(frac - res.GetBinContent(b)) > 1e-9 or abs(bias - out.Get("result_b").GetBinContent(b)) > 1e-9 or \
+                abs(p[g] - o[g] - out.Get("result_D").GetBinContent(b)) > 1e-6 or N[g] != out.Get("result_N").GetBinContent(b):
             raise RuntimeError("D or b differ for %s: %s %s" % (g, frac, bias))
-    print("D and b agree for", res.GetNbinsX(), "groups")
+    print("maps, N, D, D/N and b agree for", res.GetNbinsX(), "groups")
     print("VALIDATE PASS")
 
 
@@ -437,6 +452,7 @@ def plot(args):
         c.Update()
         for g in graphs:
             g.Draw(cs._info[id(g)][1] + " same")
+        cs.context(c, ())
         cs.legend([(g, l, cs._info[id(g)][2]) for g, l in zip(graphs, labels)], y2=0.89, y1=0.60, x1=0.20, ncol=3, size=0.024, header=header)
         cs.save(c, base, False, args.log)
 
@@ -446,7 +462,7 @@ def plot(args):
         gs.sort(key=lambda g: num(g.split("_", 1)[1].split("_")[0].replace("Mchi-", "")))
         d = out / "overlays"
         d.mkdir(parents=True, exist_ok=True)
-        many = len(gs) > 7 and kind == "mass"
+        many = len(gs) > 7
         styles = [(cs.COLORS[i // 3 % 7], (1, 2, 3)[i % 3], (20, 24, 21)[i % 3]) if many else (cs.COLORS[i % 7], 1 + i // 7, 20 + i % 2) for i in range(len(gs))]
         short = lambda g: lab(g).split("= ")[-1].replace(" GeV", "")
         for ax in AXES:
@@ -469,7 +485,7 @@ def plot(args):
     graphs_x = [0, 1]
     overlay("mass", "mass", "m_{#chi} / #Deltam [GeV]")
     overlay("ctau", "ctau", "Pooled over masses")
-    overlay("delta", "delta", "Pooled over masses, lifetimes")
+    overlay("delta", "delta", "#Deltam [GeV]")
     d = out / "prediction"
     d.mkdir(parents=True, exist_ok=True)
     for g in [x for x in groups if x == "overall" or x.startswith("delta_")]:
