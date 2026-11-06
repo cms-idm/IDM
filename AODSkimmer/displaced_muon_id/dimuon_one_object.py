@@ -445,15 +445,18 @@ def plot(args):
             if s and all(x.GetN() for x in s):
                 cs.plot(str(d / ("fractions_%s_%s" % (ax, g))), s, [l for (_, l), _, _ in FR], XT[ax], "Fraction of two-accepted events",
                         lines=[lab(g)], log=args.log)
-    def crowded(base, graphs, labels, xtitle, ytitle, header, ymax):
-        """18 mass points: three legend columns (relative splitting) and six rows (mass), above the data."""
+    def crowded(base, graphs, labels, xtitle, ytitle, header, top, norm=False):
+        """Many curves: three legend columns above the data; the y range leaves just enough room for them."""
+        rows = (len(graphs) + 2) // 3 + 1
+        y2 = 0.84 if norm else 0.89
+        y1 = y2 - rows * 0.036
         c = cs.canvas("c_" + Path(base).name)
-        cs.frame(c, graphs_x[0], graphs_x[1], 0, ymax, xtitle, ytitle)
+        cs.frame(c, graphs_x[0], graphs_x[1], 0, 1.05 * top * 0.78 / (y1 - 0.14), xtitle, ytitle)
         c.Update()
         for g in graphs:
             g.Draw(cs._info[id(g)][1] + " same")
-        cs.context(c, ())
-        cs.legend([(g, l, cs._info[id(g)][2]) for g, l in zip(graphs, labels)], y2=0.89, y1=0.60, x1=0.20, ncol=3, size=0.024, header=header)
+        cs.context(c, [cs.STYLE["norm_label"]] if norm else ())
+        cs.legend([(g, l, cs._info[id(g)][2]) for g, l in zip(graphs, labels)], y2=y2, y1=y1, x1=0.20, ncol=3, size=0.024, header=header)
         cs.save(c, base, False, args.log)
 
     def overlay(prefix, kind, name):
@@ -470,7 +473,7 @@ def plot(args):
             ss = [(cs.eff_graph(get(g, ax, "n2"), get(g, ax, "den"), c, ls, m), short(g)) for g, (c, ls, m) in zip(gs, styles)]
             ss = [x for x in ss if x[0].GetN()]
             if many:
-                crowded(str(d / ("%s_f2_%s" % (prefix, ax))), [x[0] for x in ss], [x[1] for x in ss], XT[ax], "Fraction with 2 legs matched", name, 1.8)
+                crowded(str(d / ("%s_f2_%s" % (prefix, ax))), [x[0] for x in ss], [x[1] for x in ss], XT[ax], "Fraction with 2 legs matched", name, 1.0)
             else:
                 cs.plot(str(d / ("%s_f2_%s" % (prefix, ax))), [x[0] for x in ss], [x[1] for x in ss], XT[ax],
                         "Fraction with 2 legs matched", header=name, log=args.log)
@@ -479,7 +482,7 @@ def plot(args):
                 base = str(d / ("%s_den_%s%s" % (prefix, ax, "_norm" if norm else "")))
                 if many:
                     top = max(max(x.GetY()[i] for i in range(x.GetN())) for x in s)
-                    crowded(base, s, [short(g) for g in gs], XT[ax], yt, name, 1.9 * top)
+                    crowded(base, s, [short(g) for g in gs], XT[ax], yt, name, top, norm)
                 else:
                     cs.plot(base, s, [short(g) for g in gs], XT[ax], yt, header=name, log=args.log)
     graphs_x = [0, 1]
