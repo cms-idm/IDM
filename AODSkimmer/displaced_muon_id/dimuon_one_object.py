@@ -35,7 +35,8 @@ NCELL = 5 * 3 * 2
 CLOSE, SEPARATED, CLOSURE_MAP = 0.2, 0.3, 1.0
 THRESHOLD = 0.02
 CLASSES = "ABCDE"
-STATS = ("den", "n2", "n1", "n0", "supp", "supp2", "pred") + tuple("sec" + c for c in CLASSES)
+NCORE = 7
+STATS = ("den", "n2", "n1", "n0", "supp", "supp2", "pred") + tuple("sec" + c for c in CLASSES) + ("secX",)
 
 
 def wrap(d):
@@ -43,26 +44,29 @@ def wrap(d):
 
 
 def classify(leg, claimed, q, st2, comps):
-    """Secondary table for the unmatched leg of a one-leg event. Returns (class, closure violated).
-    comps: (obj, type, q, idPass, inEta, prop, eta2, phi2); type 1 is DSA."""
+    """Secondary table for the unmatched leg of a one-leg event. Returns (class, closure violated, second object).
+    comps: (obj, type, q, idPass, inEta, prop, eta2, phi2); type 1 is DSA. Second object: any eligible component inside
+    its threshold in an unclaimed object, whichever is nearest (the nearest is usually the claimed object when the two
+    muons are close, so the class alone can hide it)."""
     if st2 is None:
-        return "E", False
-    best, closure = None, False
+        return "E", False, False
+    best, closure, second = None, False, False
     for i, (obj, typ, cq, idp, ineta, prop, eta2, phi2) in enumerate(comps):
         if not (idp and ineta and prop):
             continue
         d = math.hypot(st2[0] - eta2, wrap(st2[1] - phi2))
         if d >= (0.10 if typ == 1 else 0.06):
             continue
+        second = second or obj != claimed
         if obj != claimed and cq == q:
             closure = True  # must never happen: hierarchy() would have matched it
         if best is None or (d, i) < best[:2]:
             best = (d, i, obj == claimed, cq == q)
     if best is None:
-        return "D", closure
+        return "D", closure, second
     if best[2]:
-        return ("A" if best[3] else "B"), closure
-    return ("C" if not best[3] else "F"), closure
+        return ("A" if best[3] else "B"), closure, second
+    return ("C" if not best[3] else "F"), closure, second
 
 
 def load(args):
@@ -104,21 +108,21 @@ def load(args):
         s2 = np.full(len(a), np.nan)
         dphi = (phi2[:, 0] - phi2[:, 1] + np.pi) % (2 * np.pi) - np.pi
         s2[both_prop] = np.hypot(eta2[:, 0] - eta2[:, 1], dphi)[both_prop]
-        sec = np.full(len(a), -1)
+        sec, secx = np.full(len(a), -1), np.zeros(len(a), bool)
         q = ak.to_list(a["sigQ"])
         one = np.flatnonzero((mo >= 0).sum(axis=1) == 1)
         cl = [ak.to_list(a[b][one]) for b in ("cObj", "cType", "cQ", "cIdPass", "cInEta", "cProp", "cEta2", "cPhi2")]
         for k, i in enumerate(one):
             g = 0 if mo[i, 0] < 0 else 1
             st2 = (float(eta2[i, g]), float(phi2[i, g])) if prop[i, g] else None
-            c, bad = classify(g, mo[i, 1 - g], q[i][g], st2, list(zip(*[x[k] for x in cl])))
+            c, bad, sx = classify(g, mo[i, 1 - g], q[i][g], st2, list(zip(*[x[k] for x in cl])))
             if bad or c == "F":
                 raise RuntimeError("Closure check failed: unclaimed same-charge candidate in %s event %d" % (sample, i))
-            sec[i] = CLASSES.index(c)
+            sec[i], secx[i] = CLASSES.index(c), sx
         parts.append(dict(si=np.full(len(a), si), s2=s2, genDR=np.asarray(a["genDR"], float),
                           d0max=np.abs(ak.to_numpy(a["sigD0"]).astype(float)).max(axis=1),
                           pt=ak.to_numpy(a["sigPt"]).astype(float), eta=ak.to_numpy(a["sigEta"]).astype(float),
-                          lxy=ak.to_numpy(a["sigLxy"]).astype(float), m=mo >= 0, sec=sec))
+                          lxy=ak.to_numpy(a["sigLxy"]).astype(float), m=mo >= 0, sec=sec, secx=secx))
     ev = {k: np.concatenate([p[k] for p in parts]) for k in parts[0]}
     return names, ev, total
 
@@ -225,6 +229,7 @@ def analyze(args):
     masks = {"den": np.ones(N, bool), "n2": nleg == 2, "n1": nleg == 1, "n0": nleg == 0,
              "supp": defined & supported, "supp2": defined & supported & both}
     masks.update({"sec" + k: ev["sec"] == i for i, k in enumerate(CLASSES)})
+    masks["secX"] = ev["secx"]
     for ax, edges in AXES.items():
         counts[ax] = np.zeros((len(names), len(STATS), len(edges) + 1))
         bins = np.searchsorted(edges, axis_vals[ax], side="right")
@@ -240,7 +245,7 @@ def analyze(args):
         c0 = counts[ax]
         if not np.all(c0[:, 1:4].sum(axis=1) == c0[:, 0]) or c0[:, 0].sum() != N:
             raise RuntimeError("Category sums fail on " + ax)
-        if not np.all(c0[:, 7:].sum(axis=1) == c0[:, 2]):
+        if not np.all(c0[:, NCORE:NCORE + len(CLASSES)].sum(axis=1) == c0[:, 2]):
             raise RuntimeError("Secondary classes do not sum to one-leg events on " + ax)
     if not args.samples and (total != 720000 or N != 494255 or both.sum() != 199931):
         raise RuntimeError("Full-run counts differ from the mumu talk study: %d %d %d" % (total, N, both.sum()))
@@ -287,39 +292,58 @@ def analyze(args):
         print("%-12s %8d %8d %6d %8d %8.1f %8.1f %9.5f %9.5f %9.5f %9.5f %9.5f" % (
             g, res["N"][i], res["close"][i], res["close_unsupported"][i], res["obs"][i], res["pred"][i], res["D"][i],
             res["frac"][i], res["L"][i], res["U"][i], res["b"][i], res["hi"][i]))
+    softer = ev["pt"].min(axis=1)
+    for lo, hi in zip((0, 3, 5, 10, 20), (3, 5, 10, 20, 1e9)):
+        k = (softer >= lo) & (softer < hi)
+        print("softer gen pT %g-%g: %d events, undefined s2 fraction %.4f" % (lo, hi, k.sum(), (~defined[k]).mean() if k.any() else 0))
     print("undefined s2: %d of %d; closure overall obs %.0f pred %.1f" % (res["undefined"][0], N, res["clo_obs"][0], res["clo_pred"][0]))
     print("DECISION", decision, "(%.1f s)" % (time.time() - t0))
 
 
+def scalar_cell(pt, eta, lxy):
+    ipt = 0 if pt < 3 else 1 if pt < 5 else 2 if pt < 10 else 3 if pt < 20 else 4
+    il = 0 if lxy < 10 else 1 if lxy < 60 else 2
+    return ipt, il, abs(eta) >= 1.2
+
+
 def validate(args):
-    """Independent scalar recount on raw branches with PyROOT, against the saved per-sample histograms."""
+    """Independent scalar recount on raw branches with PyROOT, for every sample in the output: per-sample categories and
+    secondary classes on the s2 axis, then maps, D and closure per group. Not bootstrap intervals."""
     import ROOT
+    from collections import defaultdict
     ROOT.gROOT.SetBatch(True)
     out = ROOT.TFile.Open(args.output)
-    for sample in args.samples.split(","):
+    samples = out.Get("samples").GetTitle().split(",")
+    pairs = []
+    for sample in samples:
         f = ROOT.TFile.Open(str(Path(args.input_dir) / (sample + ".root")))
         t = f.Get("preselectedVertexing/events")
-        den, leg, secn = np.zeros(len(S_EDGES) + 1), np.zeros((3, len(S_EDGES) + 1)), np.zeros((5, len(S_EDGES) + 1))
+        nb = len(S_EDGES) + 1
+        tab = defaultdict(lambda: np.zeros(nb))
+        gkey = "delta_" + sample.split("dMchi-")[1].split("_")[0]
         for e in t:
             if not e.twoAcc:
                 continue
             ok = e.sigProp[0] and e.sigProp[1]
-            s = -1.0
+            s = None
             if ok:
                 dp = abs(e.sigPhi2[0] - e.sigPhi2[1])
                 dp = min(dp, 2 * math.pi - dp)
                 s = math.sqrt((e.sigEta2[0] - e.sigEta2[1]) ** 2 + dp ** 2)
-            b = sum(1 for x in S_EDGES if x <= s)
-            den[b] += 1
-            n = int(e.matchObj[0] >= 0) + int(e.matchObj[1] >= 0)
-            leg[n, b] += 1
+            b = 0 if s is None else sum(1 for x in S_EDGES if x <= s)
+            tab["den"][b] += 1
+            m0, m1 = e.matchObj[0] >= 0, e.matchObj[1] >= 0
+            n = int(m0) + int(m1)
+            tab["n%d" % n][b] += 1
+            pairs.append((gkey, s, scalar_cell(e.sigPt[0], e.sigEta[0], e.sigLxy[0]), m0,
+                          scalar_cell(e.sigPt[1], e.sigEta[1], e.sigLxy[1]), m1))
             if n != 1:
                 continue
-            g = 0 if e.matchObj[0] < 0 else 1
+            g = 0 if not m0 else 1
             if not e.sigProp[g]:
-                secn[4, b] += 1
+                tab["secE"][b] += 1
                 continue
-            cand = []
+            cand, second = [], False
             for i in range(e.cObj.size()):
                 if not (e.cIdPass[i] and e.cInEta[i] and e.cProp[i]):
                     continue
@@ -328,20 +352,53 @@ def validate(args):
                 d = math.sqrt((e.sigEta2[g] - e.cEta2[i]) ** 2 + dp ** 2)
                 if d < (0.10 if e.cType[i] == 1 else 0.06):
                     cand.append((d, i))
+                    if e.cObj[i] != e.matchObj[1 - g]:
+                        second = True
+                        if e.cQ[i] == e.sigQ[g]:
+                            raise RuntimeError("Unclaimed same-charge candidate in " + sample)
+            if second:
+                tab["secX"][b] += 1
             if not cand:
-                secn[3, b] += 1
+                tab["secD"][b] += 1
                 continue
             i = min(cand)[1]
             same_obj, same_q = e.cObj[i] == e.matchObj[1 - g], e.cQ[i] == e.sigQ[g]
-            secn[0 if same_obj and same_q else 1 if same_obj else 2, b] += 1
-        for st, arr in [("den", den), ("n0", leg[0]), ("n1", leg[1]), ("n2", leg[2])] + \
-                [("sec" + k, secn[i]) for i, k in enumerate(CLASSES)]:
+            tab["secA" if same_obj and same_q else "secB" if same_obj else "secC"][b] += 1
+        for st in ("den", "n0", "n1", "n2", "secA", "secB", "secC", "secD", "secE", "secX"):
             h = out.Get("sample_%s__s2__%s" % (sample, st))
-            saved = np.array([h.GetBinContent(i) for i in range(len(S_EDGES) + 1)])
-            if not np.array_equal(saved, arr):
-                raise RuntimeError("Mismatch %s %s: %s vs %s" % (sample, st, saved, arr))
-        print("validated", sample, "two-accepted", int(den.sum()), "one-leg", int(leg[1].sum()))
+            saved = np.array([h.GetBinContent(i) for i in range(nb)])
+            if not np.array_equal(saved, tab[st]):
+                raise RuntimeError("Mismatch %s %s: %s vs %s" % (sample, st, saved, tab[st]))
         f.Close()
+    print("per-sample histograms agree for", len(samples), "samples,", len(pairs), "two-accepted events")
+
+    def efficiency(lo):
+        k, n = defaultdict(int), defaultdict(int)
+        for _, s, c0, m0, c1, m1 in pairs:
+            if s is not None and s >= lo:
+                n[c0] += 1; k[c0] += m0; n[c1] += 1; k[c1] += m1
+        return {c: k[c] / n[c] for c in n}
+
+    def deficit(eps, lo, hi):
+        pred, obs = defaultdict(float), defaultdict(float)
+        for g, s, c0, m0, c1, m1 in pairs:
+            if s is not None and lo <= s < hi and c0 in eps and c1 in eps:
+                for key in ("overall", g):
+                    pred[key] += eps[c0] * eps[c1]; obs[key] += m0 and m1
+        return pred, obs
+
+    res = out.Get("result_frac")
+    N = defaultdict(int)
+    for g, *_ in pairs:
+        N["overall"] += 1; N[g] += 1
+    p, o = deficit(efficiency(SEPARATED), 0, CLOSE)
+    cp_, co = deficit(efficiency(CLOSURE_MAP), SEPARATED, CLOSURE_MAP)
+    for b in range(1, res.GetNbinsX() + 1):
+        g = res.GetXaxis().GetBinLabel(b)
+        frac, bias = (p[g] - o[g]) / N[g], abs(cp_[g] - co[g]) / N[g]
+        if abs(frac - res.GetBinContent(b)) > 1e-9 or abs(bias - out.Get("result_b").GetBinContent(b)) > 1e-9:
+            raise RuntimeError("D or b differ for %s: %s %s" % (g, frac, bias))
+    print("D and b agree for", res.GetNbinsX(), "groups")
     print("VALIDATE PASS")
 
 
@@ -360,7 +417,7 @@ def plot(args):
     get = lambda g, ax, st: f.Get("%s__%s__%s" % (g, ax, st))
     def lab(g):
         k, _, v = g.partition("_")
-        v = v.replace("Mchi-", "").replace("_dMchi-", " / ").replace("_ctau-", ", c#tau ").replace("p", ".")
+        v = v.replace("_dMchi-", " / ").replace("Mchi-", "").replace("_ctau-", " GeV, c#tau ").replace("p", ".")
         return {"overall": "All signal samples", "delta": "#Deltam = %s GeV" % v, "mass": "m_{#chi} / #Deltam = %s GeV" % v,
                 "ctau": "c#tau = %s mm" % v, "sample": "m_{#chi} / #Deltam = %s mm" % v}[k]
     FR = ((("n2", "2 legs matched"), cs.BLUE, 20), (("n1", "1 leg matched"), cs.ORANGE, 21), (("n0", "0 legs matched"), cs.GREEN, 22))
@@ -373,21 +430,43 @@ def plot(args):
             if s and all(x.GetN() for x in s):
                 cs.plot(str(d / ("fractions_%s_%s" % (ax, g))), s, [l for (_, l), _, _ in FR], XT[ax], "Fraction of two-accepted events",
                         lines=[lab(g)], log=args.log)
+    def crowded(base, graphs, labels, xtitle, ytitle, header, ymax):
+        """18 mass points: three legend columns (relative splitting) and six rows (mass), above the data."""
+        c = cs.canvas("c_" + Path(base).name)
+        cs.frame(c, graphs_x[0], graphs_x[1], 0, ymax, xtitle, ytitle)
+        c.Update()
+        for g in graphs:
+            g.Draw(cs._info[id(g)][1] + " same")
+        cs.legend([(g, l, cs._info[id(g)][2]) for g, l in zip(graphs, labels)], y2=0.89, y1=0.60, x1=0.20, ncol=3, size=0.024, header=header)
+        cs.save(c, base, False, args.log)
+
     def overlay(prefix, kind, name):
         gs = [g for g in groups if g.startswith(kind + "_")]
+        num = lambda t: float(t.replace("p", "."))
+        gs.sort(key=lambda g: num(g.split("_", 1)[1].split("_")[0].replace("Mchi-", "")))
         d = out / "overlays"
         d.mkdir(parents=True, exist_ok=True)
-        styles = [(cs.COLORS[i % 7], 20 + i // 7 * 4 + (i % 2)) for i in range(len(gs))]
-        short = lambda g: lab(g).split("= ")[-1]
+        many = len(gs) > 7 and kind == "mass"
+        styles = [(cs.COLORS[i // 3 % 7], (1, 2, 3)[i % 3], (20, 24, 21)[i % 3]) if many else (cs.COLORS[i % 7], 1 + i // 7, 20 + i % 2) for i in range(len(gs))]
+        short = lambda g: lab(g).split("= ")[-1].replace(" GeV", "")
         for ax in AXES:
-            ss = [(cs.eff_graph(get(g, ax, "n2"), get(g, ax, "den"), c, 1, m), short(g)) for g, (c, m) in zip(gs, styles)]
+            graphs_x[:] = [AXES[ax][0], AXES[ax][-1]]
+            ss = [(cs.eff_graph(get(g, ax, "n2"), get(g, ax, "den"), c, ls, m), short(g)) for g, (c, ls, m) in zip(gs, styles)]
             ss = [x for x in ss if x[0].GetN()]
-            cs.plot(str(d / ("%s_f2_%s" % (prefix, ax))), [x[0] for x in ss], [x[1] for x in ss], XT[ax],
-                    "Fraction with 2 legs matched", header=name, log=args.log)
+            if many:
+                crowded(str(d / ("%s_f2_%s" % (prefix, ax))), [x[0] for x in ss], [x[1] for x in ss], XT[ax], "Fraction with 2 legs matched", name, 1.8)
+            else:
+                cs.plot(str(d / ("%s_f2_%s" % (prefix, ax))), [x[0] for x in ss], [x[1] for x in ss], XT[ax],
+                        "Fraction with 2 legs matched", header=name, log=args.log)
             for norm, yt in ((False, "Two-accepted events / bin"), (True, "Fraction of events / bin")):
-                s = [cs.hist_graph(get(g, ax, "den"), c, step=True, norm=norm) for g, (c, m) in zip(gs, styles)]
-                cs.plot(str(d / ("%s_den_%s%s" % (prefix, ax, "_norm" if norm else ""))), s, [short(g) for g in gs], XT[ax], yt,
-                        header=name, log=args.log)
+                s = [cs.hist_graph(get(g, ax, "den"), c, ls, step=True, norm=norm) for g, (c, ls, m) in zip(gs, styles)]
+                base = str(d / ("%s_den_%s%s" % (prefix, ax, "_norm" if norm else "")))
+                if many:
+                    top = max(max(x.GetY()[i] for i in range(x.GetN())) for x in s)
+                    crowded(base, s, [short(g) for g in gs], XT[ax], yt, name, 1.9 * top)
+                else:
+                    cs.plot(base, s, [short(g) for g in gs], XT[ax], yt, header=name, log=args.log)
+    graphs_x = [0, 1]
     overlay("mass", "mass", "m_{#chi} / #Deltam [GeV]")
     overlay("ctau", "ctau", "Pooled over masses")
     overlay("delta", "delta", "Pooled over masses, lifetimes")
@@ -400,7 +479,7 @@ def plot(args):
         a = cs.eff_graph(supp2, supp, cs.BLUE, 1, 20)
         b = cs.hist_graph(ratio, cs.ORANGE, 1, 21, errors=False)
         cs.plot(str(d / ("observed_vs_predicted_" + g)), [a, b], ["Observed", "Predicted (#varepsilon_{1}#varepsilon_{2})"], XT["s2"],
-                "Fraction with 2 legs matched", lines=[lab(g), "Close: < 0.2, map from #geq 0.3"], log=args.log)
+                "Fraction with 2 legs matched", lines=[lab(g), "Close < 0.2, map #geq 0.3"], x1=0.60, log=args.log)
     res = lambda k: f.Get("result_" + k)
     r = {k: [res(k).GetBinContent(i + 1) for i in range(res(k).GetNbinsX())] for k in
          ("N", "undefined", "close", "close_unsupported", "obs", "pred", "D", "frac", "L", "U", "b", "lo", "hi", "clo_obs", "clo_pred")}
@@ -417,15 +496,17 @@ def plot(args):
          cs._style(g3, cs.BLACK, 2, 1, edges, opt="L", legopt="l", kind="hist")]
     v = f.Get("decision").GetTitle()
     cs.plot(str(d / "deficit_vs_delta"), s, ["With bias allowance b", "95% bootstrap interval", "2% threshold"], "#Deltam [GeV]",
-            "Deficit D / two-accepted events [%]", lines=["Overall %.2f%%, [%.2f, %.2f]%%" % (100 * r["frac"][0], 100 * r["lo"][0], 100 * r["hi"][0])])
+            "Deficit D / two-accepted events [%]", lines=["Overall %.2f%%" % (100 * r["frac"][0]), "[%.2f, %.2f]%%" % (100 * r["lo"][0], 100 * r["hi"][0])], x1=0.58)
     rows = [[n.replace("delta_", "Δ = ").replace("p", "."), "%d" % r["N"][i], "%d" % r["close"][i], "%d" % r["close_unsupported"][i], "%d" % r["undefined"][i],
              "%d" % r["obs"][i], "%.1f" % r["pred"][i], "%.3f" % (100 * r["frac"][i]), "[%.3f, %.3f]" % (100 * r["L"][i], 100 * r["U"][i]),
              "%.3f" % (100 * r["b"][i]), "[%.3f, %.3f]" % (100 * r["lo"][i], 100 * r["hi"][i])] for i, n in enumerate(names)]
-    ov = [[("undefined" if b == 0 else "overflow" if b == len(S_EDGES) else "%g–%g" % (S_EDGES[b - 1], S_EDGES[b])),
-           "%d" % get("overall", "s2", "supp").GetBinContent(b), "%d" % get("overall", "s2", "supp2").GetBinContent(b),
-           "%.1f" % get("overall", "s2", "pred").GetBinContent(b),
-           "%.1f" % (get("overall", "s2", "pred").GetBinContent(b) - get("overall", "s2", "supp2").GetBinContent(b))]
-          + ["%d" % get("overall", "s2", "sec" + k).GetBinContent(b) for k in CLASSES] for b in range(len(S_EDGES) + 1)]
+    def row(b):
+        ov = lambda st: get("overall", "s2", st).GetBinContent(b)
+        name = "undefined" if b == 0 else "overflow" if b == len(S_EDGES) else "%g–%g" % (S_EDGES[b - 1], S_EDGES[b])
+        core = ["n/a"] * 3 if b == 0 else ["%d" % ov("supp"), "%d" % ov("supp2"), "%.1f" % ov("pred")]
+        return [name, "%d" % ov("den"), "%d" % ov("n1")] + core + ["n/a" if b == 0 else "%.1f" % (ov("pred") - ov("supp2"))] + \
+            ["%d" % ov("sec" + k) for k in CLASSES] + ["%d" % ov("secX")]
+    ov = [row(b) for b in range(len(S_EDGES) + 1)]
     caps = cs.Captions("One-object dimuon study: separation-dependent leg loss", [
         "Signal: 2022EE iDMmu MC, 2026-09-28 production; samples: %s. Saved PreselectedVertexing trees (met_proxy_20261022, %s), no rescan." % (len(f.Get("samples").GetTitle().split(",")), INPUT_REV),
         "Denominator: two-accepted events (exactly two signal muons, opposite charge, both |η| < 2.4, 0 ≤ Lxy < 740 cm, |vz| < 960 cm, no pT minimum). Event level, raw, unweighted; pooling unweighted.",
@@ -434,9 +515,9 @@ def plot(args):
         "Bars are 68% Clopper–Pearson unless stated. Results are an association with separation, not a measurement of merged muons."])
     caps.add("*/fractions_*", "Fraction of two-accepted events with 2, 1 and 0 matched legs, per group and x-variable. Fractions sum to one in each bin.")
     caps.add("overlays/*_f2_*", "Two-leg fraction overlaid by mass, lifetime or splitting. Bins with fewer than 20 events are not drawn.")
-    caps.add("overlays/*_den_*", "Two-accepted events in each bin: unnormalized, and _norm copies normalized to unity.")
-    caps.add("prediction/observed_vs_predicted_*", "Observed two-leg fraction against the mean of ε(leg 1) × ε(leg 2), per station-2 ΔR bin. ε is one map from legs of pairs with station-2 ΔR ≥ 0.3 pooled over all samples, in 30 cells of leg pT, Lxy and barrel/endcap. Bins at ≥ 0.3 are in-sample. Only pairs with defined separation and both legs in occupied cells. Secondary classes for the unmatched leg of one-leg events: A claimed object, charge agrees; B claimed object, charge disagrees; C unclaimed object, charge disagrees; D no eligible component inside the threshold; E no station-2 position.",
-             ["Station-2 ΔR", "Pairs", "Observed 2-leg", "Predicted", "D"] + list(CLASSES), ov)
+    caps.add("overlays/*_den_*", "Two-accepted events in each bin: unnormalized, and _norm copies normalized to unity over the drawn bins, so undefined station-2 ΔR and overflow are excluded from the normalization.")
+    caps.add("prediction/observed_vs_predicted_*", "Observed two-leg fraction against the mean of ε(leg 1) × ε(leg 2), per station-2 ΔR bin. ε is one map from legs of pairs with station-2 ΔR ≥ 0.3 pooled over all samples, in 30 cells of leg pT, Lxy and barrel/endcap. Bins at ≥ 0.3 are in-sample. Only pairs with defined separation and both legs in occupied cells. Secondary classes for the unmatched leg of one-leg events: A claimed object, charge agrees; B claimed object, charge disagrees; C unclaimed object, charge disagrees; D no eligible component inside the threshold; E no station-2 position. Classes use the nearest eligible component inside its threshold. X (not exclusive, a subset of A to C): the leg also has an eligible component inside its threshold in an unclaimed object. Components failing ID have no stored station-2 position, so they are not seen here. Being near a leg is not identity.",
+             ["Station-2 ΔR", "All events", "1 leg", "Supported pairs", "Observed 2-leg", "Predicted", "Pred − obs"] + list(CLASSES) + ["X"], ov)
     caps.add("prediction/deficit_vs_delta*", "D = sum over close pairs (station-2 ΔR < 0.2) of predicted minus observed two-leg, over two-accepted events. Blue: 95%% Poisson event-bootstrap interval [L, U], marginal, refitting the map. Orange: [L − b, U + b], where b is the size of the closure mismatch (map from ≥ 1.0 predicting 0.3–1.0), an assumed allowance. Dashed: 2%% threshold. Decision: %s. D covers only pairs with defined separation and supported cells, and assumes the prediction carries over to the close region." % v,
              ["Group", "Two-accepted", "Close", "Unsupported", "Undefined", "Observed", "Predicted", "D/N [%]", "95% [%]", "b [%]", "With b [%]"], rows)
     print("CAPTIONS", caps.write(out))
@@ -452,7 +533,6 @@ def main():
     a.add_argument("--seed", type=int, default=20261106)
     v = sub.add_parser("validate")
     v.add_argument("--input-dir", required=True); v.add_argument("--output", required=True)
-    v.add_argument("--samples", required=True)
     p = sub.add_parser("plot")
     p.add_argument("--output", required=True); p.add_argument("--plot-dir", required=True)
     p.add_argument("--style-dir", required=True); p.add_argument("--log", action="store_true")
