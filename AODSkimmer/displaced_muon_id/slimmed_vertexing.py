@@ -323,7 +323,7 @@ def plot(args):
         for pad, ser, ylo, yhi, yt, s in (
                 (p1, top, 1e-3 if log else 0, 2 if log else ymax_of([x[0] for x in top], 0.62),
                  "Fraction of two-accepted events", 1.0),
-                (p2, bot, 1e-4 if log else 0, 30 if log else ymax_of([x[0] for x in bot], 0.70), "Lost fraction", 0.67 / 0.33)):
+                (p2, bot, 1e-4 if log else 0, 3 if log else ymax_of([x[0] for x in bot], 0.70), "Lost fraction", 0.67 / 0.33)):
             pad.cd(); pad.SetLogy(int(log))
             fr = pad.DrawFrame(xlo, ylo, xhi, yhi); cs._keep.append(fr)
             fr.GetYaxis().SetTitle(yt); fr.GetXaxis().SetTitle(XTITLE[v] if pad is p2 else "")
@@ -340,7 +340,7 @@ def plot(args):
         cs.header(p1, 0.15, 0.935, (0.055, 0.042), 0.96)
         t = ROOT.TLatex(); t.SetNDC(); t.SetTextFont(42); t.SetTextSize(0.036); t.SetTextAlign(13); cs._keep.append(t)
         t.DrawLatex(0.19, 0.87, lab(g))
-        cs.legend([(gr, l, "lp") for gr, l in top], y2=0.82, y1=0.58, x1=0.50, size=0.036)
+        cs.legend([(gr, l, "lp") for gr, l in top], y2=0.82, y1=0.58, x1=0.46, x2=0.90, size=0.033)
         p2.cd()
         cs.legend([(gr, l, "lp") for gr, l in bot], y2=0.93, y1=0.70, x1=0.50, size=0.07)
         base.parent.mkdir(parents=True, exist_ok=True)
@@ -448,7 +448,7 @@ def plot(args):
         return ents + [(l[0], "All samples, reco", "l"), (l[1], "All samples, vertexed", "l")]
     # One label per mass point, on the first sample of its group; dotted separators between mass groups.
     slabels = [mlab(g) if i == 0 or mass_key(samples[i - 1]) != mass_key(g) else "" for i, g in enumerate(samples)]
-    summary("summary_sample", samples, slabels, sample_graphs, "m_{#chi} / #Deltam [GeV], 4 c#tau each", sample_leg, True)
+    summary("summary_sample", samples, slabels, sample_graphs, "m_{#chi} / #Deltam [GeV] (grouped by mass, colored by c#tau)", sample_leg, True)
 
     # Overlays: all masses (pooled over lifetimes) and all lifetimes (pooled over masses).
     odir = out / "overlay"
@@ -506,7 +506,8 @@ def plot(args):
         "x: max gen |d0| of the two muons (straight line to the origin); gen production Lxy; leading/subleading gen pT."])
     cap.add("efficiency/<group kind>/eff_<x>_<group>.png", "Top: reco and vertexed fraction for A and B. Bottom: lost "
             "by slimming at each stage. Counts per group: summary tables below. `d0wide`/`lxywide`: 0-740 cm in 10 cm "
-            "bins.")
+            "bins. `_log` copies: log y; a bin with a zero fraction has no marker there and its interval is clipped at "
+            "the lower edge.")
     cap.add("summary/summary_mass.png", "Lost / two-accepted per mass point (pooled over lifetimes); dashed lines: all "
             "samples.", hdr, [row(mlab(g), g) for g in masses] + [row("All samples", "overall")])
     cap.add("summary/summary_lifetime.png", "Lost / two-accepted per lifetime (pooled over masses).", hdr,
@@ -514,8 +515,8 @@ def plot(args):
     cap.add("summary/summary_sample.png", "Lost / two-accepted per sample, grouped by mass point, colored by lifetime.",
             hdr, [row(g[len("sample_"):], g) for g in samples])
     cap.add("overlay/<mass|lifetime>_<quantity>_<x>.png", "One curve per mass point (pooled over lifetimes) or per "
-            "lifetime (pooled over masses). Quantity: lostVtx (lost by slimming, vertexed), vtxA, vtxB (vertexed "
-            "fraction).")
+            "lifetime (pooled over masses). Quantity, each divided by two-accepted events: lostVtx = lost by slimming at "
+            "the vertexed stage; vtxA = vertexed with displacedMuons; vtxB = vertexed with slimmedDisplacedMuons.")
     cap.write(out)
 
 
