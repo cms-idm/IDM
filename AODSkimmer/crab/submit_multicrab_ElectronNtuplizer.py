@@ -24,7 +24,7 @@ def parseArguments():
     parser.add_option('-y', '--year',
                       dest = 'year',
                       default = '',
-                      help = "Which year to process ('2018'(default)/'2017'/'2016'/'2016APV')",
+                      help = "Which year to process ('2023'/'2022'/'2018'(default)/'2017'/'2016'/'2016APV')",
                       metavar = 'YEAR')
 
     parser.add_option("-f","--inFile",
@@ -80,7 +80,8 @@ def main():
     options = parseArguments()
     
     if 'CMSSW_BASE' not in os.environ.keys():
-        print "Run cmsenv first!"
+        print ("Run cmsenv first!")
+
         return
     base_dir = os.environ['CMSSW_BASE']
 
@@ -100,6 +101,7 @@ def main():
 
     # Basic settings common to all runs 
     config.General.workArea = base_dir+'/src/iDMe/AODSkimmer/crab/submissions_ElectronNtuplizer_/' + options.name
+
     config.General.transferOutputs = True
     config.General.transferLogs = False
     config.JobType.pluginName = 'Analysis'
@@ -107,6 +109,7 @@ def main():
     config.JobType.allowUndistributedCMSSW = True
     config.JobType.numCores = 1
     config.Data.splitting = 'Automatic'
+
     config.JobType.maxMemoryMB = 2500
     #config.Data.totalUnits = 1
     #config.Data.splitting = 'EventAwareLumiBased'
@@ -128,31 +131,44 @@ def main():
     with open(inFile) as f:
         samples = json.load(f)
     for samp in samples.keys():
-        for subsample, dataset in samples[samp].items():
+        for subsample, dataset_info in samples[samp].items():
             if particular is not None and subsample != particular:
                 continue
-            if samp_type == 0:
-                if isSignal == 0:
-                    output_base = '/store/group/lpcmetx/iDMe/Samples/Ntuples/background_{0}/{1}/{2}/{3}/'.format(run_name,year,samp,subsample)
+            
+            items_to_process = []
+            
+            if isinstance(dataset_info, dict):
+                if not dataset_info:
+                    continue
+                for era, dataset in dataset_info.items():
+                    items_to_process.append((f"{subsample}_{era}", dataset))
+            elif isinstance(dataset_info, str):
+                items_to_process.append((subsample, dataset_info))
+                
+            for current_subsample, dataset in items_to_process:
+                if samp_type == 0:
+                    if isSignal == 0:
+                        output_base = '/store/group/lpcmetx/iDMe/Samples/Ntuples/background_{0}/{1}/{2}/{3}/'.format(run_name,year,samp,current_subsample)
+                    else:
+                        output_base = '/store/group/lpcmetx/iDMe/Samples/Ntuples/signal_{0}/{1}/{2}/{3}/'.format(run_name,year,samp,current_subsample)
                 else:
-                    output_base = '/store/group/lpcmetx/iDMe/Samples/Ntuples/signal_{0}/{1}/{2}/{3}/'.format(run_name,year,samp,subsample)
-            else:
-                output_base = '/store/group/lpcmetx/iDMe/Samples/Ntuples/data_{0}/{1}/{2}/{3}/'.format(run_name,year,samp,subsample)
-            xrdClient.mkdir(output_base,flags.MkDirFlags.MAKEPATH)
-            config.Data.outLFNDirBase = output_base
-            config.Data.inputDataset = dataset
-            config.General.requestName = 'iDMe_' + subsample + datetime.now().strftime("_%Y_%m_%d-%H_%M")
-            config.JobType.outputFiles = ['{0}.root'.format(subsample)]
-            config.JobType.pyCfgParams = ['numThreads=1',
-                                          'outfile={0}.root'.format(subsample),
-                                          'data={0}'.format(samp_type),
-                                          'signal={0}'.format(isSignal)]
-            print 'Submitting for input dataset {0}'.format(subsample)
-            #crabCommand(options.crabCmd, config = config)
-            kwargs = {'config':config}
-            p = Process(target=crabCommand,args=(options.crabCmd,),kwargs=kwargs)
-            p.start()
-            p.join()
+                    output_base = '/store/group/lpcmetx/iDMe/Samples/Ntuples/data_{0}/{1}/{2}/{3}/'.format(run_name,year,samp,current_subsample)
+                xrdClient.mkdir(output_base,flags.MkDirFlags.MAKEPATH)
+                config.Data.outLFNDirBase = output_base
+                config.Data.inputDataset = dataset
+                config.General.requestName = 'iDMe_' + current_subsample + datetime.now().strftime("_%Y_%m_%d-%H_%M")
+                config.JobType.outputFiles = ['{0}.root'.format(current_subsample)]
+                config.JobType.pyCfgParams = ['numThreads=1',
+                                              'outfile={0}.root'.format(current_subsample),
+                                              'data={0}'.format(samp_type),
+                                              'signal={0}'.format(isSignal)]
+                print ('Submitting for input dataset {0}'.format(current_subsample))
+
+                #crabCommand(options.crabCmd, config = config)
+                kwargs = {'config':config}
+                p = Process(target=crabCommand,args=(options.crabCmd,),kwargs=kwargs)
+                p.start()
+                p.join()
 
 if __name__ == '__main__':
     main()

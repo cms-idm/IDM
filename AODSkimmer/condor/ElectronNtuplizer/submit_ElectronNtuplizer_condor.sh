@@ -16,9 +16,11 @@ flist_full=`realpath $flist`
 fname=`echo $flist_full | rev | cut -d "/" -f 1 | rev | cut -d "." -f 1`
 
 if [ -z "$outDirName" ]; then
-	mass=`echo $fname | cut -d "_" -f 1-3`
-	ctau=`echo $fname | cut -d "_" -f 4`
-	outDirName="${mass}/${ctau}"
+	# default: iDMmu signal file-list names, <mass>_<dm>_<ctau>_flist (Alaa_Dev);
+	# pass outDirName (11th argument) for other naming schemes
+	mass=`echo $fname | cut -d "_" -f 1-2`
+	ctau=`echo $fname | cut -d "_" -f 3`
+	outDirName="iDMmu/${mass}/${ctau}"
 fi
 
 mkdir -p split_fileLists

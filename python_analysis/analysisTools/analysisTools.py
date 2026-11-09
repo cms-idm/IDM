@@ -4,21 +4,27 @@ from coffea.nanoevents import NanoEventsFactory, NanoAODSchema, BaseSchema
 from mySchema import MySchema
 from coffea import processor
 
-#from coffea.dataset_tools import (
+# from coffea.dataset_tools import (
 #    apply_to_fileset,
 #    max_chunks,
 #    preprocess,
-#)
-#import dask
+# )
+# import dask
 
 import uproot
 import awkward as ak
-#import vector
-#vector.register_awkward()
+
+import vector
+# vector.register_awkward()
+
+import vector
+# vector.register_awkward()
+
 import numpy as np
 import matplotlib.pyplot as plt
 import json
 import os
+import sys
 import time
 import importlib
 import pandas as pd
@@ -26,11 +32,11 @@ from XRootD import client
 import re
 NanoAODSchema.warn_missing_crossrefs = False
 import analysisSubroutines as routines
-import sys
 from collections import defaultdict
 from hist import Hist
 from hist.axis import StrCategory, Regular, Integer, IntCategory
 import hist
+
 import corrections
 
 match_names = {"Default":"match0","lowpt":"match1"}
@@ -72,6 +78,7 @@ class Analyzer:
         self.cuts = cuts
 
         self.sample_names = [] # list of sample names, readable names are generated from data in the fileList json
+        
         self.sample_locs = {} # dictionary mapping sample name to file/directory location
         self.sample_info = {} # dictionary with sample metadata
         self.max_samples = max_samples
@@ -82,6 +89,7 @@ class Analyzer:
         self.mode = None
 
         self.model = model_json # BDT model for inference (if used in selections)
+
         self.nJet_isNom = nJet_isNominal # nomial njet range of NJet > 0 and NJet < 3
         self.good_vtx = good_vtx
         
@@ -112,6 +120,7 @@ class Analyzer:
                     exit()
             
             loc = sample['location']
+            
             if '.root' in loc:
                 # if the location is just a single file, load it in
                 if self.newCoffea:
@@ -120,11 +129,11 @@ class Analyzer:
                     self.sample_locs[name] = [sample['location']]
             elif 'fileset' in sample.keys():
                 if self.newCoffea:
-                    self.sample_locs[name] = {'files':{f:'ntuples/outT' for f in sample['fileset'] if f.split("/")[-1] not in sample['blacklist']}}
+                    self.sample_locs[name] = {'files':{f:'ntuples/outT' for f in sample['fileset'] if f.split("/")[-1] not in sample.get('blacklist', [])}}
                     if self.max_files_per_samp > 0 and len(self.sample_locs[name]['files']) > self.max_files_per_samp:
                         self.sample_locs[name]['files'] = {k:self.sample_locs[name]['files'][k] for k in list(self.sample_locs[name]['files'].keys())[:self.max_files_per_samp]}
                 else:
-                    self.sample_locs[name] = [f for f in sample['fileset'] if f.split("/")[-1] not in sample['blacklist']]
+                    self.sample_locs[name] = [f for f in sample['fileset'] if f.split("/")[-1] not in sample.get('blacklist', [])]
                     if self.max_files_per_samp > 0 and len(self.sample_locs[name]) > self.max_files_per_samp:
                         self.sample_locs[name] = self.sample_locs[name][:self.max_files_per_samp]
             else:
@@ -132,18 +141,19 @@ class Analyzer:
                 xrdClient = client.FileSystem("root://cmseos.fnal.gov")
                 if type(loc) != list:
                     status, flist = xrdClient.dirlist(loc)
-                    fullList = ["root://cmsxrootd.fnal.gov/"+loc+"/"+item.name for item in flist if (('.root' in item.name) and (item.name not in sample['blacklist']))]
+                    fullList = ["root://cmseos.fnal.gov/"+loc+"/"+item.name for item in flist if (('.root' in item.name) and (item.name not in sample.get('blacklist', [])))]
                 else:
                     fullList = []
                     for l in loc:
                         status, flist = xrdClient.dirlist(l)
-                        fullList.extend(["root://cmsxrootd.fnal.gov/"+l+"/"+item.name for item in flist if (('.root' in item.name) and (item.name not in sample['blacklist']))])
+                        fullList.extend(["root://cmsxrootd.fnal.gov/"+l+item.name for item in flist if (('.root' in item.name) and (item.name not in sample.get('blacklist', [])))])
                 if self.max_files_per_samp > 0 and len(fullList) > self.max_files_per_samp:
                     fullList = fullList[:self.max_files_per_samp]
+
                 if self.newCoffea:
-                    self.sample_locs[name] = {'files':{f:'ntuples/outT' for f in fullList}}
+                     self.sample_locs[name] = {'files':{f:'ntuples/outT' for f in fullList}}
                 else:
-                    self.sample_locs[name] = fullList
+                     self.sample_locs[name] = fullList
             
             self.sample_info[name] = sample
             self.sample_names.append(name)
@@ -159,6 +169,8 @@ class Analyzer:
             proc = trigProcessor(self.sample_names,self.sample_info,self.sample_locs,self.histoFile,self.cuts,mode=self.mode,**kwargs)
         elif procType == 'bare':
             proc = bareProcessor(self.sample_names,self.sample_info,self.sample_locs,self.histoFile,self.cuts,mode=self.mode,**kwargs)
+        elif procType == 'muonReco':
+            proc = muonRecoProcessor(self.sample_names,self.sample_info,self.sample_locs,mode=self.mode,**kwargs)
         
         if not self.newCoffea:
             if execr == "iterative":
@@ -174,37 +186,41 @@ class Analyzer:
             else:
                 print("Invalid executor type specification!")
                 return
+
             runner = processor.Runner(executor=executor,schema=MySchema,savemetrics=True)
             accumulator = runner(fileset,
                                 treename=treename,
                                 processor_instance=proc)
+
         else:
             print("Preprocessing")
             dataset_runnable, dataset_updated = preprocess(fileset,step_size=100_000,files_per_batch=1)
             print("Done Preprocessing")
             to_compute = apply_to_fileset(proc,dataset_runnable,schemaclass=MySchema)
             (accumulator,) = dask.compute(to_compute)
-        
+
         return accumulator
 
 class iDMeProcessor(processor.ProcessorABC):
+
     def __init__(self,samples,sampleInfo,fileSet,histoFile,cutFile,mode='signal',model_json=None,nJet_isNom=None,isSFstudies=False,good_vtx='v11',systematics=None,**kwargs):
+
         self.samples = samples
         self.sampleInfo = sampleInfo
         self.sampleLocs = fileSet
         self.mode = mode
         self.model = model_json
+
         self.nJet_isNom = nJet_isNom
         self.good_vtx = good_vtx
         self.systematics = systematics
         print('Running with systematics: ', self.systematics)
         self.isSFstudies = isSFstudies
 
-        # load in histogram config
         self.histoMod = importlib.import_module(histoFile)
         self.histoFill = self.histoMod.fillHistos
         self.subroutines = self.histoMod.subroutines
-        
+
         # load in cuts module
         self.cutFile = cutFile
         if "/" in self.cutFile: # if cut file is in a different directory
@@ -227,6 +243,7 @@ class iDMeProcessor(processor.ProcessorABC):
             print(f"Registering extra input {k} = {v}")
     
     def process(self,events):
+        
         samp = events.metadata["dataset"]
         info = self.sampleInfo[samp]
         isMC = info["type"] == "signal" or info["type"] == "bkg"
@@ -234,9 +251,7 @@ class iDMeProcessor(processor.ProcessorABC):
         info['selectBestVertex'] = routines.selectBestVertex
         for k,v in self.extraStuff.items():
             info[f"extras_{k}"] = v
-        
-        #histos = self.histoMod.make_histograms()
-        #histos['cutDesc'] = defaultdict(str)
+ 
         histObj = self.histoMod.make_histograms(info)
         cutDesc = defaultdict(str)
 
@@ -263,9 +278,10 @@ class iDMeProcessor(processor.ProcessorABC):
                 xsec = xsec*info['filter_eff']
             # register event weight branch
             events.__setitem__("eventWgt",xsec*lumi*events.genWgt)
+  
         else:
             sum_wgt = info["num_events"]
-
+            
         # Initial number of events
         if isMC:
             cutflow['all'] += ak.sum(events.genWgt)/sum_wgt
@@ -278,14 +294,14 @@ class iDMeProcessor(processor.ProcessorABC):
             
         cutDesc['all'] = 'No cuts@'
 
+
         ######################################################################################
         ## Add HEM flags to Event (before applying any quality cuts to jet, electrons ##
         ######################################################################################
 
-        if str(info['year']) == '2018':
-            routines.checkHEMjet(events)
-            routines.checkHEMelectron(events)
-
+        routines.checkHEMjet(events)
+        routines.checkHEMelectron(events)
+        
         #################################
         ## Calculating Additional Vars ##
         #################################
@@ -338,7 +354,6 @@ class iDMeProcessor(processor.ProcessorABC):
                 if not isMC:
                     sf_trig_data = corrections.get_trigger_MC(iov, jsonPath, events.PFMET.pt, isMC, type=self.systematics['trigger_data'])
                     events['eventWgt'] = events['eventWgt'] * sf_trig_data
-            
 
         #################################
         ##### Hard-coded basic cuts #####
@@ -405,8 +420,7 @@ class iDMeProcessor(processor.ProcessorABC):
         # computing any extra quantities specified in the histogram config file
         for subroutine in self.subroutines:
             getattr(routines,subroutine)(events)
-
-        
+  
         # SF studies
         if self.isSFstudies:
             if isMC:
@@ -416,17 +430,18 @@ class iDMeProcessor(processor.ProcessorABC):
                     print('After cutting on ZG pT', len(events[events.sel_vtx.refit_pt > 17]))
                 elif 'DY' in info['name']:
                     events = events[events.sel_vtx.refit_pt < 17]
-        
-        
+
         ###############################
         ######## CUTS & HISTOS ########
         ###############################
+
         for cut in self.cuts:
             events, cutName, cutDescription, savePlots = cut(events,info)
             if isMC:
                 cutflow[cutName] += ak.sum(events.genWgt)/sum_wgt
             else:
                 cutflow[cutName] += len(events)/sum_wgt
+
             cutflow_nevts[cutName] += len(events)            
             if info['type'] == "signal":
                 vtx_matched_events = events[events.sel_vtx.isMatched]
@@ -464,8 +479,6 @@ class genProcessor(iDMeProcessor):
         samp = events.metadata["dataset"]
         info = self.sampleInfo[samp]
         
-        #histos = self.histoMod.make_histograms()
-        #histos['cutDesc'] = defaultdict(str)
         histObj = self.histoMod.make_histograms(info)
         
         cutDesc = defaultdict(str)
@@ -492,7 +505,9 @@ class genProcessor(iDMeProcessor):
         #################################
         routines.jetBtag(events,info['year'])
         routines.vtxElectronConnection(events)
+
         events = routines.computeExtraVariables(events,info)
+
         #if info['type'] == 'signal':
         #    routines.genMatchExtraVtxVariables(events)
 
@@ -510,18 +525,19 @@ class genProcessor(iDMeProcessor):
         #### Demand >= 1 ee vertices ####
         #################################
         #routines.defineGoodVertices(events) # define "good" vertices based on whether associated electrons pass ID cuts
+
         routines.defineGoodVertices(events,version='none') # define "good" vertices based on whether associated electrons pass ID cuts
 
         #events.__setitem__("nGoodVtx",ak.count(events.good_vtx.vxy,axis=1))
         #events = events[events.nGoodVtx > 0]
         # define "selected" vertex based on selection criteria in the routine (nominally: lowest chi2)
-        routines.selectBestVertex(events)
+        #routines.selectBestVertex(events)
 
         # Fill cutflow after baseline selection
         cutflow['hasVtx'] += ak.sum(events.genWgt)/sum_wgt
         cutflow_nevts['hasVtx'] += len(events)
         cutDesc['hasVtx'] = 'Baseline Selection'
-        
+
         # computing any extra quantities specified in the histogram config file
         for subroutine in self.subroutines:
             getattr(routines,subroutine)(events)
@@ -540,14 +556,13 @@ class genProcessor(iDMeProcessor):
         
         for k in cutflow.keys():
             cutflow_counts[k] = xsec*lumi*cutflow[k]
-        
-        
+
         histos = histObj.histograms
         histos['cutDesc'] = cutDesc
         histos['cutflow'] = {samp:cutflow}
         histos['cutflow_cts'] = {samp:cutflow_counts}
         histos['cutflow_nevts'] = {samp:cutflow_nevts}
-        
+
         return histos
 
 # processor for doing nothing but filling histos
@@ -561,8 +576,6 @@ class bareProcessor(iDMeProcessor):
         for k,v in self.extraStuff.items():
             info[f"extras_{k}"] = v
         
-        #histos = self.histoMod.make_histograms()
-        #histos['cutDesc'] = defaultdict(str)
         histObj = self.histoMod.make_histograms(info)
         cutDesc = defaultdict(str)
         
@@ -580,21 +593,11 @@ class bareProcessor(iDMeProcessor):
         #################################
         ## Calculating Additional Vars ##
         #################################
-        #events = routines.computeExtraVariables(events,info)
         
         #################################
         ##### Hard-coded basic cuts #####
         #################################
         # 1 or 2 jets in the event
-        #nJets = ak.count(events.PFJet.pt,axis=1)
-        #events = events[(nJets>0) & (nJets<4)]
-        #events = events[nJets>0]
-        #events["nJets"] = nJets
-        # needs a good vertex
-        #routines.defineGoodVertices(events,version='v8') # define "good" vertices based on whether associated electrons pass ID cuts
-        #events = events[events.nGoodVtx > 0]
-        # define "selected" vertex based on selection criteria in the routine (nominally: lowest chi2)
-        #routines.selectBestVertex(events)
 
         self.histoFill(events,histObj,samp,"all",info,sum_wgt=sum_wgt)
         
@@ -722,9 +725,9 @@ class trigProcessor(iDMeProcessor):
 
         # fill histos
         #MET_passTrig.fill(samp=samp,
-        #                     met=events.PFMET.pt,
-        #                     passTrig=ak.values_astype(events.trig.HLT_PFMET120_PFMHT120_IDTight,int),
-        #                     weight=events.wgt)
+        #                    met=events.PFMET.pt,
+        #                    passTrig=ak.values_astype(events.trig.HLT_PFMET120_PFMHT120_IDTight,int),
+        #                    weight=events.wgt)
         #jet_pt_passTrig.fill(samp=samp,pt=events.PFJet.pt[:,0],passTrig=ak.values_astype(events.trig.HLT_PFMET120_PFMHT120_IDTight,int),weight=events.wgt)
 
         output = {"MET_passTrig":MET_passTrig,"MET_all":MET_all, "MET_passTrig_all":MET_passTrig_all,
@@ -735,6 +738,281 @@ class trigProcessor(iDMeProcessor):
     def postprocess(self, accumulator):
         return accumulator
 
+
+class muonRecoProcessor(processor.ProcessorABC):
+    def __init__(self,samples,sampleInfo,fileSet,mode='signal',gen_pt_min=3.0,gen_eta_max=2.4,reco_pt_min=0.0,dr_max=0.1,require_dsa_id=False,mother_id=0):
+        self.samples = samples
+        self.sampleInfo = sampleInfo
+        self.sampleLocs = fileSet
+        self.mode = mode
+        self.gen_pt_min = gen_pt_min
+        self.gen_eta_max = gen_eta_max
+        self.reco_pt_min = reco_pt_min
+        self.dr_max = dr_max
+        self.require_dsa_id = require_dsa_id
+        self.mother_id = mother_id
+
+        self._accumulator = {
+            "muon_reco_counts": Hist(StrCategory([],name="samp",label="Sample Name",growth=True),
+                                      StrCategory(["n_events",
+                                                   "n_events_ge2_gen_mu",
+                                                   "n_gen_mu_den",
+                                                   "n_prompt_matched",
+                                                   "n_dsa_matched",
+                                                   "n_either_matched",
+                                                   "n_events_both_prompt",
+                                                   "n_events_both_dsa",
+                                                   "n_events_both_either",
+                                                   "n_dsa_reco_muons",
+                                                   "n_dsa_reco_muons_pass_id",
+                                                   "n_events_with_dsa",
+                                                   "n_events_with_dsa_pass_id",
+                                                   "n_events_0_dsa",
+                                                   "n_events_1_dsa",
+                                                   "n_events_ge2_dsa",
+                                                   "n_events_0_dsa_pass_id",
+                                                   "n_events_1_dsa_pass_id",
+                                                   "n_events_ge2_dsa_pass_id"],name="quantity",label="quantity"),
+                                      storage=hist.storage.Weight()),
+
+            "muon_reco_pt": Hist(StrCategory([],name="samp",label="Sample Name",growth=True),
+                                  StrCategory(["den","prompt","dsa","either"],name="match",label="match"),
+                                  hist.axis.Variable([0,1,2,3,5,7,10,15,20,30,50,75,100,150,200],name="pt",label="gen muon pT [GeV]"),
+                                  storage=hist.storage.Weight()),
+
+            "muon_reco_abseta": Hist(StrCategory([],name="samp",label="Sample Name",growth=True),
+                                      StrCategory(["den","prompt","dsa","either"],name="match",label="match"),
+                                      Regular(24,0,2.4,name="abseta",label="|gen muon eta|"),
+                                      storage=hist.storage.Weight()),
+
+            "muon_reco_eta": Hist(StrCategory([],name="samp",label="Sample Name",growth=True),
+                                   StrCategory(["den","prompt","dsa","either"],name="match",label="match"),
+                                   Regular(48,-2.4,2.4,name="eta",label="gen muon eta"),
+                                   storage=hist.storage.Weight()),
+
+            "muon_reco_vxy": Hist(StrCategory([],name="samp",label="Sample Name",growth=True),
+                                   StrCategory(["den","prompt","dsa","either"],name="match",label="match"),
+                                   hist.axis.Variable([0,0.01,0.03,0.1,0.3,1,3,10,30,100,300,1000],name="vxy",label="gen muon vxy [cm]"),
+                                   storage=hist.storage.Weight()),
+
+            "muon_reco_vz": Hist(StrCategory([],name="samp",label="Sample Name",growth=True),
+                                  StrCategory(["den","prompt","dsa","either"],name="match",label="match"),
+                                  Regular(60,-300,300,name="vz",label="gen muon vz [cm]"),
+                                  storage=hist.storage.Weight()),
+
+            # Pure reco-level DSA diagnostics before any gen matching
+            "n_dsa_muons": Hist(StrCategory([],name="samp",label="Sample Name",growth=True),
+                                 Integer(0,20,name="n_dsa",label="Number of DSA reco muons"),
+                                 storage=hist.storage.Weight()),
+
+            "n_dsa_muons_pass_id": Hist(StrCategory([],name="samp",label="Sample Name",growth=True),
+                                         Integer(0,20,name="n_dsa_pass_id",label="Number of DSA reco muons passing DSA ID"),
+                                         storage=hist.storage.Weight()),
+
+            "dsa_muon_pass_id": Hist(StrCategory([],name="samp",label="Sample Name",growth=True),
+                                      IntCategory([0,1],name="pass_id",label="DSA displaced ID"),
+                                      storage=hist.storage.Weight()),
+
+            "dsa_muon_pt_pass_id": Hist(StrCategory([],name="samp",label="Sample Name",growth=True),
+                                         Regular(100,0,100,name="pt",label="DSA reco muon pT [GeV]"),
+                                         IntCategory([0,1],name="pass_id",label="DSA displaced ID"),
+                                         storage=hist.storage.Weight())
+        }
+
+    @property
+    def accumulator(self):
+        return self._accumulator
+
+    def _delta_phi(self,phi1,phi2):
+        return np.arctan2(np.sin(phi1-phi2),np.cos(phi1-phi2))
+
+    def _delta_r(self,eta1,phi1,eta2,phi2):
+        return np.sqrt((eta1-eta2)**2 + self._delta_phi(phi1,phi2)**2)
+
+    def _has_match(self,gen_eta,gen_phi,reco_eta,reco_phi):
+        gen = ak.zip(
+            {
+                "eta": gen_eta,
+                "phi": gen_phi,
+            }
+        )
+
+        reco = ak.zip(
+            {
+                "eta": reco_eta,
+                "phi": reco_phi,
+            }
+        )
+
+        pairs = ak.cartesian(
+            {
+                "gen": gen,
+                "reco": reco,
+            },
+            axis=1,
+            nested=True,
+        )
+
+        dr = self._delta_r(
+            pairs["gen"].eta,
+            pairs["gen"].phi,
+            pairs["reco"].eta,
+            pairs["reco"].phi,
+        )
+
+        return ak.any(dr < self.dr_max,axis=-1)
+
+    def _fill_muon_hists(self,output,samp,gen_pt,gen_eta,gen_vxy,gen_vz,match_name,mask=None):
+        if mask is None:
+            pt = ak.to_numpy(ak.flatten(gen_pt))
+            eta = ak.to_numpy(ak.flatten(gen_eta))
+            vxy = ak.to_numpy(ak.flatten(gen_vxy))
+            vz = ak.to_numpy(ak.flatten(gen_vz))
+        else:
+            pt = ak.to_numpy(ak.flatten(gen_pt[mask]))
+            eta = ak.to_numpy(ak.flatten(gen_eta[mask]))
+            vxy = ak.to_numpy(ak.flatten(gen_vxy[mask]))
+            vz = ak.to_numpy(ak.flatten(gen_vz[mask]))
+
+        if len(pt) == 0:
+            return
+
+        output["muon_reco_pt"].fill(samp=samp,match=match_name,pt=pt)
+        output["muon_reco_abseta"].fill(samp=samp,match=match_name,abseta=np.abs(eta))
+        output["muon_reco_eta"].fill(samp=samp,match=match_name,eta=eta)
+        output["muon_reco_vxy"].fill(samp=samp,match=match_name,vxy=vxy)
+        output["muon_reco_vz"].fill(samp=samp,match=match_name,vz=vz)
+
+    def process(self,events):
+        samp = events.metadata["dataset"]
+        output = {k:v.copy() for k,v in self.accumulator.items()}
+
+        # -----------------------------
+        # Pure reco DSA-ID diagnostics
+        # before any gen matching
+        # -----------------------------
+        dsa_pass_id = events.recoDSAMuonDisplacedId == 1
+
+        n_dsa = ak.num(events.recoDSAMuonPt,axis=1)
+        n_dsa_pass_id = ak.sum(dsa_pass_id,axis=1)
+
+        n_dsa_total = ak.sum(n_dsa)
+        n_dsa_pass_total = ak.sum(n_dsa_pass_id)
+
+        n_events_with_dsa = ak.sum(n_dsa > 0)
+        n_events_with_dsa_pass_id = ak.sum(n_dsa_pass_id > 0)
+
+        n_events_0_dsa = ak.sum(n_dsa == 0)
+        n_events_1_dsa = ak.sum(n_dsa == 1)
+        n_events_ge2_dsa = ak.sum(n_dsa >= 2)
+
+        n_events_0_dsa_pass_id = ak.sum(n_dsa_pass_id == 0)
+        n_events_1_dsa_pass_id = ak.sum(n_dsa_pass_id == 1)
+        n_events_ge2_dsa_pass_id = ak.sum(n_dsa_pass_id >= 2)
+
+        output["n_dsa_muons"].fill(
+            samp=samp,
+            n_dsa=ak.to_numpy(n_dsa)
+        )
+
+        output["n_dsa_muons_pass_id"].fill(
+            samp=samp,
+            n_dsa_pass_id=ak.to_numpy(n_dsa_pass_id)
+        )
+
+        output["dsa_muon_pass_id"].fill(
+            samp=samp,
+            pass_id=ak.to_numpy(ak.flatten(ak.values_astype(dsa_pass_id,np.int32)))
+        )
+
+        output["dsa_muon_pt_pass_id"].fill(
+            samp=samp,
+            pt=ak.to_numpy(ak.flatten(events.recoDSAMuonPt)),
+            pass_id=ak.to_numpy(ak.flatten(ak.values_astype(dsa_pass_id,np.int32)))
+        )
+
+        output["muon_reco_counts"].fill(samp=samp,quantity="n_dsa_reco_muons",weight=float(n_dsa_total))
+        output["muon_reco_counts"].fill(samp=samp,quantity="n_dsa_reco_muons_pass_id",weight=float(n_dsa_pass_total))
+        output["muon_reco_counts"].fill(samp=samp,quantity="n_events_with_dsa",weight=float(n_events_with_dsa))
+        output["muon_reco_counts"].fill(samp=samp,quantity="n_events_with_dsa_pass_id",weight=float(n_events_with_dsa_pass_id))
+
+        output["muon_reco_counts"].fill(samp=samp,quantity="n_events_0_dsa",weight=float(n_events_0_dsa))
+        output["muon_reco_counts"].fill(samp=samp,quantity="n_events_1_dsa",weight=float(n_events_1_dsa))
+        output["muon_reco_counts"].fill(samp=samp,quantity="n_events_ge2_dsa",weight=float(n_events_ge2_dsa))
+
+        output["muon_reco_counts"].fill(samp=samp,quantity="n_events_0_dsa_pass_id",weight=float(n_events_0_dsa_pass_id))
+        output["muon_reco_counts"].fill(samp=samp,quantity="n_events_1_dsa_pass_id",weight=float(n_events_1_dsa_pass_id))
+        output["muon_reco_counts"].fill(samp=samp,quantity="n_events_ge2_dsa_pass_id",weight=float(n_events_ge2_dsa_pass_id))
+
+        # -----------------------------
+        # Gen muon denominator
+        # -----------------------------
+        gen_mu = (np.abs(events.GenPart.ID) == 13) & (events.GenPart.pt > self.gen_pt_min) & (np.abs(events.GenPart.eta) < self.gen_eta_max)
+
+        if self.mother_id != 0:
+            gen_mu = gen_mu & (np.abs(events.GenPart.motherID) == abs(self.mother_id))
+
+        gen_pt = events.GenPart.pt[gen_mu]
+        gen_eta = events.GenPart.eta[gen_mu]
+        gen_phi = events.GenPart.phi[gen_mu]
+        gen_vxy = events.GenPart.vxy[gen_mu]
+        gen_vz = events.GenPart.vz[gen_mu]
+
+        # -----------------------------
+        # Prompt reco muons
+        # -----------------------------
+        prompt_mu = events.Muon.pt > self.reco_pt_min
+        prompt_eta = events.Muon.eta[prompt_mu]
+        prompt_phi = events.Muon.phi[prompt_mu]
+
+        # -----------------------------
+        # DSA reco muons
+        # -----------------------------
+        dsa_mu = events.recoDSAMuonPt > self.reco_pt_min
+
+        if self.require_dsa_id:
+            dsa_mu = dsa_mu & (events.recoDSAMuonDisplacedId == 1)
+
+        dsa_eta = events.recoDSAMuonEta[dsa_mu]
+        dsa_phi = events.recoDSAMuonPhi[dsa_mu]
+
+        # -----------------------------
+        # Gen-reco matching
+        # -----------------------------
+        prompt_match = self._has_match(gen_eta,gen_phi,prompt_eta,prompt_phi)
+        dsa_match = self._has_match(gen_eta,gen_phi,dsa_eta,dsa_phi)
+        either_match = prompt_match | dsa_match
+
+        n_events = len(events)
+        n_gen_mu_den = ak.sum(ak.num(gen_pt,axis=1))
+        n_prompt_matched = ak.sum(prompt_match)
+        n_dsa_matched = ak.sum(dsa_match)
+        n_either_matched = ak.sum(either_match)
+
+        n_events_ge2_gen_mu = ak.sum(ak.num(gen_pt,axis=1) >= 2)
+        n_events_both_prompt = ak.sum(ak.sum(prompt_match,axis=1) >= 2)
+        n_events_both_dsa = ak.sum(ak.sum(dsa_match,axis=1) >= 2)
+        n_events_both_either = ak.sum(ak.sum(either_match,axis=1) >= 2)
+
+        output["muon_reco_counts"].fill(samp=samp,quantity="n_events",weight=float(n_events))
+        output["muon_reco_counts"].fill(samp=samp,quantity="n_events_ge2_gen_mu",weight=float(n_events_ge2_gen_mu))
+        output["muon_reco_counts"].fill(samp=samp,quantity="n_gen_mu_den",weight=float(n_gen_mu_den))
+        output["muon_reco_counts"].fill(samp=samp,quantity="n_prompt_matched",weight=float(n_prompt_matched))
+        output["muon_reco_counts"].fill(samp=samp,quantity="n_dsa_matched",weight=float(n_dsa_matched))
+        output["muon_reco_counts"].fill(samp=samp,quantity="n_either_matched",weight=float(n_either_matched))
+        output["muon_reco_counts"].fill(samp=samp,quantity="n_events_both_prompt",weight=float(n_events_both_prompt))
+        output["muon_reco_counts"].fill(samp=samp,quantity="n_events_both_dsa",weight=float(n_events_both_dsa))
+        output["muon_reco_counts"].fill(samp=samp,quantity="n_events_both_either",weight=float(n_events_both_either))
+
+        self._fill_muon_hists(output,samp,gen_pt,gen_eta,gen_vxy,gen_vz,"den")
+        self._fill_muon_hists(output,samp,gen_pt,gen_eta,gen_vxy,gen_vz,"prompt",prompt_match)
+        self._fill_muon_hists(output,samp,gen_pt,gen_eta,gen_vxy,gen_vz,"dsa",dsa_match)
+        self._fill_muon_hists(output,samp,gen_pt,gen_eta,gen_vxy,gen_vz,"either",either_match)
+
+        return output
+
+    def postprocess(self,accumulator):
+        return accumulator
 class fileSkimmer:
     def __init__(self,sampFile,sampleInfo,cutFile,mode='signal'):
         self.sampleInfo = sampleInfo
@@ -851,6 +1129,12 @@ def getLumi(year):
     year = str(year)
 
     lumi, unc = 0, 0
+    if year == '2022':
+        lumi = 38.01
+        unc =  0.014*lumi #1.4 percent
+    if year == 2016:
+        lumi = 36.31
+
     if year == '2016':
         lumi = 16.8
         unc = 0.012*lumi # 1.2 percent
