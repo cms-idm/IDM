@@ -12,7 +12,7 @@ from Configuration.ProcessModifiers.run2_miniAOD_UL_cff import run2_miniAOD_UL
 #Run3 imports
 from Configuration.Eras.Era_Run3_cff import Run3                   #corresponds to Run3 2022 (maybe)
 from Configuration.Eras.Era_Run3_2023_cff import Run3_2023         #corresponds to Run3 2023
-from Configuration.Eras.Era_Run3_2024_cff import Run3_2024         # 2024
+# from Configuration.Eras.Era_Run3_2024_cff import Run3_2024         # 2024
 
 import json
 import sys
@@ -123,23 +123,22 @@ elif options.year == '2018':
     globaltag = '106X_dataRun2_v37' if options.data else '106X_upgrade2018_realistic_v16_L1v1'
     era = Run2_2018
     recoEgammaTools_era = '2018-UL'
-
-# Run3 below options following https://twiki.cern.ch/twiki/bin/viewauth/CMS/MultivariateElectronIdentificationRun3
+    
 elif options.year == '2022':
     globaltag = '130X_dataRun3_v2' if options.data else '130X_mcRun3_2022_realistic_v5'  
     #For data, you can also use 124X_dataRun3_PromptAnalysis_v1 
     era = Run3
-    recoEgammaTools_era = '2022-Prompt' #XYZ FIX
+    recoEgammaTools_era = '2018-UL' #XYZ FIX
     
 elif options.year == '2023':
     globaltag = '130X_dataRun3_PromptAnalysis_v1' if options.data else '130X_mcRun3_2023_realistic_v14'
     era = Run3_2023
-    recoEgammaTools_era = '2022-Prompt' #XYZ FIX
+    recoEgammaTools_era = '2018-UL' #XYZ FIX
 
-elif options.year == '2024': #XYZ FIX
-    globaltag = '' if options.data else '150X_mcRun3_2024_realistic_v2'
-    era = Run3_2024
-    recoEgammaTools_era = '2022-Prompt' #XYZ FIX
+# elif options.year == '2024': #XYZ FIX
+#     globaltag = '' if options.data else '150X_mcRun3_2024_realistic_v2'
+#     era = Run3_2024
+#     recoEgammaTools_era = '2018-UL' #XYZ FIX
 
 
 else:
@@ -287,6 +286,8 @@ process.load("Configuration.StandardSequences.GeometryRecoDB_cff")
 process.load('Configuration.StandardSequences.MagneticField_38T_cff')
 process.load('Configuration.StandardSequences.FrontierConditions_GlobalTag_cff')
 
+
+
 process.MessageLogger.cerr.FwkReport.reportEvery = 1000
 
 from Configuration.AlCa.GlobalTag import GlobalTag
@@ -302,6 +303,7 @@ process.maxEvents = cms.untracked.PSet(
 )
 process.source = cms.Source("PoolSource",
     fileNames = cms.untracked.vstring(options.inputFiles),
+
     #skipBadFiles = cms.untracked.bool(True),
     #cacheSize = cms.untracked.uint32(0)
     skipBadFiles = cms.untracked.bool(True)
@@ -331,19 +333,11 @@ process.ntuples = ElectronSkimmer.clone(
 )
 
 # import EGamma postreco tools
-# old version
-#from RecoEgamma.EgammaTools.EgammaPostRecoTools import setupEgammaPostRecoSeq
-# Run3 working version?
-from EgammaUser.EgammaPostRecoTools.EgammaPostRecoTools import setupEgammaPostRecoSeq
-# Run3 following https://twiki.cern.ch/twiki/bin/viewauth/CMS/MultivariateElectronIdentificationRun3
+from RecoEgamma.EgammaTools.EgammaPostRecoTools import setupEgammaPostRecoSeq
 setupEgammaPostRecoSeq(process,
-                       runEnergyCorrections=False, # XYZ deactivated bc not working for Run3 yet, I think?
+                       runEnergyCorrections=True,
                        runVID=True, #saves CPU time by not needlessly re-running VID, if you want the Fall17V2 IDs, set this to True or remove (default is True)
-                       era=recoEgammaTools_era,
-                       eleIDModules=['RecoEgamma.ElectronIdentification.Identification.mvaElectronID_RunIIIWinter22_iso_V1_cff',
-                                     'RecoEgamma.ElectronIdentification.Identification.mvaElectronID_RunIIIWinter22_noIso_V1_cff',
-                                     'RecoEgamma.ElectronIdentification.Identification.cutBasedElectronID_Winter22_122X_V1_cff']
-                       )
+                       era=recoEgammaTools_era)
 
 
 # load nanoAOD producer chain for low-pT electrons -- computes mini iso
@@ -386,4 +380,3 @@ process.iDMNanoElectronSequence = cms.Sequence(process.lowPtNanoElectronSequence
 process.iDMNanoElectron = cms.Path(process.iDMNanoElectronSequence)
 
 process.schedule = cms.Schedule(process.iDMEgammaPostReco,process.iDMNanoElectron,process.ntuplePath)
-

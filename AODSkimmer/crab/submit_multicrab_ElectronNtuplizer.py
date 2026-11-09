@@ -80,7 +80,7 @@ def main():
     options = parseArguments()
     
     if 'CMSSW_BASE' not in os.environ.keys():
-        print "Run cmsenv first!"
+        print( "Run cmsenv first!")
         return
     base_dir = os.environ['CMSSW_BASE']
 
@@ -147,7 +147,7 @@ def main():
                                           'outfile={0}.root'.format(subsample),
                                           'data={0}'.format(samp_type),
                                           'signal={0}'.format(isSignal)]
-            print 'Submitting for input dataset {0}'.format(subsample)
+            print ('Submitting for input dataset {0}'.format(subsample) )
             #crabCommand(options.crabCmd, config = config)
             kwargs = {'config':config}
             p = Process(target=crabCommand,args=(options.crabCmd,),kwargs=kwargs)
