@@ -340,8 +340,13 @@ def plot(args):
         cs.header(p1, 0.15, 0.935, (0.055, 0.042), 0.96)
         t = ROOT.TLatex(); t.SetNDC(); t.SetTextFont(42); t.SetTextSize(0.036); t.SetTextAlign(13); cs._keep.append(t)
         t.DrawLatex(0.19, 0.87, lab(g))
-        if log:  # log copy: the lower panel spans its data, so its entries join the top legend
-            cs.legend([(gr, l, "lp") for gr, l in top + bot], y2=0.82, y1=0.46, x1=0.46, x2=0.90, size=0.033)
+        if log:  # log copy: the lower panel spans its data, so its entries join the top legend, placed where the
+            # right half of the frame is empty: bottom right if every right-half point is >= 0.05, else top right
+            mid = 0.5 * (xlo + xhi)
+            right = [gr.GetPointY(i) - gr.GetErrorYlow(i) for gr, _ in top for i in range(gr.GetN()) if gr.GetPointX(i) >= mid]
+            low = bool(right) and min(right) >= 0.05
+            cs.legend([(gr, l, "lp") for gr, l in top + bot], y2=0.40 if low else 0.82, y1=0.06 if low else 0.46,
+                      x1=0.46, x2=0.90, size=0.033)
         else:
             cs.legend([(gr, l, "lp") for gr, l in top], y2=0.82, y1=0.58, x1=0.46, x2=0.90, size=0.033)
             p2.cd()
