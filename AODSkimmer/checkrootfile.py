@@ -5,7 +5,7 @@ import numpy as np
 #['Electron_genMatched', 'Electron_hasLptMatch', 'Electron_lptMatchIdx', 'Electron_hasAllLptMatch', 'Electron_AllLptMatchIdx', 'LptElectron_genMatched', 'LptElectron_gedIsMatched', 'AllLptElectron_genMatched', 'AllLptElectron_gedIsMatched', 'vtx_isMatched', 'vtx_e1_isMatched', 'vtx_e2_isMatched']
 
 # Open a ROOT file
-with uproot.open("test.root") as f:
+with uproot.open("htctest.root") as f:
 
     # List available keys (trees, histograms, etc.)
     print("Keys:", f.keys())
@@ -36,6 +36,12 @@ with uproot.open("test.root") as f:
 
     print("AllLptXC:", arrays["AllLptElectron_xCleaned"][:10])
     print("AllLptGEDidx:", arrays["AllLptElectron_gedIdx"][:10])
+    print("GenEleMatched:", arrays["GenEle_matched"][:10])
+    print("GenEleMatchedAll:", arrays["GenEle_matchedAllLowPt"][:10])
+
+    disagree = arrays["GenEle_matched"] != arrays["GenEle_matchedAllLowPt"]
+    print("GenEleMatched:", arrays["GenEle_matched"][disagree][:10])
+    print("GenEleMatchedAll:", arrays["GenEle_matchedAllLowPt"][disagree][:10])
 
     print("PFJet:", arrays["PFJet_pt"][:10])
     print("nPFJet:", arrays["nPFJet"][:10])
