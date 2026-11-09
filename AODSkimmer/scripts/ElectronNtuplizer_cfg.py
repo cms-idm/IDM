@@ -135,10 +135,6 @@ elif options.year == '2023':
     era = Run3_2023
     recoEgammaTools_era = '2018-UL' #XYZ FIX
 
-# elif options.year == '2024': #XYZ FIX
-#     globaltag = '' if options.data else '150X_mcRun3_2024_realistic_v2'
-#     era = Run3_2024
-#     recoEgammaTools_era = '2018-UL' #XYZ FIX
 
 
 else:

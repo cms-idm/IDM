@@ -889,13 +889,9 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    {
       // basic cut (should be applied by default in miniAOD stage, but repeating here)
       // Run3 syntax updated - below cuts are legacy sanity check from Run2, likely will change later
-// <<<<<<< HEAD
       if (ele.pt() < 1 || ele.electronID("ID") < -0.25) 
       {
-// =======
-//       //if (ele.pt() < 1 || ele.electronID("ID") < -0.25) {
-//       if (ele.pt() < 1) {
-// >>>>>>> pr8-source
+
          ilpt_all++;
          continue;
       }
@@ -1384,9 +1380,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    }
    }
 
-// <<<<<<< HEAD
-  
-// =======
+
    // Handling isolated tracks (signal samples only)
    if (isSignal && isoTrackHandle_.isValid()) {
       for (const auto & trk : *isoTrackHandle_) {
