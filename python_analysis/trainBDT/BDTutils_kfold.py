@@ -13,6 +13,12 @@ import json
 # an unbiased (out-of-fold) score and the full MC sample can be used for the analysis.
 K_FOLDS = 5
 
+# hyperparameter grid search: run once, on the training events of outer fold GRID_FOLD (folds != GRID_FOLD), with
+# a random fraction GRID_BKG_FRAC of the bkg (weights scaled by 1/GRID_BKG_FRAC); all signal is kept. The chosen
+# parameters are used for every fold model, which is then trained on the full sample.
+GRID_FOLD = 0
+GRID_BKG_FRAC = 0.2
+
 def get_fold(event_num, k=K_FOLDS):
     return (np.asarray(event_num).astype(np.uint64) % np.uint64(k)).astype(int)
 
@@ -54,8 +60,10 @@ def process_signal_inputs(sig_files,variables):
             # keep all signal events, whether or not the selected vertex is gen-matched, so training and
             # evaluation see the same signal population as the analysis
             entries = len(fin['wgt'])
-            entries_genMatched = np.sum(fin["sel_vtx_isMatched"][()]==1)
-            print(f'Signal events: {entries} ({entries_genMatched} with gen-matched selected vertex, raw counts)\n')
+            # vertexed h5 stores sel_vtx_isMatched, merged-electron h5 stores mele_isGenMerged
+            match_key = 'sel_vtx_isMatched' if 'sel_vtx_isMatched' in fin else 'mele_isGenMerged'
+            entries_genMatched = np.sum(fin[match_key][()]==1)
+            print(f'Signal events: {entries} ({entries_genMatched} gen-matched via {match_key}, raw counts)\n')
 
             sig_data.append(np.concatenate([fin[v][()].reshape(-1,1) for v in variables],axis=1))
             sig_xsec_norm.append(fin['wgt_norm'][()])
@@ -185,16 +193,10 @@ def reweight_signal(sig_data,bkg_nev_raw,nSamp,bkg_sf,sig_subprocess,bkg_xsec_no
     
     return sig_sf
 
-## 'learning_rate': 0.01, 'max_depth': 6, 'n_estimators': 600
-### 'learning_rate': 0.01, 'max_depth': 5, 'n_estimators': 700
-#### 'learning_rate': 0.012, 'max_depth': 3, 'n_estimators': 700
-##### 'learning_rate': 0.015, 'max_depth': 2, 'n_estimators': 800 BDT out-of-fold AUC: 0.9920
-###### 'learning_rate': 0.018, 'max_depth': 2, 'n_estimators': 800 BDT out-of-fold AUC: 0.9919
-####### 'learning_rate': 0.018, 'max_depth': 2, 'n_estimators': 800 BDT out-of-fold AUC: 0.9919
 PARAM_GRID = {
-    'max_depth': [2, 4, 6, 8],
-    'n_estimators': [600, 800, 1000, 1200],
-    'learning_rate': [0.01, 0.018, 0.02, 0.03]
+    'max_depth': [2, 4, 6],
+    'n_estimators': [600, 800, 1000],
+    'learning_rate': [0.01, 0.02, 0.05]
 }
 
 def build_training_set(sig_data,sig_sf_arr,bkg_data,bkg_sf_arr):
@@ -208,6 +210,16 @@ def build_training_set(sig_data,sig_sf_arr,bkg_data,bkg_sf_arr):
     rng = np.random.default_rng(seed=438290)
     perm = rng.permutation(len(train))
     return train[perm], y_train[perm], train_sf[perm]
+
+def subsample_bkg(bkg_data,bkg_sf_arr,frac,seed=91827):
+    # random subsample of a fraction frac of the bkg events, weights scaled by 1/frac so the total bkg weight
+    # (and hence the sig/bkg balance) is unchanged. frac >= 1 returns the inputs unchanged
+    if frac >= 1:
+        return bkg_data, bkg_sf_arr
+    rng = np.random.default_rng(seed=seed)
+    keep = rng.random(len(bkg_data)) < frac
+    print(f'Grid search bkg subsample: {np.sum(keep)}/{len(keep)} events (frac = {frac})')
+    return bkg_data[keep], bkg_sf_arr[keep]/frac
 
 def grid_search_fold(train,y_train,train_sf,param_grid=PARAM_GRID):
     # grid search on one fold's training events (its CV only splits the training folds, i.e. it is nested inside
@@ -375,10 +387,11 @@ def make_eval_plots(bdt_name,y,scores,train_y=None,train_scores=None,folds=None,
     plt.savefig(f'plots/{bdt_name}/{bdt_name}_PR_curve.pdf')
     plt.close('all')
 
-def make_importance_plot(bdt_name,models,variables):
-    # per-fold feature importance side by side, same F score (importance_type='weight') as xgb.plot_importance
+def make_importance_plot(bdt_name,models,variables,importance_type='weight'):
+    # per-fold feature importance side by side
+    # importance_type: 'weight' (# splits on feature), 'gain' (avg loss reduction per split), 'cover' (avg hessian-weighted events per split)
     os.makedirs(f"plots/{bdt_name}/",exist_ok=True)
-    imp = np.array([[bst.get_booster().get_score(importance_type='weight').get(f'f{idx}',0) for idx in range(len(variables))]
+    imp = np.array([[bst.get_booster().get_score(importance_type=importance_type).get(f'f{idx}',0) for idx in range(len(variables))]
                     for bst in models])
     order = np.argsort(imp.mean(axis=0))
     k = len(models)
@@ -389,11 +402,11 @@ def make_importance_plot(bdt_name,models,variables):
     for i in range(k):
         plt.barh(ypos - 0.4 + (i+0.5)*width, imp[i][order], height=width, color=colors[i], label=f'Fold {i}')
     plt.yticks(ypos, [variables[j] for j in order])
-    plt.xlabel('F score')
+    plt.xlabel(importance_type.capitalize())
     plt.ylabel('Features')
     plt.legend()
     hep.cms.text("Private Work")
-    plt.savefig(f'plots/{bdt_name}/{bdt_name}_importance.pdf', bbox_inches = "tight")
+    plt.savefig(f'plots/{bdt_name}/{bdt_name}_importance_{importance_type}.pdf', bbox_inches = "tight")
     plt.close('all')
 
 def save_oof_scores(fname,scores,folds,event_num,sig_point=None):
@@ -426,7 +439,26 @@ def exclude_signal_points(sig_data,sig_xsec_norm,sig_point,exclude_points):
     sig_point = {k: v[keep] for k, v in sig_point.items()}
     return sig_data[keep], sig_xsec_norm[keep], sig_point
 
-def train_bdt(bdt_name,signal_h5,bkg_h5,variables,max_depth=6,n_estimators=500,lr=0.01,split_first=False,exclude_points=None):
+def exclude_low_stat_points(sig_data,sig_xsec_norm,sig_point,min_events):
+    # drops every (m1, delta, ctau) point with fewer than min_events raw signal events (full sample, all folds).
+    # Such points get a very large per-event weight from reweight_signal (equal total weight per point), so the
+    # fold models memorize their few training events and their out-of-fold AUC is dominated by statistical noise.
+    sig_subprocess, _ = build_sig_subprocess(sig_point)
+    drop = np.zeros(len(sig_data),dtype=bool)
+    for point, idx in sig_subprocess.items():
+        n = np.sum(idx)
+        if n < min_events:
+            print(f'Excluding {point}: {n} events < {min_events}')
+            drop |= idx
+    keep = ~drop
+    print(f'Excluding {np.sum(drop)} of {len(sig_data)} signal events from points with < {min_events} events')
+    sig_point = {k: v[keep] for k, v in sig_point.items()}
+    return sig_data[keep], sig_xsec_norm[keep], sig_point
+
+def train_bdt(bdt_name,signal_h5,bkg_h5,variables,max_depth=6,n_estimators=500,lr=0.01,split_first=False,exclude_points=None,
+              min_sig_events=None):
+    # min_sig_events: if set, signal points with fewer raw events than this are dropped (exclude_low_stat_points)
+    # from training and from the out-of-fold evaluation/WPs, like exclude_points
     # K_FOLDS-fold cross training. Returns the fold models (models[i] is trained on folds != i and must only be
     # used on events with fold == i), the WPs from out-of-fold scores, and a dict with the out-of-fold scores.
     k = K_FOLDS
@@ -439,6 +471,8 @@ def train_bdt(bdt_name,signal_h5,bkg_h5,variables,max_depth=6,n_estimators=500,l
     sig_data, sig_xsec_norm, sig_point = process_signal_inputs(sig_files,variables)
     if exclude_points:
         sig_data, sig_xsec_norm, sig_point = exclude_signal_points(sig_data,sig_xsec_norm,sig_point,exclude_points)
+    if min_sig_events:
+        sig_data, sig_xsec_norm, sig_point = exclude_low_stat_points(sig_data,sig_xsec_norm,sig_point,min_sig_events)
     sig_fold = sig_point['fold']
 
     # load bkg
@@ -451,10 +485,10 @@ def train_bdt(bdt_name,signal_h5,bkg_h5,variables,max_depth=6,n_estimators=500,l
 
     print_fold_balance(sig_point,bkg_fold,k)
 
-    # pass 1: grid search on each fold's training events, then one common parameter set for all folds
+    # pass 1: per-fold training inputs/weights, and a single grid search on fold GRID_FOLD's training events
+    # (subsampled bkg) giving one common parameter set for all folds
     fold_inputs, cv_results = [], []
     for i in range(k):
-        print(f'\n========== Fold {i}: grid search on folds != {i} ==========')
         sig_train = sig_fold != i
         bkg_train = bkg_fold != i
         sig_point_train = {key: v[sig_train] for key, v in sig_point.items()}
@@ -465,7 +499,10 @@ def train_bdt(bdt_name,signal_h5,bkg_h5,variables,max_depth=6,n_estimators=500,l
         sig_sf = reweight_signal(sig_data[sig_train],bkg_nev_raw,nSamp,bkg_sf,sig_subprocess,bkg_xsec_norm_train)
         fold_inputs.append((sig_train,bkg_train,sig_point_train,sig_sf,np.array(bkg_sf),bkg_xsec_norm_train))
 
-        cv_results.append(grid_search_fold(*build_training_set(sig_data[sig_train],sig_sf,bkg_data[bkg_train],np.array(bkg_sf))))
+        if i == GRID_FOLD:
+            print(f'\n========== Grid search on folds != {i} ==========')
+            bkg_data_gs, bkg_sf_gs = subsample_bkg(bkg_data[bkg_train],np.array(bkg_sf),GRID_BKG_FRAC)
+            cv_results.append(grid_search_fold(*build_training_set(sig_data[sig_train],sig_sf,bkg_data_gs,bkg_sf_gs)))
     params = pick_common_params(cv_results)
 
     # pass 2: train every fold model with the common parameters
@@ -509,7 +546,8 @@ def train_bdt(bdt_name,signal_h5,bkg_h5,variables,max_depth=6,n_estimators=500,l
 
     make_eval_plots(f'{bdt_name}_kfold',y,scores,np.concatenate(train_y),np.concatenate(train_scores),folds=folds,
                     weights=weights,train_weights=np.concatenate(train_wgts))
-    make_importance_plot(f'{bdt_name}_kfold',models,variables)
+    for itype in ['weight','gain','cover']:
+        make_importance_plot(f'{bdt_name}_kfold',models,variables,importance_type=itype)
     tpr_WP, thres_WP = compute_WPs(y,scores,weights=weights)
 
     save_oof_scores(f"h5/{bdt_name}_oof_scores_sig.h5",sig_score,sig_fold,sig_point['eventNum'],sig_point)

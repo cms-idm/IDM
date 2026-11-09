@@ -19,7 +19,7 @@ from feature_sets import all_features
 # Skims
 # ---------------------------------------------------------------------------
 bdt_type = "merged" # "vertexed" (makeBDTInputs) or "merged" (makeMergedBDTInputs); also picks the feature sets checked below
-suffix = "_aptrkNov2"
+suffix = "_aptrkNov5"
 cut_config = "../configs/cut_configs/aptrk_selection.py"
 last_cut = "cut9" # apply cuts in cut_config up to and including this one (e.g. "cut5"), None = all cuts
 cut_tag = f"_{last_cut}" if last_cut is not None else ""

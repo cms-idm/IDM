@@ -19,9 +19,9 @@ from sklearn.metrics import roc_auc_score
 # ---------------------------------------------------------------------------
 # Skims
 # ---------------------------------------------------------------------------
-suffix = "_TestOct28"
-cut_config = "../configs/cut_configs/anabrv_selection.py"
-last_cut = "cut4" # apply cuts in cut_config up to and including this one (e.g. "cut5"), None = all cuts
+suffix = "_aptrkNov5"
+cut_config = "../configs/cut_configs/aptrk_selection.py"
+last_cut = "cut9" # apply cuts in cut_config up to and including this one (e.g. "cut5"), None = all cuts
 cut_tag = f"_{last_cut}" if last_cut is not None else ""
 signal_json = "../configs/sample_configs/signal_2024_Jul2026noID_0p1_skimmed.json"
 #signal_json = "../configs/sample_configs/signal_2018_official_Preapproval_aEM.json"
@@ -38,10 +38,15 @@ bkg_file = f"{samp_bkg}{suffix}{cut_tag}"
 # ---------------------------------------------------------------------------
 # BDT 
 # ---------------------------------------------------------------------------
-bdt_name = "BDT"
-feature_sets = ["AN"] # keys of FEATURE_SETS in feature_sets.py; one model is trained per set, named f"{bdt_name}_{fs}"
+bdt_name = "BDTNov6"
+feature_sets = ["merged7"] # keys of FEATURE_SETS in feature_sets.py; one model is trained per set, named f"{bdt_name}_{fs}"
 
 exclude_points = [{'m1': 0.05}]
+if "aptrk_selection" in cut_config:
+    # m1=50 points have very few merged-electron events after the aptrk selection; with equal weight per point
+    # the fold models memorize them (large train vs out-of-fold AUC gap)
+    exclude_points.append({'m1': 50})
+min_sig_events = None # drop signal points with fewer raw events than this (None = keep all)
 
 for fs in feature_sets:
     name = f"{bdt_name}_{fs}{suffix}"
@@ -49,7 +54,7 @@ for fs in feature_sets:
     print(f'\n===== Training {name}: {variables} =====')
 
     # k-fold cross training: models[i] is trained on folds != i (fold = eventNum % bdt.K_FOLDS)
-    models, tpr_WP, thres_WP, oof = bdt.train_bdt(name,sig_file,bkg_file,variables,exclude_points=exclude_points)
+    models, tpr_WP, thres_WP, oof = bdt.train_bdt(name,sig_file,bkg_file,variables,exclude_points=exclude_points,min_sig_events=min_sig_events)
 
     print(tpr_WP)
     print(thres_WP)

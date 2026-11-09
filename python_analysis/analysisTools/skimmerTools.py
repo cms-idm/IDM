@@ -265,6 +265,8 @@ class makeBDTInputs(processor.ProcessorABC):
         outputs['sel_vtx_minDxy'] = column_accumulator(np.minimum(np.abs(events.sel_vtx.e1.dxy),np.abs(events.sel_vtx.e2.dxy)).to_numpy())
         outputs['sel_vtx_corrMinDxy'] = column_accumulator(events.sel_vtx.corrMinDxy.to_numpy())
         outputs['met_leadPt_ratio'] = column_accumulator((events.PFMET.pt/events.PFJet.pt[:,0]).to_numpy())
+        outputs['HT'] = column_accumulator(ak.sum(events.PFJet.pt,axis=1).to_numpy())
+        outputs['nJets'] = column_accumulator(ak.num(events.PFJet.pt,axis=1).to_numpy())
         outputs["vxy"] = column_accumulator(events.sel_vtx.vxy.to_numpy())
         outputs["vxy_signif"] = column_accumulator((events.sel_vtx.vxy/events.sel_vtx.sigmavxy).to_numpy())
         outputs["sel_e1_dxy"] = column_accumulator(np.abs(e1.dxy).to_numpy())
@@ -308,9 +310,16 @@ class makeBDTInputs(processor.ProcessorABC):
     def postprocess(self, accumulator):
         return accumulator
 
-def _log10_floor(x, floor=1e-4):
-    # same log-scaling as configs/histo_configs/corrmatrix.py: values at/below the floor are clamped to it
-    return np.log10(np.maximum(x, floor))
+def _log10_floor(x, floor=1e-4, ceil=1e8):
+    # same log-scaling as configs/histo_configs/corrmatrix.py: values are clamped to [floor, ceil] so x = 0 or
+    # x = inf (e.g. a division by zero) can't give -inf/+inf, which XGBoost rejects. The ceiling sits far above any
+    # physical value and only catches such divergences
+    return np.log10(np.clip(x, floor, ceil))
+
+def _clip_ratio(x, hi=10):
+    # energy ratios with a possibly-zero denominator: x/0 = inf is clipped to hi (XGBoost rejects inf),
+    # 0/0 = nan is kept and treated by XGBoost as a missing value
+    return np.clip(x, 0, hi)
 
 class makeMergedBDTInputs(makeBDTInputs):
     # BDT inputs for merged-electron candidates (events.best_merged, see analysisSubroutines.computeMergedVars).
@@ -386,6 +395,8 @@ class makeMergedBDTInputs(makeBDTInputs):
         outputs['minJetMETdPhi'] = column_accumulator(ak.min(np.abs(events.PFJet.METdPhi),axis=1).to_numpy())
         outputs['met_leadPt_ratio'] = column_accumulator((events.PFMET.pt/events.PFJet.pt[:,0]).to_numpy())
         outputs['met_pt'] = column_accumulator(events.PFMET.pt.to_numpy())
+        outputs['HT'] = column_accumulator(ak.sum(events.PFJet.pt,axis=1).to_numpy())
+        outputs['nJets'] = column_accumulator(ak.num(events.PFJet.pt,axis=1).to_numpy())
         outputs['nMergedCandidates'] = column_accumulator(events.nMergedCandidates.to_numpy())
 
         if info['type'] == 'signal':
@@ -400,7 +411,7 @@ class makeMergedBDTInputs(makeBDTInputs):
         outputs['mele_log10_dxy_signif'] = column_accumulator(_log10_floor(np.abs(me.dxy)/me.dxyErr).to_numpy())
         outputs['mele_log10_dz'] = column_accumulator(_log10_floor(np.abs(me.dz)).to_numpy())
         outputs['mele_log10_dz_signif'] = column_accumulator(_log10_floor(np.abs(me.dz)/me.dzErr).to_numpy())
-        outputs['mele_logDxyDz'] = column_accumulator(np.log10(np.abs(me.dxy/me.dz)).to_numpy())
+        outputs['mele_logDxyDz'] = column_accumulator(_log10_floor(np.abs(me.dxy/me.dz)).to_numpy())
         outputs['mele_METdPhi'] = column_accumulator(me_METdPhi.to_numpy())
         outputs['mele_cosMETdPhi'] = column_accumulator(np.cos(me_METdPhi).to_numpy())
         # Lxy estimate |dxy|/sin(dPhi(e, ptmiss))
@@ -423,6 +434,16 @@ class makeMergedBDTInputs(makeBDTInputs):
         outputs['mele_sigmaIetaIeta'] = column_accumulator(me.full55sigmaIetaIeta.to_numpy())
         outputs['mele_scEtaWidth'] = column_accumulator(me.scEtaWidth.to_numpy())
         outputs['mele_scPhiWidth'] = column_accumulator(me.scPhiWidth.to_numpy())
+        # shower shape (full 5x5); r9 (long tail) and sigmaIphiIphi (sentinel ~31.6) clipped as in corrmatrix.py
+        outputs['mele_r9'] = column_accumulator(np.minimum(me.full55r9, 2).to_numpy())
+        outputs['mele_sigmaIphiIphi'] = column_accumulator(np.minimum(me.full55sigmaIphiIphi, 0.1).to_numpy())
+        outputs['mele_e1x5Frac'] = column_accumulator(_clip_ratio(me.full55e1x5/me.full55e5x5).to_numpy())
+        outputs['mele_e2x5Frac'] = column_accumulator(_clip_ratio(me.full55e2x5Max/me.full55e5x5).to_numpy())
+        # supercluster
+        outputs['mele_scNClus'] = column_accumulator(me.scClustersSize.to_numpy())
+        outputs['mele_scEoverP'] = column_accumulator(_clip_ratio(me.scEnergy/(me.pt*np.cosh(me.eta))).to_numpy())
+        outputs['mele_scRawFrac'] = column_accumulator(_clip_ratio(me.scRawE/me.scEnergy).to_numpy())
+        outputs['mele_log10_dEtaSCTrk'] = column_accumulator(_log10_floor(np.abs(me.scEta - me.eta)).to_numpy())
         outputs['mele_missingInnerHits'] = column_accumulator(me.expMissingInnerHits.to_numpy())
         outputs['mele_conversionVeto'] = column_accumulator(ak.values_astype(me.conversionVeto,int).to_numpy())
         outputs['mele_svProxyVxy'] = column_accumulator(me.svProxyVxy.to_numpy())
