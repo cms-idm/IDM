@@ -321,9 +321,9 @@ def plot(args):
         p1.Draw(); p2.Draw()
         xlo, xhi = EDGES[v][0], EDGES[v][-1]
         for pad, ser, ylo, yhi, yt, s in (
-                (p1, top, 1e-3 if log else 0, 2 if log else ymax_of([x[0] for x in top], 0.62),
+                (p1, top, 1e-3 if log else 0, 50 if log else ymax_of([x[0] for x in top], 0.62),
                  "Fraction of two-accepted events", 1.0),
-                (p2, bot, 1e-4 if log else 0, 10 if log else ymax_of([x[0] for x in bot], 0.70), "Lost fraction", 0.67 / 0.33)):
+                (p2, bot, 1e-4 if log else 0, 1 if log else ymax_of([x[0] for x in bot], 0.70), "Lost fraction", 0.67 / 0.33)):
             pad.cd(); pad.SetLogy(int(log))
             fr = pad.DrawFrame(xlo, ylo, xhi, yhi); cs._keep.append(fr)
             fr.GetYaxis().SetTitle(yt); fr.GetXaxis().SetTitle(XTITLE[v] if pad is p2 else "")
@@ -340,9 +340,12 @@ def plot(args):
         cs.header(p1, 0.15, 0.935, (0.055, 0.042), 0.96)
         t = ROOT.TLatex(); t.SetNDC(); t.SetTextFont(42); t.SetTextSize(0.036); t.SetTextAlign(13); cs._keep.append(t)
         t.DrawLatex(0.19, 0.87, lab(g))
-        cs.legend([(gr, l, "lp") for gr, l in top], y2=0.82, y1=0.58, x1=0.46, x2=0.90, size=0.033)
-        p2.cd()
-        cs.legend([(gr, l, "lp") for gr, l in bot], y2=0.93, y1=0.70, x1=0.50, size=0.07)
+        if log:  # log copy: the lower panel spans its data, so its entries join the top legend
+            cs.legend([(gr, l, "lp") for gr, l in top + bot], y2=0.82, y1=0.46, x1=0.46, x2=0.90, size=0.033)
+        else:
+            cs.legend([(gr, l, "lp") for gr, l in top], y2=0.82, y1=0.58, x1=0.46, x2=0.90, size=0.033)
+            p2.cd()
+            cs.legend([(gr, l, "lp") for gr, l in bot], y2=0.93, y1=0.70, x1=0.50, size=0.07)
         base.parent.mkdir(parents=True, exist_ok=True)
         c.SaveAs(str(base) + ("_log.png" if log else ".png"))
         c.Close()
@@ -493,6 +496,7 @@ def plot(args):
     hdr = ["Group", "Two-accepted", "Reco A", "Reco B", "Vertexed A", "Vertexed B", "Lost reco", "Lost vertexed",
            "Gained reco / vertexed"]
     cap = cs.Captions("Reco and vertexing loss from slimmedDisplacedMuons (signal MC, 2022EE, 2026-09-28 production)", [
+        "Inputs: %d signal samples (\"All samples\" = these); ROOT source %s." % (nsamp, Path(args.output).name),
         "Population: two-accepted events (exactly two signal muons, opposite charge, both with |eta| < 2.4, 0 <= Lxy < "
         "740 cm, |vz| < 960 cm; no pT minimum). Event level, raw unweighted; pooling over samples unweighted.",
         "A = displacedMuons -> cleanedDisplacedMuons; B = only the displacedMuons kept in slimmedDisplacedMuons, then the "
