@@ -168,14 +168,16 @@ def get_bkg_cutflow_df(bkg_histos, branch, process = 'all', isLegacy = False):
             total_cts_after_cut = {cut: 0 for cut in cut_idx}
             
             for subprocess in list(histos['cutflow'].keys()):
-                total_cts_nocut += histos['cutflow_cts'][subprocess]['all'] / histos['cutflow'][subprocess]['all']
+                cf_all = histos['cutflow'][subprocess]['all']
+                if cf_all != 0:
+                    total_cts_nocut += histos['cutflow_cts'][subprocess]['all'] / cf_all
             
                 for cut in cut_idx:
-                    total_cts_after_cut[cut] += bkg_histos[process]['cutflow_cts'][subprocess][cut]
+                    total_cts_after_cut[cut] += histos['cutflow_cts'][subprocess][cut]
     
-            total_eff_after_cut = {cut: total_cts_after_cut[cut] / total_cts_nocut for cut in cut_idx}
+            total_eff_after_cut = {cut: (total_cts_after_cut[cut] / total_cts_nocut if total_cts_nocut != 0 else 0.0) for cut in cut_idx}
     
-            cutflow.loc["Total"] = total_eff_after_cut
+            cutflow.loc["Total"] = pd.Series(total_eff_after_cut)
 
     else:
         # for each process
@@ -203,12 +205,14 @@ def get_bkg_cutflow_df(bkg_histos, branch, process = 'all', isLegacy = False):
             total_raw_cts_after_cut[process] = {cut: 0 for cut in cut_idx}
             
             for subprocess in bkgSubCat:
-                total_cts_nocut[process] += histos['cutflow_cts'][subprocess]['all'] / histos['cutflow'][subprocess]['all']
+                cf_all = histos['cutflow'][subprocess]['all']
+                if cf_all != 0:
+                    total_cts_nocut[process] += histos['cutflow_cts'][subprocess]['all'] / cf_all
                 for cut in cut_idx:
                     total_cts_after_cut[process][cut] += histos['cutflow_cts'][subprocess][cut]
                     total_raw_cts_after_cut[process][cut] += histos['cutflow_nevts'][subprocess][cut]
             
-            total_eff_after_cut[process] = {cut: total_cts_after_cut[process][cut] / total_cts_nocut[process] for cut in cut_idx}
+            total_eff_after_cut[process] = {cut: (total_cts_after_cut[process][cut] / total_cts_nocut[process] if total_cts_nocut[process] != 0 else 0.0) for cut in cut_idx}
 
         total_cts_all_process_after_cut = {cut: 0 for cut in cut_idx}
         total_cts_all_process_no_cut = 0
@@ -222,7 +226,7 @@ def get_bkg_cutflow_df(bkg_histos, branch, process = 'all', isLegacy = False):
                 if idx == 0:
                     total_cts_all_process_no_cut += total_cts_nocut[process] # do it only once
         
-            total_eff_after_cut['Total'][cut] = total_cts_all_process_after_cut[cut] / total_cts_all_process_no_cut
+            total_eff_after_cut['Total'][cut] = (total_cts_all_process_after_cut[cut] / total_cts_all_process_no_cut if total_cts_all_process_no_cut != 0 else 0.0)
         
         if branch == 'cutflow':
             cutflow = pd.DataFrame.from_dict(total_eff_after_cut, orient='index')

@@ -1,0 +1,24 @@
+# Existing dimuon transfer pattern. Submit from the new run dir with cmssw_lib.tgz, samples.txt,
+# logs/ and inputs/: condor_submit EFF_REVISION=<sha> <repo>/.../component_efficiency.jdl
+code = /uscms_data/d3/abdelham/CMSSW_13_0_13/src/iDMe/AODSkimmer/displaced_muon_id
+flists = /uscms_data/d3/abdelham/CMSSW_13_0_13/src/iDMe/AODSkimmer/fileLists/signal/2022EE/iDMmu
+universe = vanilla
+executable = $(code)/condor_component_efficiency.sh
+arguments = $(sample) $(sample)_flist.txt $(sample).root $(EFF_REVISION)
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = $(code)/component_efficiency_cfg.py,$(flists)/$(sample)_flist.txt,cmssw_lib.tgz
+transfer_output_files = $(sample).root,$(sample).xml
+transfer_output_remaps = "$(sample).root=inputs/$(sample).root;$(sample).xml=logs/$(sample).xml"
+output = logs/$(sample)_$(Cluster).out
+error = logs/$(sample)_$(Cluster).err
+log = logs/condor_$(Cluster).log
+request_cpus = 1
+request_memory = 2500
+request_disk = 2000000
+use_x509userproxy = true
+x509userproxy = /uscms/home/abdelham/x509up_u15180
+on_exit_hold = (ExitBySignal == True) || (ExitCode != 0)
++DesiredOS = "EL8"
++JobBatchName = "component-matching-efficiency"
+queue sample from samples.txt

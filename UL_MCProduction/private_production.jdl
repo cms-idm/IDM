@@ -1,0 +1,27 @@
+# Private 2022EE background production, one sample per submission (logs/<sample>/ must exist; Condor writes the
+# event log there on the submit host):
+#   mkdir -p logs/<sample> && condor_submit private_production.jdl sample=<sample> index=<sample index> nevents=<generated events per job> jobs="0 1"
+# (chains/<sample>_chain.json and chains/<sample>_fragment.py from make_bkg_private_chains.py).
+# Resubmit failed jobs with their original indices only after the originals left the queue and EOS was listed.
+universe = vanilla
+executable = run_private_condor_production.sh
+eosdir = /store/user/lpcmetx/iDMe/iDMmu_Run3_Production/2022EE/Background_MINIAOD/$(sample)_private
+arguments = $(sample) $(index) $(job) $(nevents) $(eosdir) $(Cluster).$(Process)
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = prepare_private_job.py,chains/$(sample)_chain.json,chains/$(sample)_fragment.py,pileup.txt
+transfer_output_files = results.tar.gz
+transfer_output_remaps = "results.tar.gz = results/$(sample)/results_$(job)_$(Cluster).$(Process).tar.gz"
+use_x509userproxy = true
+x509userproxy = /uscms/home/abdelham/x509up_u15180
+output = logs/$(sample)/condor.$(Cluster).$(Process).job$(job).out
+error = logs/$(sample)/condor.$(Cluster).$(Process).job$(job).err
+log = logs/$(sample)/condor.$(Cluster).log
+request_cpus = 2
+request_memory = 8000MB
+request_disk = 20GB
++AcctGroup = "analysis"
++ProjectName = "DarkMatterSimulation"
++DesiredOS = "EL8"
++MaxRuntime = 32400
+queue job in ($(jobs))

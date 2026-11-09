@@ -1,0 +1,22 @@
+universe = vanilla
+executable = run_wjets_condor_production.sh
+arguments = $(job) /store/user/lpcmetx/iDMe/iDMmu_Run3_Production/2022EE/Background_MINIAOD/WJets_WJetsLNu_MLNu0to120_HT100to400_private $(Cluster).$(Process)
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = prepare_wjets_test.py,WJets_2022EE_official_fragment.py,WJets_2022EE_test_chain.json,pileup.txt
+transfer_output_files = results.tar.gz
+transfer_output_remaps = "results.tar.gz = results/results_$(job)_$(Cluster).$(Process).tar.gz"
+use_x509userproxy = true
+x509userproxy = /uscms/home/abdelham/x509up_u15180
+output = logs/condor.$(Cluster).$(Process).job$(job).out
+error = logs/condor.$(Cluster).$(Process).job$(job).err
+log = logs/condor.$(Cluster).log
+request_cpus = 2
+request_memory = 8000MB
+request_disk = 20GB
++AcctGroup = "analysis"
++ProjectName = "DarkMatterSimulation"
++DesiredOS = "EL8"
++MaxRuntime = 32400
+# Resubmit failed jobs with their original indices, e.g. "queue job in (3, 17)".
+queue job from seq 0 44 |

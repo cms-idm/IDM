@@ -7,5 +7,5 @@ when_to_transfer_output = ON_EXIT
 transfer_output_files = ""
 notification = never
 request_memory = 8000
-+DesiredOS = "SL7"
++DesiredOS = "EL8"
 Queue 1
