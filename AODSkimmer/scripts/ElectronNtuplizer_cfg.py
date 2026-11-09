@@ -9,7 +9,7 @@ from Configuration.Eras.Era_Run2_2016_cff import Run2_2016
 from Configuration.Eras.Era_Run2_2016_HIPM_cff import Run2_2016_HIPM
 
 #Run3 imports
-from Configuration.Eras.Era_Run3_cff import Run3
+from Configuration.Eras.Era_Run3_cff import Run3                   #corresponds to Run3 2022 (maybe)
 
 import sys
 import os
@@ -19,15 +19,13 @@ if cmsswRelease not in ("CMSSW_13_0_13", "CMSSW_14_0_21"):
     raise RuntimeError("Supported releases: CMSSW_13_0_13 and CMSSW_14_0_21; got " + cmsswRelease)
 
 # argument parsing
-options = VarParsing.VarParsing("analysis")
-
-options.register(
-    "data",
-    False,
-    VarParsing.VarParsing.multiplicity.singleton,
-    VarParsing.VarParsing.varType.bool,
-    "Run on data (1) or MC (0)"
-)
+options = VarParsing.VarParsing('analysis')
+options.register('data',
+        False,
+        VarParsing.VarParsing.multiplicity.singleton,
+        VarParsing.VarParsing.varType.bool,
+        "Run on data (1) or MC (0)"
+        )
 
 options.register(
     "signal",
@@ -118,34 +116,37 @@ if options.signal and 'selectionMode' in _explicitArgs:
 
 # input files
 if ".txt" in options.flist:
+    # list of files
     print("reading input file list: "+options.flist)
     options.inputFiles = FileUtils.loadListFromFile(options.flist)
+
 else:
+    # we have passed a file name directly
     options.inputFiles = options.flist
 
 
 # global tag / era
-globaltag = ""
+globaltag = ''
 
 if options.year == "2016APV":
-    globaltag = "106X_dataRun2_v37" if options.data else "106X_mcRun2_asymptotic_preVFP_v11"
+    globaltag = '106X_dataRun2_v37' if options.data else '106X_mcRun2_asymptotic_preVFP_v11'
     era = Run2_2016_HIPM
-    recoEgammaTools_era = "2016preVFP-UL"
+    recoEgammaTools_era = '2016preVFP-UL'
 
 elif options.year == "2016":
-    globaltag = "106X_dataRun2_v37" if options.data else "106X_mcRun2_asymptotic_v17"
+    globaltag = '106X_dataRun2_v37' if options.data else '106X_mcRun2_asymptotic_v17'
     era = Run2_2016
-    recoEgammaTools_era = "2016postVFP-UL"
+    recoEgammaTools_era = '2016postVFP-UL'
 
 elif options.year == "2017":
-    globaltag = "106X_dataRun2_v37" if options.data else "106X_mc2017_realistic_v10"
+    globaltag = '106X_dataRun2_v37' if options.data else '106X_mc2017_realistic_v10'
     era = Run2_2017
-    recoEgammaTools_era = "2017-UL"
+    recoEgammaTools_era = '2017-UL'
 
 elif options.year == "2018":
-    globaltag = "106X_dataRun2_v37" if options.data else "106X_upgrade2018_realistic_v16_L1v1"
+    globaltag = '106X_dataRun2_v37' if options.data else '106X_upgrade2018_realistic_v16_L1v1'
     era = Run2_2018
-    recoEgammaTools_era = "2018-UL"
+    recoEgammaTools_era = '2018-UL'
 
 elif options.year in ["2022", "2022EE"]:
     if options.data:
@@ -155,17 +156,23 @@ elif options.year in ["2022", "2022EE"]:
     else:
         globaltag = "130X_mcRun3_2022_realistic_v5"
     era = Run3
-    recoEgammaTools_era = "2022-Prompt"
+    recoEgammaTools_era = '2022-Prompt' #XYZ FIX
 
 elif options.year == "2023" and cmsswRelease == "CMSSW_14_0_21":
-    from Configuration.Eras.Era_Run3_2023_cff import Run3_2023
-    globaltag = "130X_dataRun3_PromptAnalysis_v1" if options.data else "130X_mcRun3_2023_realistic_v14"
+    from Configuration.Eras.Era_Run3_2023_cff import Run3_2023         #corresponds to Run3 2023
+    globaltag = '130X_dataRun3_PromptAnalysis_v1' if options.data else '130X_mcRun3_2023_realistic_v14'
     era = Run3_2023
-    recoEgammaTools_era = "2022-Prompt"
+    recoEgammaTools_era = '2022-Prompt' #XYZ FIX
+
+elif options.year == "2024" and cmsswRelease == "CMSSW_14_0_21":
+    from Configuration.Eras.Era_Run3_2024_cff import Run3_2024         # 2024
+    globaltag = '' if options.data else '150X_mcRun3_2024_realistic_v2'
+    era = Run3_2024
+    recoEgammaTools_era = '2022-Prompt' #XYZ FIX
 
 else:
     print("Invalid or unsupported year for {1}: {0}".format(options.year, cmsswRelease))
-    print("Supported years here: 2016APV, 2016, 2017, 2018, 2022, 2022EE; 2023 additionally in CMSSW_14_0_21")
+    print("Supported years here: 2016APV, 2016, 2017, 2018, 2022, 2022EE; 2023 and 2024 additionally in CMSSW_14_0_21")
     sys.exit(1)
 
 
@@ -184,10 +191,10 @@ if options.year in ["2016", "2016APV"]:
         "Flag_BadPFMuonFilter",
         "Flag_BadPFMuonDzFilter",
         "Flag_eeBadScFilter",
-        "Flag_hfNoisyHitsFilter",
+        "Flag_hfNoisyHitsFilter"
     ]
 
-elif options.year in ["2017", "2018", "2022", "2022EE", "2023"]:
+elif options.year in ["2017", "2018", "2022", "2022EE", "2023", "2024"]:
     metFilters = [
         "Flag_goodVertices",
         "Flag_globalSuperTightHalo2016Filter",
@@ -198,7 +205,7 @@ elif options.year in ["2017", "2018", "2022", "2022EE", "2023"]:
         "Flag_BadPFMuonDzFilter",
         "Flag_hfNoisyHitsFilter",
         "Flag_eeBadScFilter",
-        "Flag_ecalBadCalibFilter",
+        "Flag_ecalBadCalibFilter"
     ]
 
 #######################
@@ -206,6 +213,9 @@ elif options.year in ["2017", "2018", "2022", "2022EE", "2023"]:
 #######################
 
 metTrigs = [
+    #"HLT_PFMET90_PFMHT90_IDTight", # not included in Run 3
+    #"HLT_PFMET100_PFMHT100_IDTight", # not included in Run 3
+    #"HLT_PFMET110_PFMHT110_IDTight", # not included in Run 3
     "HLT_PFMET120_PFMHT120_IDTight",
     "HLT_PFMET120_PFMHT120_IDTight_PFHT60",
     "HLT_PFMET130_PFMHT130_IDTight",
@@ -218,12 +228,18 @@ metTrigs = [
     "HLT_PFMETNoMu130_PFMHTNoMu130_IDTight_FilterHF",
     "HLT_PFMETNoMu140_PFMHTNoMu140_IDTight",
     "HLT_PFMETNoMu140_PFMHTNoMu140_IDTight_FilterHF",
+    #"HLT_PFMETTypeOne110_PFMHT110_IDTight", # not included in Run 3
+    #"HLT_PFMETTypeOne120_PFMHT120_IDTight", # not included in Run 3
+    #"HLT_PFMETTypeOne130_PFMHT130_IDTight", # not included in Run 3
     "HLT_PFMETTypeOne140_PFMHT140_IDTight",
+    #"HLT_PFMET100_PFMHT100_IDTight_PFHT60_v9", # not included in Run 3
     "HLT_PFMET105_IsoTrk50",
 ]
 
 
 jetTrigs = [
+    #"HLT_PFJet15", # not included in Run 3
+    #"HLT_PFJet25", # not included in Run 3
     "HLT_PFJet40",
     "HLT_PFJet60",
     "HLT_PFJet80",
@@ -235,6 +251,11 @@ jetTrigs = [
     "HLT_PFJet450",
     "HLT_PFJet500",
     "HLT_PFJet550",
+    #"HLT_AK4PFJet30", # not included in Run 3
+    #"HLT_AK4PFJet50", # not included in Run 3
+    #"HLT_AK4PFJet80", # not included in Run 3
+    #"HLT_AK4PFJet100", # not included in Run 3
+    #"HLT_AK4PFJet120", # not included in Run 3
 ]
 eleTrigs = list(set([
     "HLT_Ele50_CaloIdVT_GsfTrkIdT_PFJet165",
@@ -267,16 +288,13 @@ eleTrigs = list(set([
 ]))
 
 muTrigs = [
-    "HLT_IsoMu27",
+     "HLT_IsoMu27"
 ]
 
 triggerPaths = metTrigs + jetTrigs + eleTrigs + muTrigs
 
 # Electron effective area input file for PU-corrected PF isolation calculations
-effAreaInputPath = (
-    "RecoEgamma/ElectronIdentification/data/Run3_Winter22/"
-    "effAreaElectrons_cone03_pfNeuHadronsAndPhotons_122X.txt"
-)
+effAreaInputPath = "RecoEgamma/ElectronIdentification/data/Run3_Winter22/effAreaElectrons_cone03_pfNeuHadronsAndPhotons_122X.txt"
 
 
 #######################
@@ -286,11 +304,11 @@ effAreaInputPath = (
 process = cms.Process("USER",era)
 
 process.load("FWCore.MessageService.MessageLogger_cfi")
-process.load("Configuration.StandardSequences.Services_cff")
+process.load('Configuration.StandardSequences.Services_cff')
 process.load("Configuration.EventContent.EventContent_cff")
 process.load("TrackingTools.TransientTrack.TransientTrackBuilder_cfi")
 process.load("Configuration.StandardSequences.GeometryRecoDB_cff")
-process.load("Configuration.StandardSequences.MagneticField_38T_cff")
+process.load('Configuration.StandardSequences.MagneticField_38T_cff')
 
 # Required for both:
 #   1. PropagateToMuon station-1/station-2 diagnostics
@@ -299,12 +317,12 @@ process.load("TrackPropagation.SteppingHelixPropagator.SteppingHelixPropagatorAl
 process.load("TrackPropagation.SteppingHelixPropagator.SteppingHelixPropagatorOpposite_cfi")
 process.load("TrackPropagation.SteppingHelixPropagator.SteppingHelixPropagatorAny_cfi")
 
-process.load("Configuration.StandardSequences.FrontierConditions_GlobalTag_cff")
+process.load('Configuration.StandardSequences.FrontierConditions_GlobalTag_cff')
 
 process.MessageLogger.cerr.FwkReport.reportEvery = 1000
 
 from Configuration.AlCa.GlobalTag import GlobalTag
-process.GlobalTag = GlobalTag(process.GlobalTag, globaltag, "")
+process.GlobalTag = GlobalTag(process.GlobalTag, globaltag, '')
 
 process.options = cms.untracked.PSet()
 process.options.numberOfThreads=cms.untracked.uint32(options.numThreads)
@@ -314,15 +332,13 @@ process.options.numberOfConcurrentLuminosityBlocks=cms.untracked.uint32(1)
 process.maxEvents = cms.untracked.PSet(
     input = cms.untracked.int32(options.nEvents)
 )
-
-process.source = cms.Source(
-    "PoolSource",
+process.source = cms.Source("PoolSource",
     fileNames = cms.untracked.vstring(options.inputFiles),
+    #skipBadFiles = cms.untracked.bool(True),
+    #cacheSize = cms.untracked.uint32(0)
     skipBadFiles = cms.untracked.bool(True)
 )
-
-process.TFileService = cms.Service(
-    "TFileService",
+process.TFileService = cms.Service("TFileService",
     fileName = cms.string(options.outfile),
     closeFileFast = cms.untracked.bool(True)
 )
@@ -406,59 +422,51 @@ if cmsswRelease == "CMSSW_13_0_13":
 else:
     from EgammaUser.EgammaPostRecoTools.EgammaPostRecoTools import setupEgammaPostRecoSeq
 
-setupEgammaPostRecoSeq(
-    process,
-    runEnergyCorrections = False,
-    runVID = True,
-    era = recoEgammaTools_era,
-    eleIDModules = [
-        "RecoEgamma.ElectronIdentification.Identification.mvaElectronID_RunIIIWinter22_iso_V1_cff",
-        "RecoEgamma.ElectronIdentification.Identification.mvaElectronID_RunIIIWinter22_noIso_V1_cff",
-        "RecoEgamma.ElectronIdentification.Identification.cutBasedElectronID_Winter22_122X_V1_cff",
-    ]
-)
+setupEgammaPostRecoSeq(process,
+                       runEnergyCorrections=False, # XYZ deactivated bc not working for Run3 yet, I think?
+                       runVID=True, #saves CPU time by not needlessly re-running VID, if you want the Fall17V2 IDs, set this to True or remove (default is True)
+                       era=recoEgammaTools_era,
+                       eleIDModules=['RecoEgamma.ElectronIdentification.Identification.mvaElectronID_RunIIIWinter22_iso_V1_cff',
+                                     'RecoEgamma.ElectronIdentification.Identification.mvaElectronID_RunIIIWinter22_noIso_V1_cff',
+                                     'RecoEgamma.ElectronIdentification.Identification.cutBasedElectronID_Winter22_122X_V1_cff']
+                       )
 
 
 ##################################
 ###### Low-pT electron chain #####
 ##################################
 
-process.load("PhysicsTools.NanoAOD.lowPtElectrons_cff")
-
-process.lowPtNanoElectronSequence = cms.Sequence(
-    process.modifiedLowPtElectrons +
-    process.updatedLowPtElectrons +
-    process.lowPtPATElectronID +
-    process.isoForLowPtEle +
-    process.updatedLowPtElectronsWithUserData
-)
+process.load('PhysicsTools.NanoAOD.lowPtElectrons_cff')
+process.lowPtNanoElectronSequence = cms.Sequence(process.modifiedLowPtElectrons+\
+                                         process.updatedLowPtElectrons+\
+                                         process.lowPtPATElectronID+\
+                                         process.isoForLowPtEle+\
+                                         process.updatedLowPtElectronsWithUserData)
 
 
 ##################################
 ###### Regular electron chain ####
 ##################################
 
-process.load("PhysicsTools.NanoAOD.electrons_cff")
-
-process.isoForEleRelative = process.isoForEle.clone(
+process.load('PhysicsTools.NanoAOD.electrons_cff')
+process.isoForEleRelative = process.isoForEle.clone( # configure isolation to compute relative isolation by default
     relative = cms.bool(True)
 )
-
-process.slimmedElectronsWithUserDataMinimal = process.slimmedElectronsWithUserData.clone(
+process.slimmedElectronsWithUserDataMinimal = process.slimmedElectronsWithUserData.clone( # remove need to save non-isolation value maps
     src = cms.InputTag("slimmedElectrons"),
     userFloats = cms.PSet(
         miniIsoChg = cms.InputTag("isoForEleRelative:miniIsoChg"),
         miniIsoAll = cms.InputTag("isoForEleRelative:miniIsoAll"),
+        #PFIsoChg = cms.InputTag("isoForEleRelative:PFIsoChg"), # Doesn't work for Run 3
+        #PFIsoAll = cms.InputTag("isoForEleRelative:PFIsoAll"), # Doesn't work for Run 3
+        #PFIsoAll04 = cms.InputTag("isoForEleRelative:PFIsoAll04"), # Doesn't work for Run 3
     ),
     userIntFromBools = cms.PSet(),
     userInts = cms.PSet(),
     userCands = cms.PSet()
 )
-
-process.nanoElectronSequence = cms.Sequence(
-    process.isoForEleRelative +
-    process.slimmedElectronsWithUserDataMinimal
-)
+process.nanoElectronSequence = cms.Sequence(process.isoForEleRelative+\
+                                            process.slimmedElectronsWithUserDataMinimal)
 
 
 ##############################
@@ -472,14 +480,8 @@ process.ntuplePath = cms.Path(process.ntupleSequence)
 process.iDMEgammaPostRecoSequence = cms.Sequence(process.egammaPostRecoSeq)
 process.iDMEgammaPostReco = cms.Path(process.iDMEgammaPostRecoSequence)
 
-process.iDMNanoElectronSequence = cms.Sequence(
-    process.lowPtNanoElectronSequence +
-    process.nanoElectronSequence
-)
+process.iDMNanoElectronSequence = cms.Sequence(process.lowPtNanoElectronSequence + process.nanoElectronSequence)
 process.iDMNanoElectron = cms.Path(process.iDMNanoElectronSequence)
 
-process.schedule = cms.Schedule(
-    process.iDMEgammaPostReco,
-    process.iDMNanoElectron,
-    process.ntuplePath
-)
+process.schedule = cms.Schedule(process.iDMEgammaPostReco,process.iDMNanoElectron,process.ntuplePath)
+
