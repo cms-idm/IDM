@@ -12,6 +12,11 @@ from Configuration.Eras.Era_Run2_2016_HIPM_cff import Run2_2016_HIPM
 from Configuration.Eras.Era_Run3_cff import Run3
 
 import sys
+import os
+
+cmsswRelease = os.environ.get("CMSSW_VERSION", "")
+if cmsswRelease not in ("CMSSW_13_0_13", "CMSSW_14_0_21"):
+    raise RuntimeError("Supported releases: CMSSW_13_0_13 and CMSSW_14_0_21; got " + cmsswRelease)
 
 # argument parsing
 options = VarParsing.VarParsing("analysis")
@@ -152,9 +157,15 @@ elif options.year in ["2022", "2022EE"]:
     era = Run3
     recoEgammaTools_era = "2022-Prompt"
 
+elif options.year == "2023" and cmsswRelease == "CMSSW_14_0_21":
+    from Configuration.Eras.Era_Run3_2023_cff import Run3_2023
+    globaltag = "130X_dataRun3_PromptAnalysis_v1" if options.data else "130X_mcRun3_2023_realistic_v14"
+    era = Run3_2023
+    recoEgammaTools_era = "2022-Prompt"
+
 else:
-    print("Invalid or unsupported year for this CMSSW_13_0_13 cfg: {0}".format(options.year))
-    print("Supported years here: 2016APV, 2016, 2017, 2018, 2022, 2022EE")
+    print("Invalid or unsupported year for {1}: {0}".format(options.year, cmsswRelease))
+    print("Supported years here: 2016APV, 2016, 2017, 2018, 2022, 2022EE; 2023 additionally in CMSSW_14_0_21")
     sys.exit(1)
 
 
@@ -176,7 +187,7 @@ if options.year in ["2016", "2016APV"]:
         "Flag_hfNoisyHitsFilter",
     ]
 
-elif options.year in ["2017", "2018", "2022", "2022EE"]:
+elif options.year in ["2017", "2018", "2022", "2022EE", "2023"]:
     metFilters = [
         "Flag_goodVertices",
         "Flag_globalSuperTightHalo2016Filter",
@@ -390,7 +401,10 @@ process.ntuples = ElectronSkimmer.clone(
 ###### EGamma post-reco ######
 ##############################
 
-from RecoEgamma.EgammaTools.EgammaPostRecoTools import setupEgammaPostRecoSeq
+if cmsswRelease == "CMSSW_13_0_13":
+    from RecoEgamma.EgammaTools.EgammaPostRecoTools import setupEgammaPostRecoSeq
+else:
+    from EgammaUser.EgammaPostRecoTools.EgammaPostRecoTools import setupEgammaPostRecoSeq
 
 setupEgammaPostRecoSeq(
     process,
