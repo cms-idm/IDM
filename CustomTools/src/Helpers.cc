@@ -107,7 +107,9 @@ HitBasedSVProxy Helper::EstimateSVProxyFromInnermostHit(const reco::Track &track
     // state at the innermost hit itself when available to avoid that bias.
     float theta = track.theta();
     float phi = track.phi();
-    if (track.innerOk()) {
+    // innerOk() reads the TrackExtra, which some MINIAOD inputs (e.g. the iDMmu 2022EE
+    // production) do not store; without it, keep the PCA direction above.
+    if (track.extra().isNonnull() && track.extra().isAvailable() && track.innerOk()) {
         theta = track.innerMomentum().theta();
         phi = track.innerMomentum().phi();
     }
