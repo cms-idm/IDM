@@ -323,7 +323,7 @@ def plot(args):
         for pad, ser, ylo, yhi, yt, s in (
                 (p1, top, 1e-3 if log else 0, 2 if log else ymax_of([x[0] for x in top], 0.62),
                  "Fraction of two-accepted events", 1.0),
-                (p2, bot, 1e-4 if log else 0, 3 if log else ymax_of([x[0] for x in bot], 0.70), "Lost fraction", 0.67 / 0.33)):
+                (p2, bot, 1e-4 if log else 0, 10 if log else ymax_of([x[0] for x in bot], 0.70), "Lost fraction", 0.67 / 0.33)):
             pad.cd(); pad.SetLogy(int(log))
             fr = pad.DrawFrame(xlo, ylo, xhi, yhi); cs._keep.append(fr)
             fr.GetYaxis().SetTitle(yt); fr.GetXaxis().SetTitle(XTITLE[v] if pad is p2 else "")
