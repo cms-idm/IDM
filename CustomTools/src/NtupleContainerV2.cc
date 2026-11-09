@@ -246,6 +246,20 @@ void NtupleContainerV2::CreateTreeBranches() {
     outT->Branch("Electron_expMissingInnerHits",&recoElectronExpMissingInnerHits_);
     outT->Branch("Electron_conversionVeto",&recoElectronConversionVeto_);
     outT->Branch("Electron_isEE",&recoElectronIsEE_);
+    // supercluster
+    outT->Branch("Electron_scRawE",&recoElectronScRawE_);
+    outT->Branch("Electron_scEnergy",&recoElectronScEnergy_);
+    outT->Branch("Electron_scEta",&recoElectronScEta_);
+    outT->Branch("Electron_scPhi",&recoElectronScPhi_);
+    outT->Branch("Electron_scEtaWidth",&recoElectronScEtaWidth_);
+    outT->Branch("Electron_scPhiWidth",&recoElectronScPhiWidth_);
+    outT->Branch("Electron_scClustersSize",&recoElectronScClustersSize_);
+    // additional shower shapes
+    outT->Branch("Electron_full55sigmaIetaIphi",&recoElectronFull5x5SigmaIetaIphi_);
+    outT->Branch("Electron_seedEoverScRawE",&recoElectronSeedEoverScRawE_);
+    outT->Branch("Electron_full55eMaxOverScRawE",&recoElectronFull5x5EMaxOverScRawE_);
+    outT->Branch("Electron_full55e2ndOverScRawE",&recoElectronFull5x5E2ndOverScRawE_);
+    // special vars for x-clean study
     outT->Branch("Electron_hasLptMatch",&recoElectronHasLptMatch_);
     outT->Branch("Electron_lptMatchIdx",&recoElectronLptMatchIdx_);
     outT->Branch("Electron_hasAllLptMatch",&recoElectronHasAllLptMatch_);
@@ -324,6 +338,10 @@ void NtupleContainerV2::CreateTreeBranches() {
     outT->Branch("LptElectron_full55sigmaIphiIphi",&recoLowPtElectronFull5x5SigmaIphiIphi_);
     outT->Branch("LptElectron_full55hcalDepth1OverEcal",&recoLowPtElectronFull5x5HcalDepth1OverEcal_);
     outT->Branch("LptElectron_full55hcalDepth2OverEcal",&recoLowPtElectronFull5x5HcalDepth2OverEcal_);
+    outT->Branch("LptElectron_full55sigmaIetaIphi",&recoLowPtElectronFull5x5SigmaIetaIphi_);
+    outT->Branch("LptElectron_seedEoverScRawE",&recoLowPtElectronSeedEoverScRawE_);
+    outT->Branch("LptElectron_full55eMaxOverScRawE",&recoLowPtElectronFull5x5EMaxOverScRawE_);
+    outT->Branch("LptElectron_full55e2ndOverScRawE",&recoLowPtElectronFull5x5E2ndOverScRawE_);
     // special vars for x-cleaning study
     outT->Branch("LptElectron_xCleaned",&recoLowPtElectronIsXCleaned_);
     outT->Branch("LptElectron_gedIdx",&recoLowPtElectronGEDidx_);
@@ -402,6 +420,10 @@ void NtupleContainerV2::CreateTreeBranches() {
     outT->Branch("AllLptElectron_full55sigmaIphiIphi",&recoAllLowPtElectronFull5x5SigmaIphiIphi_);
     outT->Branch("AllLptElectron_full55hcalDepth1OverEcal",&recoAllLowPtElectronFull5x5HcalDepth1OverEcal_);
     outT->Branch("AllLptElectron_full55hcalDepth2OverEcal",&recoAllLowPtElectronFull5x5HcalDepth2OverEcal_);
+    outT->Branch("AllLptElectron_full55sigmaIetaIphi",&recoAllLowPtElectronFull5x5SigmaIetaIphi_);
+    outT->Branch("AllLptElectron_seedEoverScRawE",&recoAllLowPtElectronSeedEoverScRawE_);
+    outT->Branch("AllLptElectron_full55eMaxOverScRawE",&recoAllLowPtElectronFull5x5EMaxOverScRawE_);
+    outT->Branch("AllLptElectron_full55e2ndOverScRawE",&recoAllLowPtElectronFull5x5E2ndOverScRawE_);
     // x-cleaning status and GED match info
     outT->Branch("AllLptElectron_xCleaned",&recoAllLowPtElectronIsXCleaned_);
     outT->Branch("AllLptElectron_gedIdx",&recoAllLowPtElectronGEDidx_);
@@ -1253,6 +1275,8 @@ void NtupleContainerV2::CreateSlimTreeBranches() {
     outT_slim->Branch("nElectron",&nElectronDefault_);
     outT_slim->Branch("nLptElectron",&nElectronLowPt_);
     outT_slim->Branch("nAllLptElectron",&nElectronAllLowPt_);
+    outT_slim->Branch("nMuon",&nMuon_);
+    outT_slim->Branch("nDSAMuon",&nDSAMuon_);
     outT_slim->Branch("nPFJet",&PFNJet_);
     outT_slim->Branch("PFHT",&PFHT_,"PFHT/f");
     outT_slim->Branch("PFJetPtLeading",&PFJetPtLeading_,"PFJetPtLeading/f");
@@ -1745,6 +1769,20 @@ void NtupleContainerV2::ClearTreeBranches() {
     recoElectronExpMissingInnerHits_.clear();
     recoElectronConversionVeto_.clear();
     recoElectronIsEE_.clear();
+    // supercluster
+    recoElectronScRawE_.clear();
+    recoElectronScEnergy_.clear();
+    recoElectronScEta_.clear();
+    recoElectronScPhi_.clear();
+    recoElectronScEtaWidth_.clear();
+    recoElectronScPhiWidth_.clear();
+    recoElectronScClustersSize_.clear();
+    // additional shower shapes
+    recoElectronFull5x5SigmaIetaIphi_.clear();
+    recoElectronSeedEoverScRawE_.clear();
+    recoElectronFull5x5EMaxOverScRawE_.clear();
+    recoElectronFull5x5E2ndOverScRawE_.clear();
+    // special vars for x-cleaning study
     recoElectronHasLptMatch_.clear();
     recoElectronLptMatchIdx_.clear();
     recoElectronHasAllLptMatch_.clear();
@@ -1823,6 +1861,10 @@ void NtupleContainerV2::ClearTreeBranches() {
     recoLowPtElectronFull5x5SigmaIphiIphi_.clear();
     recoLowPtElectronFull5x5HcalDepth1OverEcal_.clear();
     recoLowPtElectronFull5x5HcalDepth2OverEcal_.clear();
+    recoLowPtElectronFull5x5SigmaIetaIphi_.clear();
+    recoLowPtElectronSeedEoverScRawE_.clear();
+    recoLowPtElectronFull5x5EMaxOverScRawE_.clear();
+    recoLowPtElectronFull5x5E2ndOverScRawE_.clear();
     // special vars for x-cleaning study
     recoLowPtElectronIsXCleaned_.clear();
     recoLowPtElectronGEDidx_.clear();
@@ -1901,6 +1943,10 @@ void NtupleContainerV2::ClearTreeBranches() {
     recoAllLowPtElectronFull5x5SigmaIphiIphi_.clear();
     recoAllLowPtElectronFull5x5HcalDepth1OverEcal_.clear();
     recoAllLowPtElectronFull5x5HcalDepth2OverEcal_.clear();
+    recoAllLowPtElectronFull5x5SigmaIetaIphi_.clear();
+    recoAllLowPtElectronSeedEoverScRawE_.clear();
+    recoAllLowPtElectronFull5x5EMaxOverScRawE_.clear();
+    recoAllLowPtElectronFull5x5E2ndOverScRawE_.clear();
     recoAllLowPtElectronIsXCleaned_.clear();
     recoAllLowPtElectronGEDidx_.clear();
     recoAllLowPtElectronGEDisMatched_.clear();

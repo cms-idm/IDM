@@ -1645,6 +1645,23 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       nt.recoElectronExpMissingInnerHits_.push_back(ele.gsfTrack()->hitPattern().numberOfLostHits(missingHitType));
       nt.recoElectronConversionVeto_.push_back(!ConversionTools::hasMatchedConversion(ele,*conversionsHandle_,beamspot.position()));
       nt.recoElectronIsEE_.push_back(ele.isEE());
+      // supercluster and additional shower shapes
+      {
+         const auto & sc = ele.superCluster();
+         nt.recoElectronScRawE_.push_back(sc.isNonnull() ? sc->rawEnergy() : -999.);
+         nt.recoElectronScEnergy_.push_back(sc.isNonnull() ? sc->energy() : -999.);
+         nt.recoElectronScEta_.push_back(sc.isNonnull() ? sc->eta() : -999.);
+         nt.recoElectronScPhi_.push_back(sc.isNonnull() ? sc->phi() : -999.);
+         nt.recoElectronScEtaWidth_.push_back(sc.isNonnull() ? sc->etaWidth() : -999.);
+         nt.recoElectronScPhiWidth_.push_back(sc.isNonnull() ? sc->phiWidth() : -999.);
+         nt.recoElectronScClustersSize_.push_back(sc.isNonnull() ? (int)sc->clustersSize() : -999);
+         const bool validRawE = sc.isNonnull() && sc->rawEnergy() > 0;
+         const bool validSeed = validRawE && sc->seed().isNonnull();
+         nt.recoElectronSeedEoverScRawE_.push_back(validSeed ? sc->seed()->energy()/sc->rawEnergy() : -999.);
+         nt.recoElectronFull5x5EMaxOverScRawE_.push_back(validRawE ? ele.full5x5_showerShape().eMax/sc->rawEnergy() : -999.);
+         nt.recoElectronFull5x5E2ndOverScRawE_.push_back(validRawE ? ele.full5x5_showerShape().e2nd/sc->rawEnergy() : -999.);
+      }
+      nt.recoElectronFull5x5SigmaIetaIphi_.push_back(ele.full5x5_showerShape().sigmaIetaIphi);
       // x-cleaning study
       nt.recoElectronHasLptMatch_.push_back(false);
       nt.recoElectronLptMatchIdx_.push_back(-999);
@@ -1795,7 +1812,13 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          nt.recoAllLowPtElectronScEtaWidth_.push_back(sc.isNonnull() ? sc->etaWidth() : -999.);
          nt.recoAllLowPtElectronScPhiWidth_.push_back(sc.isNonnull() ? sc->phiWidth() : -999.);
          nt.recoAllLowPtElectronScClustersSize_.push_back(sc.isNonnull() ? (int)sc->clustersSize() : -999);
+         const bool validRawE = sc.isNonnull() && sc->rawEnergy() > 0;
+         const bool validSeed = validRawE && sc->seed().isNonnull();
+         nt.recoAllLowPtElectronSeedEoverScRawE_.push_back(validSeed ? sc->seed()->energy()/sc->rawEnergy() : -999.);
+         nt.recoAllLowPtElectronFull5x5EMaxOverScRawE_.push_back(validRawE ? ele.full5x5_showerShape().eMax/sc->rawEnergy() : -999.);
+         nt.recoAllLowPtElectronFull5x5E2ndOverScRawE_.push_back(validRawE ? ele.full5x5_showerShape().e2nd/sc->rawEnergy() : -999.);
       }
+      nt.recoAllLowPtElectronFull5x5SigmaIetaIphi_.push_back(ele.full5x5_showerShape().sigmaIetaIphi);
       nt.recoAllLowPtElectronFull5x5R9_.push_back(ele.full5x5_r9());
       nt.recoAllLowPtElectronFull5x5E5x5_.push_back(ele.full5x5_e5x5());
       nt.recoAllLowPtElectronFull5x5E1x5_.push_back(ele.full5x5_e1x5());
@@ -1903,7 +1926,13 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
             nt.recoLowPtElectronScEtaWidth_.push_back(sc.isNonnull() ? sc->etaWidth() : -999.);
             nt.recoLowPtElectronScPhiWidth_.push_back(sc.isNonnull() ? sc->phiWidth() : -999.);
             nt.recoLowPtElectronScClustersSize_.push_back(sc.isNonnull() ? (int)sc->clustersSize() : -999);
+            const bool validRawE = sc.isNonnull() && sc->rawEnergy() > 0;
+            const bool validSeed = validRawE && sc->seed().isNonnull();
+            nt.recoLowPtElectronSeedEoverScRawE_.push_back(validSeed ? sc->seed()->energy()/sc->rawEnergy() : -999.);
+            nt.recoLowPtElectronFull5x5EMaxOverScRawE_.push_back(validRawE ? ele.full5x5_showerShape().eMax/sc->rawEnergy() : -999.);
+            nt.recoLowPtElectronFull5x5E2ndOverScRawE_.push_back(validRawE ? ele.full5x5_showerShape().e2nd/sc->rawEnergy() : -999.);
          }
+         nt.recoLowPtElectronFull5x5SigmaIetaIphi_.push_back(ele.full5x5_showerShape().sigmaIetaIphi);
          nt.recoLowPtElectronFull5x5R9_.push_back(ele.full5x5_r9());
          nt.recoLowPtElectronFull5x5E5x5_.push_back(ele.full5x5_e5x5());
          nt.recoLowPtElectronFull5x5E1x5_.push_back(ele.full5x5_e1x5());
@@ -3705,6 +3734,12 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          }
          if (mindR >= PFmatch_threshold) nt.nElectronLowPt_++;
       }
+
+      // Muon counts, same definitions as the full tree: slimmed muons with pT > 3 GeV, all DSA muons
+      for (const auto & mu : *pfRecoMuHandle_) {
+         if (mu.pt() >= 3) nt.nMuon_++;
+      }
+      nt.nDSAMuon_ = dsaMuonHandle_->size();
    }
 
    if (!isSignal) outT_slim->Fill();
