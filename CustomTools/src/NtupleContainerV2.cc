@@ -889,31 +889,31 @@ void NtupleContainerV2::CreateTreeBranches() {
     if (!isData_) {
         // Authoritative complete gen-particle collection. GenLepton_* below is
         // the all-lepton view linked back by genParticleIdx.
-        outT->Branch("nGenParticle",&nGenParticle_);
-        outT->Branch("GenParticle_ID",&genPartID_);
-        outT->Branch("GenParticle_motherID",&genPartMotherID_);
-        outT->Branch("GenParticle_firstDifferentMotherID",&genPartFirstDifferentMotherID_);
-        outT->Branch("GenParticle_status",&genPartStatus_);
-        outT->Branch("GenParticle_charge",&genPartCharge_);
-        outT->Branch("GenParticle_pt",&genPartPt_);
-        outT->Branch("GenParticle_eta",&genPartEta_);
-        outT->Branch("GenParticle_phi",&genPartPhi_);
-        outT->Branch("GenParticle_energy",&genPartEn_);
-        outT->Branch("GenParticle_px",&genPartPx_);
-        outT->Branch("GenParticle_py",&genPartPy_);
-        outT->Branch("GenParticle_pz",&genPartPz_);
-        outT->Branch("GenParticle_vxy",&genPartVxy_);
-        outT->Branch("GenParticle_vx",&genPartVx_);
-        outT->Branch("GenParticle_vy",&genPartVy_);
-        outT->Branch("GenParticle_vz",&genPartVz_);
-        outT->Branch("GenParticle_mass",&genPartMass_);
-        outT->Branch("GenParticle_isFirstCopy",&genPartIsFirstCopy_);
-        outT->Branch("GenParticle_isLastCopy",&genPartIsLastCopy_);
-        outT->Branch("GenParticle_isLastCopyBeforeFSR",&genPartIsLastCopyBeforeFSR_);
-        outT->Branch("GenParticle_isHardProcess",&genPartIsHardProcess_);
-        outT->Branch("GenParticle_fromHardProcessFinalState",&genPartFromHardProcessFinalState_);
-        outT->Branch("GenParticle_fromHardProcessBeforeFSR",&genPartFromHardProcessBeforeFSR_);
-        outT->Branch("GenParticle_isPromptFinalState",&genPartIsPromptFinalState_);
+        outT->Branch("nGenPart",&nGenParticle_);
+        outT->Branch("GenPart_ID",&genPartID_);
+        outT->Branch("GenPart_motherID",&genPartMotherID_);
+        outT->Branch("GenPart_firstDifferentMotherID",&genPartFirstDifferentMotherID_);
+        outT->Branch("GenPart_status",&genPartStatus_);
+        outT->Branch("GenPart_charge",&genPartCharge_);
+        outT->Branch("GenPart_pt",&genPartPt_);
+        outT->Branch("GenPart_eta",&genPartEta_);
+        outT->Branch("GenPart_phi",&genPartPhi_);
+        outT->Branch("GenPart_e",&genPartEn_);
+        outT->Branch("GenPart_px",&genPartPx_);
+        outT->Branch("GenPart_py",&genPartPy_);
+        outT->Branch("GenPart_pz",&genPartPz_);
+        outT->Branch("GenPart_vxy",&genPartVxy_);
+        outT->Branch("GenPart_vx",&genPartVx_);
+        outT->Branch("GenPart_vy",&genPartVy_);
+        outT->Branch("GenPart_vz",&genPartVz_);
+        outT->Branch("GenPart_mass",&genPartMass_);
+        outT->Branch("GenPart_isFirstCopy",&genPartIsFirstCopy_);
+        outT->Branch("GenPart_isLastCopy",&genPartIsLastCopy_);
+        outT->Branch("GenPart_isLastCopyBeforeFSR",&genPartIsLastCopyBeforeFSR_);
+        outT->Branch("GenPart_isHardProcess",&genPartIsHardProcess_);
+        outT->Branch("GenPart_fromHardProcessFinalState",&genPartFromHardProcessFinalState_);
+        outT->Branch("GenPart_fromHardProcessBeforeFSR",&genPartFromHardProcessBeforeFSR_);
+        outT->Branch("GenPart_isPromptFinalState",&genPartIsPromptFinalState_);
 
         // All gen-lepton entries, including charged leptons and neutrinos.
         outT->Branch("nGenLepton",&nGenLepton_);
