@@ -12,7 +12,36 @@ FEATURE_SETS = {
                    'vxy_corr', 'sel_vtx_prod_eta', 'met_leadPt_ratio'],
     
     # --- MERGED ---
-    "merged1": [],
+    # all of _MELE_VARS in configs/histo_configs/corrmatrix.py, see makeMergedBDTInputs in skimmerTools.py
+    "merged1": ['mele_log10_dxy',  'mele_log10_dz', 'mele_logDxyDz', 'mele_cosMETdPhi', 'mele_log10_lxyEst', 'mele_mindRj', 'mele_mindPhiJ',
+                'mele_dRj0', 'mele_log10_trkChi2', 'mele_trkProb', 'mele_numTrackerHits', 'mele_numPixHits', 'mele_ID',
+                'mele_log10_miniRelIso', 'mele_log10_trkRelIso', 'mele_HoverE', 'mele_EoverPInv',
+                'mele_missingInnerHits', 'mele_conversionVeto', 'mele_svProxyVxy', 'met_leadPt_ratio', 'met_pt'], # AUC 0.976 
+    "merged2": ['mele_log10_lxyEst', 'mele_cosMETdPhi', 'mele_log10_dz', 'mele_log10_miniRelIso',
+                'mele_mindPhiJ', 'mele_log10_trkRelIso', 'mele_ID', 'met_leadPt_ratio',
+                'mele_missingInnerHits', 'mele_logDxyDz', 'mele_scPhiWidth', 'mele_EoverPInv'], # AUC 0.972
+    "merged3": ['mele_log10_lxyEst', 'mele_cosMETdPhi', 'mele_log10_dz', 'mele_log10_miniRelIso',
+                'mele_mindPhiJ', 'mele_log10_trkRelIso', 'mele_ID', 'met_leadPt_ratio',
+                'mele_missingInnerHits',  'mele_scPhiWidth'], # AUC 0.9831 after excluding m1=50
+    "merged4": ['mele_log10_lxyEst', 'mele_cosMETdPhi', 'mele_log10_dz', 'mele_log10_miniRelIso',
+                'mele_mindPhiJ', 'mele_log10_trkRelIso', 'mele_ID', 'met_leadPt_ratio',
+                'mele_missingInnerHits',  'mele_scPhiWidth', 'HT', 'nJets',
+                'mele_dEtaSeed', 'mele_dPhiIn', 'mele_sigmaIetaIeta', 'mele_scEtaWidth', 'mele_scPhiWidth',
+                'mele_r9', 'mele_sigmaIphiIphi', 'mele_e1x5Frac', 'mele_e2x5Frac',
+                'mele_scNClus', 'mele_scEoverP', 'mele_scRawFrac', 'mele_log10_dEtaSCTrk'], # AUC 0.9865
+    "merged5": ['mele_log10_lxyEst', 'mele_cosMETdPhi', 'mele_log10_dz', 'mele_log10_miniRelIso',
+                'mele_mindPhiJ', 'mele_log10_trkRelIso', 'mele_ID', 'met_leadPt_ratio',
+                'mele_missingInnerHits',  'mele_scPhiWidth',
+                'mele_r9', 'mele_e1x5Frac', 'mele_log10_dEtaSCTrk', 'mele_sigmaIphiIphi'], # AUC 0.9833 hmmmm
+    "merged6": ['mele_log10_lxyEst', 'mele_cosMETdPhi', 'mele_log10_dz', 'mele_log10_miniRelIso',
+                'mele_mindPhiJ', 'mele_log10_trkRelIso', 'mele_ID', 'met_leadPt_ratio',
+                'mele_missingInnerHits',  'mele_scPhiWidth',
+                'mele_r9', 'mele_e1x5Frac', 'mele_log10_dEtaSCTrk', 'mele_sigmaIphiIphi'],
+    "merged7": ['mele_log10_lxyEst', 'mele_cosMETdPhi', 'mele_log10_dz', 'mele_log10_miniRelIso',
+                'mele_mindPhiJ', 'mele_log10_trkRelIso', 'mele_ID', 'met_leadPt_ratio',
+                'mele_missingInnerHits',  'mele_scPhiWidth', 'mele_dPhiIn'], 
+
+
 }
 
 # which feature sets belong to which kind of h5 (skimmerTools.Skimmer bdt_type)

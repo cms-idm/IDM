@@ -1286,6 +1286,17 @@ def makeBDTv2Inputs(events): # Legacy BDT; not used anymore
 
     return input
 
+def _log10_floor(x, floor=1e-4):
+    # same log-scaling as configs/histo_configs/corrmatrix.py: values at/below the floor are clamped to it
+    return np.log10(np.maximum(x, floor))
+
+def _clip_ratio(x, hi=10):
+    # same as skimmerTools._clip_ratio: inf (x/0) clipped to hi, nan (0/0) kept as XGBoost's missing value
+    return np.clip(x, 0, hi)
+
+def _mele_METdPhi(events):
+    return np.abs(deltaPhi(events.best_merged.phi, events.PFMET.phi))
+
 # Definitions of the BDT input variables, keyed by the names used in trainBDT/feature_sets.py.
 # These must match the columns written to the training h5 by skimmerTools (Skimmer.process).
 # A name always means one definition: if a definition changes, add it under a new name (e.g. vxy -> vxy_corr)
@@ -1305,6 +1316,50 @@ BDT_VARIABLES = {
     'met_leadPt_ratio':      lambda events: (events.PFMET.pt/events.PFJet.pt[:,0]).to_numpy(),
     'jetMETdPhi':            lambda events: np.abs(events.PFJet.METdPhi[:,0]).to_numpy(),
     'minJetMETdPhi':         lambda events: ak.min(np.abs(events.PFJet.METdPhi),axis=1).to_numpy(),
+    'met_pt':                lambda events: events.PFMET.pt.to_numpy(),
+    'HT':                    lambda events: ak.sum(events.PFJet.pt,axis=1).to_numpy(),
+    'nJets':                 lambda events: ak.num(events.PFJet.pt,axis=1).to_numpy(),
+    # merged-electron candidate (events.best_merged, see computeMergedVars), as in skimmerTools.makeMergedBDTInputs
+    'mele_pt':               lambda events: events.best_merged.pt.to_numpy(),
+    'mele_eta':              lambda events: events.best_merged.eta.to_numpy(),
+    'mele_log10_dxy':        lambda events: _log10_floor(np.abs(events.best_merged.dxy)).to_numpy(),
+    'mele_log10_dxy_signif': lambda events: _log10_floor(np.abs(events.best_merged.dxy)/events.best_merged.dxyErr).to_numpy(),
+    'mele_log10_dz':         lambda events: _log10_floor(np.abs(events.best_merged.dz)).to_numpy(),
+    'mele_log10_dz_signif':  lambda events: _log10_floor(np.abs(events.best_merged.dz)/events.best_merged.dzErr).to_numpy(),
+    'mele_logDxyDz':         lambda events: np.log10(np.abs(events.best_merged.dxy/events.best_merged.dz)).to_numpy(),
+    'mele_METdPhi':          lambda events: _mele_METdPhi(events).to_numpy(),
+    'mele_cosMETdPhi':       lambda events: np.cos(_mele_METdPhi(events)).to_numpy(),
+    # Lxy estimate |dxy|/sin(dPhi(e, ptmiss))
+    'mele_log10_lxyEst':     lambda events: _log10_floor(np.abs(events.best_merged.dxy)/np.sin(_mele_METdPhi(events))).to_numpy(),
+    'mele_mindRj':           lambda events: events.best_merged.mindRj.to_numpy(),
+    'mele_mindPhiJ':         lambda events: events.best_merged.mindPhiJ.to_numpy(),
+    'mele_dRj0':             lambda events: events.best_merged.dRj0.to_numpy(),
+    'mele_log10_trkChi2':    lambda events: _log10_floor(events.best_merged.trkChi2).to_numpy(),
+    'mele_trkProb':          lambda events: events.best_merged.trkProb.to_numpy(),
+    'mele_numTrackerHits':   lambda events: events.best_merged.numTrackerHits.to_numpy(),
+    'mele_numPixHits':       lambda events: events.best_merged.numPixHits.to_numpy(),
+    'mele_ID':               lambda events: events.best_merged.ID.to_numpy(),
+    'mele_log10_PFRelIso':   lambda events: _log10_floor(events.best_merged.PFRelIso).to_numpy(),
+    'mele_log10_miniRelIso': lambda events: _log10_floor(events.best_merged.miniRelIso).to_numpy(),
+    'mele_log10_trkRelIso':  lambda events: _log10_floor(events.best_merged.trkRelIso).to_numpy(),
+    'mele_HoverE':           lambda events: events.best_merged.HoverE.to_numpy(),
+    'mele_EoverPInv':        lambda events: events.best_merged.abs1overEm1overP.to_numpy(),
+    'mele_dEtaSeed':         lambda events: events.best_merged.absdEtaSeed.to_numpy(),
+    'mele_dPhiIn':           lambda events: events.best_merged.absdPhiIn.to_numpy(),
+    'mele_sigmaIetaIeta':    lambda events: events.best_merged.full55sigmaIetaIeta.to_numpy(),
+    'mele_scEtaWidth':       lambda events: events.best_merged.scEtaWidth.to_numpy(),
+    'mele_scPhiWidth':       lambda events: events.best_merged.scPhiWidth.to_numpy(),
+    'mele_r9':               lambda events: np.minimum(events.best_merged.full55r9, 2).to_numpy(),
+    'mele_sigmaIphiIphi':    lambda events: np.minimum(events.best_merged.full55sigmaIphiIphi, 0.1).to_numpy(),
+    'mele_e1x5Frac':         lambda events: _clip_ratio(events.best_merged.full55e1x5/events.best_merged.full55e5x5).to_numpy(),
+    'mele_e2x5Frac':         lambda events: _clip_ratio(events.best_merged.full55e2x5Max/events.best_merged.full55e5x5).to_numpy(),
+    'mele_scNClus':          lambda events: events.best_merged.scClustersSize.to_numpy(),
+    'mele_scEoverP':         lambda events: _clip_ratio(events.best_merged.scEnergy/(events.best_merged.pt*np.cosh(events.best_merged.eta))).to_numpy(),
+    'mele_scRawFrac':        lambda events: _clip_ratio(events.best_merged.scRawE/events.best_merged.scEnergy).to_numpy(),
+    'mele_log10_dEtaSCTrk':  lambda events: _log10_floor(np.abs(events.best_merged.scEta - events.best_merged.eta)).to_numpy(),
+    'mele_missingInnerHits': lambda events: events.best_merged.expMissingInnerHits.to_numpy(),
+    'mele_conversionVeto':   lambda events: ak.values_astype(events.best_merged.conversionVeto,int).to_numpy(),
+    'mele_svProxyVxy':       lambda events: events.best_merged.svProxyVxy.to_numpy(),
 }
 
 def makeBDTinputs(events, features="comb11"):
