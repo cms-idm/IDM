@@ -278,9 +278,11 @@ def plot(args):
                   for i in range(len(COUNTS))} for g in groups}
     num = lambda s: float(s.replace("p", "."))
 
+    nsamp = sum(g.startswith("sample_") for g in groups)
+
     def lab(g):
         if g == "overall":
-            return "All 72 signal samples"
+            return "All %d signal samples" % nsamp
         k, _, v = g.partition("_")
         if k == "ctau":
             return "c#tau = %s mm (pooled over masses)" % v.replace("p", ".")
@@ -311,7 +313,7 @@ def plot(args):
                 "Lost by slimming, %s" % STAGE[s][0].lower()) for s in ("reco", "vtx")]
         if not any(gr.GetN() for gr, _ in top):
             return False
-        c = ROOT.TCanvas("c_" + base.name, "", 800, 850); cs._keep.append(c)
+        c = ROOT.TCanvas("c_" + base.name + ("_log" if log else ""), "", 800, 850)
         p1 = ROOT.TPad("p1_" + base.name, "", 0, 0.33, 1, 1); p2 = ROOT.TPad("p2_" + base.name, "", 0, 0, 1, 0.33)
         for p in (p1, p2):
             cs._keep.append(p); p.SetLeftMargin(0.15); p.SetRightMargin(0.04); p.SetTicks(1, 1)
@@ -321,7 +323,7 @@ def plot(args):
         for pad, ser, ylo, yhi, yt, s in (
                 (p1, top, 1e-3 if log else 0, 2 if log else ymax_of([x[0] for x in top], 0.62),
                  "Fraction of two-accepted events", 1.0),
-                (p2, bot, 1e-4 if log else 0, 1 if log else ymax_of([x[0] for x in bot], 0.70), "Lost fraction", 0.67 / 0.33)):
+                (p2, bot, 1e-4 if log else 0, 30 if log else ymax_of([x[0] for x in bot], 0.70), "Lost fraction", 0.67 / 0.33)):
             pad.cd(); pad.SetLogy(int(log))
             fr = pad.DrawFrame(xlo, ylo, xhi, yhi); cs._keep.append(fr)
             fr.GetYaxis().SetTitle(yt); fr.GetXaxis().SetTitle(XTITLE[v] if pad is p2 else "")
@@ -343,6 +345,7 @@ def plot(args):
         cs.legend([(gr, l, "lp") for gr, l in bot], y2=0.93, y1=0.70, x1=0.50, size=0.07)
         base.parent.mkdir(parents=True, exist_ok=True)
         c.SaveAs(str(base) + ("_log.png" if log else ".png"))
+        c.Close()
         return True
 
     for g in groups:
@@ -365,6 +368,8 @@ def plot(args):
     ctaus = sorted([g for g in groups if g.startswith("ctau_")], key=lambda g: num(g.split("_")[1]))
     samples = sorted([g for g in groups if g.startswith("sample_")], key=lambda g: (mass_key(g), num(g.split("ctau-")[1])))
     mlab = lambda g: "%g / %g" % mass_key(g)
+    separators = lambda cats: [i for i in range(1, len(cats)) if cats[i].startswith("sample_")
+                               and mass_key(cats[i - 1]) != mass_key(cats[i])]
 
     def summary(base, cats, labels, series_of, xtitle, legend_entries, vertical):
         nb = len(cats)
@@ -374,16 +379,19 @@ def plot(args):
         series = series_of()
         hi = max(y + eh for gr in series for y, eh in ((gr.GetPointY(i), gr.GetErrorYhigh(i)) for i in range(gr.GetN())))
         fr = ROOT.TH1D("f_" + base, "", nb, 0, nb); cs._keep.append(fr)
-        fr.SetMinimum(0); fr.SetMaximum(cs._round_up(hi / 0.68))
+        fr.SetMinimum(0); fr.SetMaximum(cs._round_up(hi / 0.6))
         for i, l in enumerate(labels):
             fr.GetXaxis().SetBinLabel(i + 1, l)
         fr.GetXaxis().SetTitle(xtitle); fr.GetYaxis().SetTitle("Lost / two-accepted events")
-        fr.GetXaxis().SetLabelSize(0.03 if vertical else 0.045); fr.GetYaxis().SetLabelSize(0.042)
+        fr.GetXaxis().SetLabelSize(0.04 if vertical else 0.05); fr.GetYaxis().SetLabelSize(0.042)
         fr.GetXaxis().SetTitleSize(0.045); fr.GetYaxis().SetTitleSize(0.05)
         fr.GetXaxis().SetTitleOffset(2.6 if vertical else 1.1); fr.GetYaxis().SetTitleOffset(1.1 if nb > 20 else 1.4)
         if vertical:
             fr.LabelsOption("v")
         fr.Draw("AXIS")
+        for xs in separators(cats):
+            sep = ROOT.TLine(xs, 0, xs, fr.GetMaximum()); sep.SetLineColor(ROOT.kGray); sep.SetLineStyle(3)
+            sep.Draw(); cs._keep.append(sep)
         tot = counts["overall"]
         lines = []
         for k, (ls, _) in (("lostReco", cs.OPEN_DASHED), ("lostVtx", cs.FILLED_SOLID)):
@@ -438,27 +446,30 @@ def plot(args):
             v = "%g" % num(ct.split("_")[1])
             ents += [(s[2 * ci], "c#tau %s mm, reco" % v, "p"), (s[2 * ci + 1], "c#tau %s mm, vertexed" % v, "p")]
         return ents + [(l[0], "All samples, reco", "l"), (l[1], "All samples, vertexed", "l")]
-    slabels = [mlab(g) if i % 4 == 1 else "" for i, g in enumerate(samples)]
+    # One label per mass point, on the first sample of its group; dotted separators between mass groups.
+    slabels = [mlab(g) if i == 0 or mass_key(samples[i - 1]) != mass_key(g) else "" for i, g in enumerate(samples)]
     summary("summary_sample", samples, slabels, sample_graphs, "m_{#chi} / #Deltam [GeV], 4 c#tau each", sample_leg, True)
 
     # Overlays: all masses (pooled over lifetimes) and all lifetimes (pooled over masses).
     odir = out / "overlay"
     odir.mkdir(parents=True, exist_ok=True)
-    QUANT = {"lostVtx": "Lost by slimming, vertexed / two-acc.", "vtxB": "Vertexed (slimmedDisplacedMuons) / two-acc.",
-             "vtxA": "Vertexed (displacedMuons) / two-acc."}
+    QUANT = {"lostVtx": ("Lost / two-accepted events", "Lost by slimming, vertexed"),
+             "vtxB": ("Vertexed / two-accepted events", "slimmedDisplacedMuons"),
+             "vtxA": ("Vertexed / two-accepted events", "displacedMuons")}
     for kind, gs, hdr in (("mass", masses, "m_{#chi} / #Deltam [GeV], pooled over c#tau"),
                           ("lifetime", ctaus, "c#tau [mm], pooled over masses")):
         many = len(gs) > 7
         styles = [(cs.COLORS[i // 3 % 7], (1, 2, 3)[i % 3], (20, 24, 21)[i % 3]) if many else (cs.COLORS[i], 1, 20)
                   for i in range(len(gs))]
         labs = [mlab(g) if kind == "mass" else "%g" % num(g.split("_")[1]) for g in gs]
-        for q, yt in QUANT.items():
+        for q, (yt, what) in QUANT.items():
             for v in EDGES:
                 ss = [(cs.eff_graph(get(g, q, v), get(g, "den", v), col, ls, mk), l) for g, (col, ls, mk), l in zip(gs, styles, labs)]
                 ss = [x for x in ss if x[0].GetN()]
                 base = odir / ("%s_%s_%s" % (kind, q, v))
                 if not many:
-                    cs.plot(str(base), [x[0] for x in ss], [x[1] for x in ss], XTITLE[v], yt, header=hdr, log=args.log)
+                    cs.plot(str(base), [x[0] for x in ss], [x[1] for x in ss], XTITLE[v], yt, lines=[what], header=hdr,
+                            log=args.log)
                     continue
                 rows = (len(ss) + 2) // 3 + 1
                 y1 = 0.89 - rows * 0.036
@@ -469,7 +480,8 @@ def plot(args):
                 for gr, _ in ss:
                     gr.Draw("P same")
                 cs.context(c, ())
-                cs.legend([(gr, l, "lp") for gr, l in ss], y2=0.89, y1=y1, x1=0.20, ncol=3, size=0.024, header=hdr)
+                cs.legend([(gr, l, "lp") for gr, l in ss], y2=0.89, y1=y1, x1=0.20, ncol=3, size=0.024,
+                          header="%s; %s" % (what, hdr))
                 cs.save(c, str(base), False, args.log)
 
     pct = lambda k, n: "%d (%.2f%%)" % (k, 100.0 * k / n) if n else "%d" % k
