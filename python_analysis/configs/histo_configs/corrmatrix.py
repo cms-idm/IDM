@@ -29,11 +29,13 @@ import awkward as ak
 
 _CONST = '_const'
 _LOG_FLOOR = 1e-4
+_LOG_CEIL = 1e8
 
-def _log10(x, floor=_LOG_FLOOR):
+def _log10(x, floor=_LOG_FLOOR, ceil=_LOG_CEIL):
     # heavy-tailed positive variables are log-scaled so Pearson isn't dominated
-    # by the tails; values at/below the floor are clamped to it
-    return np.log10(np.maximum(x, floor))
+    # by the tails; values are clamped to [floor, ceil] so x = 0 or x = inf (e.g. a
+    # division by zero) can't give -inf/+inf. Same scaling as skimmerTools._log10_floor
+    return np.log10(np.clip(x, floor, ceil))
 
 def _dphi(a, b):
     d = np.abs(a - b)
@@ -63,6 +65,8 @@ _VTX_VARS = [
     ('log10_maxMiniIso',    lambda v, ev: _log10(np.maximum(v.e1.miniRelIsoEleCorr, v.e2.miniRelIsoEleCorr))),
     ('mindRj',              lambda v, ev: v.mindRj),
     ('met_pt',              lambda v, ev: ev.PFMET.pt),
+    ('HT',                  lambda v, ev: ak.sum(ev.PFJet.pt, axis=1)),
+    ('nJets',               lambda v, ev: ak.num(ev.PFJet.pt, axis=1)),
 ]
 
 _MELE_VARS = [
@@ -72,7 +76,7 @@ _MELE_VARS = [
     ('log10_dxy_signif',    lambda me, ev: _log10(np.abs(me.dxy) / me.dxyErr)),
     ('log10_dz',            lambda me, ev: _log10(np.abs(me.dz))),
     ('log10_dz_signif',     lambda me, ev: _log10(np.abs(me.dz) / me.dzErr)),
-    ('logDxyDz',            lambda me, ev: np.log10(np.abs(me.dxy / me.dz))),
+    ('logDxyDz',            lambda me, ev: _log10(np.abs(me.dxy / me.dz))),
     ('METdPhi',             lambda me, ev: _dphi(me.phi, ev.PFMET.phi)),
     ('cosMETdPhi',          lambda me, ev: np.cos(_dphi(me.phi, ev.PFMET.phi))),
     # Lxy estimate |dxy|/sin(dPhi(e, ptmiss)); sin=0 gives inf and drops the event
@@ -95,11 +99,26 @@ _MELE_VARS = [
     ('sigmaIetaIeta',       lambda me, ev: me.full55sigmaIetaIeta),
     ('scEtaWidth',          lambda me, ev: me.scEtaWidth),
     ('scPhiWidth',          lambda me, ev: me.scPhiWidth),
+    # shower shape (full 5x5); e5x5 = 0 gives inf/nan and drops the event.
+    # r9 has a long tail (to ~80) and sigmaIphiIphi a sentinel at ~31.6, so both
+    # are clipped to keep Pearson from being dominated by them.
+    ('r9',                  lambda me, ev: np.minimum(me.full55r9, 2)),
+    ('sigmaIphiIphi',       lambda me, ev: np.minimum(me.full55sigmaIphiIphi, 0.1)),
+    ('e1x5Frac',            lambda me, ev: me.full55e1x5 / me.full55e5x5),
+    ('e2x5Frac',            lambda me, ev: me.full55e2x5Max / me.full55e5x5),
+    # supercluster
+    ('scNClus',             lambda me, ev: me.scClustersSize),
+    ('scEoverP',            lambda me, ev: me.scEnergy / (me.pt * np.cosh(me.eta))),
+    ('scRawFrac',           lambda me, ev: me.scRawE / me.scEnergy),
+    ('log10_dEtaSCTrk',     lambda me, ev: _log10(np.abs(me.scEta - me.eta))),
+    # (full55hcalDepth1/2OverEcal not included: identically 0 in the current ntuples)
     ('missingInnerHits',    lambda me, ev: me.expMissingInnerHits),
     ('conversionVeto',      lambda me, ev: me.conversionVeto),
     ('svProxyVxy',          lambda me, ev: me.svProxyVxy),
     ('met_leadPt_ratio',    lambda me, ev: ev.PFMET.pt / _lead_jet(ev, 'pt')),
     ('met_pt',              lambda me, ev: ev.PFMET.pt),
+    ('HT',                  lambda me, ev: ak.sum(ev.PFJet.pt, axis=1)),
+    ('nJets',               lambda me, ev: ak.num(ev.PFJet.pt, axis=1)),
 ]
 
 def _moment_hist(var_spec):

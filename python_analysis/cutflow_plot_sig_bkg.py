@@ -2,6 +2,7 @@
 import re
 import numpy as np
 import matplotlib.pyplot as plt
+import mplhep as hep
 import awkward as ak
 
 import sys
@@ -18,10 +19,37 @@ import json
 import os
 import glob
 
+plt.rcParams.update({
+    'font.size':        24,
+    'axes.titlesize':   32,
+    # Lift the title clear of the CMS / lumi label hep.cms.label draws just
+    # above the axes.
+    'axes.titlepad':    44,
+    'axes.labelsize':   34,
+    'xtick.labelsize':  30,
+    'ytick.labelsize':  30,
+    'legend.fontsize':  24,
+    'figure.titlesize': 32,
+})
+
+# Cut-name labels on the x-axis stay small so the long descriptions fit.
+CUT_LABEL_FS = 17
+CMS_LABEL_FS = 26
+LEGEND_FS = 20
+# Background labels are short, so they're packed into columns.
+BKG_LEGEND_NCOL = 3
+
+# Display name for each cut config (configs/cut_configs/<selection>_selection.py)
+SELECTION_NAMES = {
+    'an':    'Resolved Selection',
+    'aptrk': 'Merged Selection',
+}
+
 outdir = 'workarea'
 bkg_vers = 'Aug2026'
 sig_vers = 'Jul2026noID'
-selection = 'an'
+selection = 'aptrk'
+year = 2024
 hists = 'cutflow_only'
 
 saved_signal_hists = f"{outdir}/hists_sig{sig_vers}_{selection}-sel_{hists}.coffea"
@@ -30,7 +58,14 @@ plottag = f'sb{bkg_vers}_{selection}-sel'
 
 # All samples here are processed as year 2024; 'cutflow_cts' is already
 # xsec * getLumi(2024) * efficiency, so it's plotted as-is (no rescaling).
-LUMI_FB, _ = tools.getLumi(2024)
+LUMI_FB, _ = tools.getLumi(year)
+
+
+def _new_fig():
+    fig, ax = plt.subplots(figsize=(16, 12))
+    hep.cms.label('Private Work', data=True, year=year, lumi=round(LUMI_FB),
+                  com='13.6', ax=ax, fontsize=CMS_LABEL_FS)
+    return fig, ax
 
 
 # ---- Cut-column alignment ----------------------------------------------
@@ -104,6 +139,29 @@ def _auto_ylim(values, pad_decades=0.3):
     lo = 10 ** (np.floor(np.log10(min(finite))) - pad_decades)
     hi = 10 ** (np.ceil(np.log10(max(finite))) + pad_decades)
     return [lo, hi]
+
+def _make_room_for_legends(fig, ax, legends, values, gap=0.03):
+    """Raise the top of the y-axis so every plotted value sits below the
+    lowest legend edge (legends stay inside the axes, above the data)."""
+    fig.tight_layout()
+    fig.canvas.draw()
+    to_axes = ax.transAxes.inverted()
+    legend_bottom = min(to_axes.transform(leg.get_window_extent())[0][1] for leg in legends)
+    frac = legend_bottom - gap      # fraction of axes height left for the data
+    if frac <= 0.2:
+        return
+
+    log = ax.get_yscale() == 'log'
+    finite = [v for v in values if np.isfinite(v) and (v > 0 or not log)]
+    if not finite:
+        return
+    lo, _ = ax.get_ylim()
+    hi = max(finite)
+    if log:
+        lo_l, hi_l = np.log10(lo), np.log10(hi)
+        ax.set_ylim(lo, 10 ** (lo_l + (hi_l - lo_l) / frac))
+    else:
+        ax.set_ylim(lo, lo + (hi - lo) / frac)
 
 def _select_sig_points(sig_df, plot_dict):
     """Return [(point, sig_dict), ...] for the signal points matching
@@ -179,8 +237,7 @@ def plot_sig_bkg_yields(sig_histo, bkg_histos, sig_df_eff, sig_df_cts, bkg_df_ct
     if sig_df_wts is not None:
         sig_df_wts = realign_cutflow_df(sig_df_wts, sig_desc_to_idx, union_idx)
 
-    size = (16, 12)
-    fig, ax = plt.subplots(figsize=size)
+    fig, ax = _new_fig()
 
     plotted_vals = []
 
@@ -193,15 +250,17 @@ def plot_sig_bkg_yields(sig_histo, bkg_histos, sig_df_eff, sig_df_cts, bkg_df_ct
         bkg_processes = [p for p in bkg_selection if p != 'Total']
         doTotal = 'Total' in bkg_selection
 
+    bkg_handles, sig_handles = [], []
+
     for process in bkg_processes:
         color = ptools.bkg_cmap.get(process, 'gray')
         vals = bkg_df_cts.loc[process].values.astype(float)
-        ax.plot(x, vals, label=process, color=color, ls='--', lw=1.5, alpha=0.6)
+        bkg_handles += ax.plot(x, vals, label=process, color=color, ls='--', lw=1.5, alpha=0.6)
         plotted_vals.extend(vals)
 
     if doTotal:
         vals = bkg_df_cts.loc['Total'].values.astype(float)
-        ax.plot(x, vals, label='Total Bkg', color='black', ls='--', lw=3)
+        bkg_handles += ax.plot(x, vals, label='Total Bkg', color='black', ls='--', lw=3)
         plotted_vals.extend(vals)
 
     # signal lines, subset selected by m1/delta/ctau
@@ -220,11 +279,12 @@ def plot_sig_bkg_yields(sig_histo, bkg_histos, sig_df_eff, sig_df_cts, bkg_df_ct
             yerr_eff = np.sqrt(eff * (1 - eff) * sw2_all) / W_0
             norm = counts[0] / W_0                      # xsec * lumi for this signal point
             yerr = yerr_eff * norm
-            ax.errorbar(x, counts, yerr=yerr, label=label, color=color,
-                        fmt='-o', markersize=4, capsize=3, lw=2)
+            sig_handles.append(ax.errorbar(x, counts, yerr=yerr, label=label, color=color,
+                                           fmt='-o', markersize=4, capsize=3, lw=2))
+            plotted_vals.extend(counts + yerr)
         else:
-            ax.plot(x, counts, label=label, color=color,
-                    lw=2, marker='o', markersize=4)
+            sig_handles += ax.plot(x, counts, label=label, color=color,
+                                   lw=2, marker='o', markersize=4)
         plotted_vals.extend(counts)
 
     if plot_dict.get('doLog', True):
@@ -238,14 +298,23 @@ def plot_sig_bkg_yields(sig_histo, bkg_histos, sig_df_eff, sig_df_cts, bkg_df_ct
 
     ax.grid()
 
-    ax.set_ylabel(plot_dict.get('ylabel', 'Events'), fontsize=28)
-    ax.set_title(plot_dict.get('title', ''), fontsize=24)
+    ax.set_ylabel(plot_dict.get('ylabel', 'Events'))
+    ax.set_title(plot_dict.get('title', ''))
 
     ax.set_xticks(ticks=x, labels=cut_labels, rotation=45, ha='right')
-    ax.tick_params(axis='x', labelsize=17)
-    ax.tick_params(axis='y', labelsize=28)
+    ax.tick_params(axis='x', labelsize=CUT_LABEL_FS)
 
-    ax.legend(loc='upper right', fontsize=14, ncol=1)
+    # Background (short labels, packed in columns) upper left; signal upper right.
+    legends = []
+    if bkg_handles:
+        legends.append(ax.legend(handles=bkg_handles, loc='upper left',
+                                 ncol=BKG_LEGEND_NCOL, fontsize=LEGEND_FS))
+        ax.add_artist(legends[-1])
+    if sig_handles:
+        legends.append(ax.legend(handles=sig_handles, loc='upper right',
+                                 ncol=1, fontsize=LEGEND_FS))
+    if legends and plot_dict.get('ylim') is None:
+        _make_room_for_legends(fig, ax, legends, plotted_vals)
 
     if plot_dict.get('doSave', False):
         os.makedirs(plot_dict['outDir'], exist_ok=True)
@@ -280,8 +349,7 @@ def plot_sig_bkg_ratios(sig_histo, bkg_histos, sig_df_cts, bkg_df_cts, plot_dict
     bkg_total = bkg_df_cts.loc['Total'].values.astype(float)
     bkg_total = np.where(bkg_total > 0, bkg_total, np.nan)
 
-    size = (16, 12)
-    fig, ax = plt.subplots(figsize=size)
+    fig, ax = _new_fig()
 
     plotted_vals = []
 
@@ -314,19 +382,22 @@ def plot_sig_bkg_ratios(sig_histo, bkg_histos, sig_df_cts, bkg_df_cts, plot_dict
 
     ax.grid()
 
-    ax.set_ylabel(plot_dict.get('ylabel', r'$S/B$, $S/\sqrt{B}$'), fontsize=28)
-    ax.set_title(plot_dict.get('title', ''), fontsize=24)
+    ax.set_ylabel(plot_dict.get('ylabel', r'$S/B$, $S/\sqrt{B}$'))
+    ax.set_title(plot_dict.get('title', ''))
 
     ax.set_xticks(ticks=x, labels=cut_labels, rotation=45, ha='right')
-    ax.tick_params(axis='x', labelsize=17)
-    ax.tick_params(axis='y', labelsize=28)
+    ax.tick_params(axis='x', labelsize=CUT_LABEL_FS)
 
-    # color legend for signal points, plus line-style proxies for the two ratios
-    handles, labels = ax.get_legend_handles_labels()
-    handles += [plt.Line2D([], [], color='gray', ls='-', lw=2),
-                plt.Line2D([], [], color='gray', ls=':', lw=2.5)]
-    labels += [r'$S/B$', r'$S/\sqrt{B}$']
-    ax.legend(handles, labels, loc='best', fontsize=14, ncol=1, framealpha=0.9)
+    # line-style key for the two ratios upper left; color legend for signal points upper right
+    style_handles = [plt.Line2D([], [], color='gray', ls='-', lw=2, label=r'$S/B$'),
+                     plt.Line2D([], [], color='gray', ls=':', lw=2.5, label=r'$S/\sqrt{B}$')]
+    legends = [ax.legend(handles=style_handles, loc='upper left', ncol=1, fontsize=LEGEND_FS)]
+    ax.add_artist(legends[-1])
+    handles, _ = ax.get_legend_handles_labels()
+    if handles:
+        legends.append(ax.legend(handles=handles, loc='upper right', ncol=1, fontsize=LEGEND_FS))
+    if plot_dict.get('ylim') is None:
+        _make_room_for_legends(fig, ax, legends, plotted_vals)
 
     if plot_dict.get('doSave', False):
         os.makedirs(plot_dict['outDir'], exist_ok=True)
@@ -379,8 +450,6 @@ bkg_slim_overrides = utils.get_bkg_slim_cut_overrides(b_hists)
 for col in bkg_slim_overrides.columns:
     bkg_df_cts[col] = bkg_slim_overrides[col]
 
-lumi_tag = rf"$\mathcal{{L}}$ = {LUMI_FB:.0f} fb$^{{-1}}$ (2024)"
-
 plot_dict = {
 
     # Select signal points to display
@@ -396,7 +465,8 @@ plot_dict = {
     'doLog': True,
 
     'ylabel': 'Events',
-    'title': '',
+    # Signal-point parameters are shown in the legend; CMS label carries lumi/year
+    'title': f"Signal + Background Cutflow [{SELECTION_NAMES[selection]}]",
 
     # Plot saving
     'doSave': True,
@@ -409,7 +479,6 @@ deltas = [0.1]
 ctaus = [10]
 
 plot_dict['m1s'] = m1s; plot_dict['deltas'] = deltas; plot_dict['ctaus'] = ctaus
-plot_dict['title'] = rf"Signal + Background Cutflow [AN Selection, {lumi_tag}]: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm"
 plot_dict['outName'] = f'cutflow/cutflow_sig-bkg_{plottag}_ctau-{utils.stringfy_friendly(ctaus[0])}_delta-{utils.stringfy_friendly(deltas[0])}_m1-wide.png'
 
 plot_sig_bkg_all(s_hists, b_hists, sig_df_eff, sig_df_cts, bkg_df_cts, plot_dict, sig_df_wts=sig_df_wts)
@@ -419,7 +488,6 @@ deltas = [0.1]
 ctaus = [10]
 
 plot_dict['m1s'] = m1s; plot_dict['deltas'] = deltas; plot_dict['ctaus'] = ctaus
-plot_dict['title'] = rf"Signal + Background Cutflow [AN Selection, {lumi_tag}]: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm"
 plot_dict['outName'] = f'cutflow/cutflow_sig-bkg_{plottag}_ctau-{utils.stringfy_friendly(ctaus[0])}_delta-{utils.stringfy_friendly(deltas[0])}_m1-narrow.png'
 
 plot_sig_bkg_all(s_hists, b_hists, sig_df_eff, sig_df_cts, bkg_df_cts, plot_dict, sig_df_wts=sig_df_wts)
@@ -429,7 +497,6 @@ deltas = [0.1]
 ctaus = [1, 10, 100]
 
 plot_dict['m1s'] = m1s; plot_dict['deltas'] = deltas; plot_dict['ctaus'] = ctaus
-plot_dict['title'] = rf"Signal + Background Cutflow [AN Selection, {lumi_tag}]: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm"
 plot_dict['outName'] = f'cutflow/cutflow_sig-bkg_{plottag}_m1-{utils.stringfy_friendly(m1s[0])}_delta-{utils.stringfy_friendly(deltas[0])}.png'
 
 plot_sig_bkg_all(s_hists, b_hists, sig_df_eff, sig_df_cts, bkg_df_cts, plot_dict, sig_df_wts=sig_df_wts)
@@ -439,7 +506,6 @@ deltas = [0.1]
 ctaus = [1, 10, 100]
 
 plot_dict['m1s'] = m1s; plot_dict['deltas'] = deltas; plot_dict['ctaus'] = ctaus
-plot_dict['title'] = rf"Signal + Background Cutflow [AN Selection, {lumi_tag}]: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm"
 plot_dict['outName'] = f'cutflow/cutflow_sig-bkg_{plottag}_m1-{utils.stringfy_friendly(m1s[0])}_delta-{utils.stringfy_friendly(deltas[0])}.png'
 
 plot_sig_bkg_all(s_hists, b_hists, sig_df_eff, sig_df_cts, bkg_df_cts, plot_dict, sig_df_wts=sig_df_wts)

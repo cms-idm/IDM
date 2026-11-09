@@ -1,9 +1,16 @@
 import numpy as np
 import awkward as ak
+import json
+import os
 try:
-    from analysisTools.analysisSubroutines import getBtagWPs, hasGoodVertex
+    from analysisTools.analysisSubroutines import getBtagWPs, hasGoodVertex, getBDTscore_kfold
 except ModuleNotFoundError:  # run with ../analysisTools/ on sys.path (e.g. trainBDT/skimmerTools)
-    from analysisSubroutines import getBtagWPs, hasGoodVertex
+    from analysisSubroutines import getBtagWPs, hasGoodVertex, getBDTscore_kfold
+
+# k-fold merged-electron BDT (trainBDT/step2_trainBDT.py, feature set merged1). Note: any module-level name containing "cut" is picked up as a cut
+bdt_json = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../trainBDT/models/variables_BDTNov5_merged3_aptrkNov2.json')
+# key of this selection's threshold in the model JSON's thres_opt (written by trainBDT/step3_optimizeThreshold.py)
+sel_name = os.path.splitext(os.path.basename(__file__))[0]
 
 def _dphi(a, b):
     d = np.abs(a - b)
@@ -126,36 +133,16 @@ def cut9(events, info):
     cut = events.nMergedCandidates > 0
     return events[cut], name, desc, plots
 
-def cut10(events,info):
+def cut10(events, info):
     name = "cut10"
-    desc = r"Candidate $L_{xy}^{est} > 0.1cm$"
+    desc = "BDT score > optimized threshold"
     plots = True
-    cand = events.best_merged
-    dphi_e_met = _dphi(cand.phi, events.PFMET.phi)
-    lxyEst     = np.abs(cand.dxy) / np.sin(dphi_e_met)
-    cut = lxyEst > 0.1
-    return events[cut], name, desc, plots
-
-def cut11(events, info):
-    name = "cut11"
-    desc = r"Log$(|d_{xy}/d_z|) > -1$"
-    plots = False
-    cand = events.best_merged
-    cut = np.log10(np.abs(cand.dxy / cand.dz)) > -1
-    return events[cut], name, desc, plots
-
-def cut12(events, info):
-    name = "cut12"
-    desc = r"Electron Track $\chi^2/$df < 5"
-    plots = False
-    cand = events.best_merged
-    cut = cand.trkChi2 < 5.
-    return events[cut], name, desc, plots
-
-def cut13(events, info):
-    name = 'cut13'
-    desc = 'Mini Rel Iso < 0.9'
-    plots = True
-    cand = events.best_merged
-    cut = cand.miniRelIsoEleCorr < 0.9
+    with open(bdt_json) as fin:
+        vars_dict = json.load(fin)
+    if sel_name not in vars_dict.get('thres_opt', {}):
+        raise KeyError(f'{bdt_json} has no thres_opt["{sel_name}"]; run trainBDT/step3_optimizeThreshold.py with cut_config = {sel_name}.py')
+    thres = vars_dict['thres_opt'][sel_name]['value']
+    # BDT inputs are read from events.best_merged, which every event has after cut9
+    events['BDTScore'] = getBDTscore_kfold(events, bdt_json)
+    cut = events.BDTScore > thres
     return events[cut], name, desc, plots

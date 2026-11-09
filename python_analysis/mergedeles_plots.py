@@ -6,14 +6,19 @@ import analysisTools.utils as utils
 import os
 
 plt.rcParams.update({
-    'font.size':        20,
-    'axes.titlesize':   24,
-    'axes.labelsize':   20,
-    'xtick.labelsize':  20,
-    'ytick.labelsize':  20,
-    'legend.fontsize':  18,
-    'figure.titlesize': 24,
+    'font.size':        24,
+    'axes.titlesize':   32,
+    # Lift the title clear of the CMS / lumi label hep.cms.label draws just
+    # above the axes.
+    'axes.titlepad':    44,
+    'axes.labelsize':   34,
+    'xtick.labelsize':  30,
+    'ytick.labelsize':  30,
+    'legend.fontsize':  24,
+    'figure.titlesize': 32,
 })
+
+CMS_LABEL_FS = 26
 
 outdir    = 'workarea'
 vers      = 'Jul2026noID'
@@ -26,6 +31,28 @@ year   = 2024
 size   = (16, 12)
 
 s_hists = util.load(saved_signal_hists)[0]
+
+
+def _new_fig():
+    fig, ax = plt.subplots(figsize=size)
+    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax, fontsize=CMS_LABEL_FS)
+    return fig, ax
+
+
+def _legend_headroom(ax, leg, pad=0.04):
+    """Raise the y-axis top so the data sits below the (upper-placed) legend
+    instead of underneath it: the old y-range is squeezed into the bottom
+    (1 - legend height - pad) of the axes, in log or linear space."""
+    fig = ax.figure
+    fig.canvas.draw()
+    frac = leg.get_window_extent().height / ax.get_window_extent().height + pad
+    frac = min(frac, 0.6)
+    lo, hi = ax.get_ylim()
+    if ax.get_yscale() == 'log':
+        llo, lhi = np.log10(lo), np.log10(hi)
+        ax.set_ylim(lo, 10 ** (llo + (lhi - llo) / (1 - frac)))
+    else:
+        ax.set_ylim(lo, lo + (hi - lo) / (1 - frac))
 
 os.makedirs('plots', exist_ok=True)
 
@@ -43,8 +70,7 @@ def _plot_2d_group(varlist):
         h = s_hists[key][{'cut': cut, 'samp': sum}]
         if np.sum(h.values()) == 0:
             continue
-        fig, ax = plt.subplots(figsize=size)
-        hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+        fig, ax = _new_fig()
         hep.hist2dplot(h, ax=ax, norm=plt.matplotlib.colors.LogNorm(), cbarextend=True)
         ax.axline((0, 0), slope=1, color='k', linestyle=':', linewidth=2)
         if key not in _LINEAR_2D_KEYS:
@@ -88,8 +114,7 @@ def _plot_2d_group_sliced(varlist, samp_mask, out_suffix, title_suffix):
         h = s_hists[key][{'cut': cut, 'samp': samps}][{'samp': sum}]
         if np.sum(h.values()) == 0:
             continue
-        fig, ax = plt.subplots(figsize=size)
-        hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+        fig, ax = _new_fig()
         hep.hist2dplot(h, ax=ax, norm=plt.matplotlib.colors.LogNorm(), cbarextend=True)
         ax.axline((0, 0), slope=1, color='k', linestyle=':', linewidth=2)
         if key not in _LINEAR_2D_KEYS:
@@ -97,7 +122,9 @@ def _plot_2d_group_sliced(varlist, samp_mask, out_suffix, title_suffix):
             ax.set_yscale('log')
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
-        ax.set_title(f'Merged electron: {_TITLE_YLABELS.get(key, ylabel)} vs {xlabel} ({title_suffix})')
+        # Slice info on its own line: at the larger title font the one-line
+        # version runs off the figure.
+        ax.set_title(f'Merged electron: {_TITLE_YLABELS.get(key, ylabel)} vs {xlabel}\n({title_suffix})')
         plt.tight_layout()
         plt.savefig(f'plots/hist_{seltag}_{key}_{out_suffix}.png')
         plt.close(fig)
@@ -165,8 +192,7 @@ _mele_1d_dphi_vars = [
     ('mele_dphi_chi2_vs_genmet',     r'$\Delta\phi$(gen $\chi_2$, gen $p_{T}^{miss}$)',         'C3'),
 ]
 
-fig, ax = plt.subplots(figsize=size)
-hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+fig, ax = _new_fig()
 any_drawn = False
 for key, label, color in _mele_1d_dphi_vars:
     if key not in s_hists:
@@ -182,7 +208,9 @@ if any_drawn:
     ax.set_xlabel(r'$\Delta\phi$')
     ax.set_ylabel('A.U.')
     ax.set_title(r'Merged electron: reco-vs-gen $\Delta\phi$ comparison')
-    ax.legend()
+    leg = ax.legend(loc='upper right')
+    plt.tight_layout()
+    _legend_headroom(ax, leg)
     plt.tight_layout()
     plt.savefig(f'plots/hist_{seltag}_mele_dphi_reco_vs_gen_allsamps.png')
 plt.close(fig)
@@ -204,8 +232,7 @@ def _plot_pop_overlay(key, xlabel, out_name, log_x=False):
     h_displaced = h[{'pop': 'displaced'}]
     if np.sum(h_prompt.values()) == 0 and np.sum(h_displaced.values()) == 0:
         return
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = _new_fig()
     if np.sum(h_prompt.values()) > 0:
         hep.histplot(h_prompt, ax=ax, histtype='step', density=True, yerr=False,
                      label=r'Prompt (Gen $L_{xy} < 0.01$ cm)', color='C0', linewidth=2)
@@ -221,7 +248,9 @@ def _plot_pop_overlay(key, xlabel, out_name, log_x=False):
     ax.set_xlabel(xlabel)
     ax.set_ylabel('A.U.')
     ax.set_title(f'Merged electron: {xlabel}')
-    ax.legend()
+    leg = ax.legend(loc='upper right')
+    plt.tight_layout()
+    _legend_headroom(ax, leg)
     plt.tight_layout()
     plt.savefig(f'plots/hist_{seltag}_{out_name}_allsamps.png')
     plt.close(fig)

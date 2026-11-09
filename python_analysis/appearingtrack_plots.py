@@ -11,14 +11,42 @@ import analysisTools.plotTools as ptools
 warnings.filterwarnings('ignore', message='List indexing selection is experimental')
 
 plt.rcParams.update({
-    'font.size':        20,
-    'axes.titlesize':   24,
-    'axes.labelsize':   20,
-    'xtick.labelsize':  20,
-    'ytick.labelsize':  20,
-    'legend.fontsize':  16,
-    'figure.titlesize': 24,
+    'font.size':        24,
+    'axes.titlesize':   32,
+    # Lift the title clear of the CMS / lumi label hep.cms.label draws just
+    # above the axes.
+    'axes.titlepad':    44,
+    'axes.labelsize':   34,
+    'xtick.labelsize':  30,
+    'ytick.labelsize':  30,
+    'legend.fontsize':  24,
+    'figure.titlesize': 32,
 })
+
+CMS_LABEL_FS = 26
+FIGSIZE      = (16, 12)
+
+
+def _new_fig():
+    fig, ax = plt.subplots(figsize=FIGSIZE)
+    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax, fontsize=CMS_LABEL_FS)
+    return fig, ax
+
+
+def _legend_headroom(ax, leg, pad=0.04):
+    """Raise the y-axis top so the data sits below the (upper-placed) legend
+    instead of underneath it: the old y-range is squeezed into the bottom
+    (1 - legend height - pad) of the axes, in log or linear space."""
+    fig = ax.figure
+    fig.canvas.draw()
+    frac = leg.get_window_extent().height / ax.get_window_extent().height + pad
+    frac = min(frac, 0.6)
+    lo, hi = ax.get_ylim()
+    if ax.get_yscale() == 'log':
+        llo, lhi = np.log10(lo), np.log10(hi)
+        ax.set_ylim(lo, 10 ** (llo + (lhi - llo) / (1 - frac)))
+    else:
+        ax.set_ylim(lo, lo + (hi - lo) / (1 - frac))
 
 # ---- FIELDS: the two coffea files to plot from -----------------------------
 outdir      = 'workarea'
@@ -74,6 +102,20 @@ _VAR_TITLES = {
     'AT_mindRj':              r'Min $\Delta R$ to Jet',
     'AT_mindPhiJ':            r'Min $\Delta\phi$ to Jet',
     'AT_full55sigmaIetaIeta': r'$\sigma_{i\eta i\eta}$ (Full 5x5)',
+    'AT_scEtaWidth':          r'SC $\eta$ Width',
+    'AT_scPhiWidth':          r'SC $\phi$ Width',
+    'AT_full55r9':            r'$R_9$ (Full 5x5)',
+    'AT_full55sigmaIphiIphi': r'$\sigma_{i\phi i\phi}$ (Full 5x5)',
+    'AT_e1x5Frac':            r'$E_{1\times5}/E_{5\times5}$',
+    'AT_e2x5Frac':            r'$E_{2\times5}^{max}/E_{5\times5}$',
+    'AT_scClustersSize':      'N Clusters in SC',
+    'AT_scEoverP':            r'$E_{SC}/p$',
+    'AT_scRawFrac':           r'$E_{SC}^{raw}/E_{SC}$',
+    'AT_dEtaSCTrk':           r'$|\eta_{SC} - \eta_{trk}|$',
+    'AT_dRj0':                r'$\Delta R$ to Leading Jet',
+    'AT_met_leadPt_ratio':    r'$p_T^\mathrm{miss}$ / Leading Jet $p_T$',
+    'AT_HT':                  r'$H_T$',
+    'AT_nJets':               r'$N_\mathrm{jets}$',
     'AT_absdEtaSeed':         r'$|\Delta\eta_\mathrm{seed}|$',
     'AT_absdPhiIn':           r'$|\Delta\phi_\mathrm{in}|$',
     'AT_HoverE':              'H/E',
@@ -208,12 +250,12 @@ def _prep_sig_total(hs_cut, s_hists, s_pts, cut):
     return sig_total, sig_total_integrals, sig_total_fracs, sig_total_no_cand_frac
 
 
-def _finalize_plot(ax, h_ref, var, cut, outdir, tag, title_suffix, logy=doLogy):
+def _finalize_plot(ax, h_ref, var, cut, outdir, tag, title_suffix, logy=doLogy, legend_fs=None):
     """Shared axis labeling/scaling/saving for all plot variants."""
     phys_axis = [a for a in h_ref.axes.name if a not in _NONPHYS_AXES][0]
     ax.set_xlabel(h_ref.axes[phys_axis].label)
     ax.set_ylabel('Normalized Events')
-    ax.set_title(f'Appearing Track: {_VAR_TITLES.get(var, var)}')
+    ax.set_title(f'Merged Electron: {_VAR_TITLES.get(var, var)}')
     if logy:
         ax.set_yscale('log')
     # axes built with a log transform already have bins equally spaced in
@@ -222,7 +264,11 @@ def _finalize_plot(ax, h_ref, var, cut, outdir, tag, title_suffix, logy=doLogy):
     # -- just switch the x-axis to match the axis's native spacing.
     if getattr(h_ref.axes[phys_axis], 'transform', None) is not None:
         ax.set_xscale('log')
-    ax.legend(loc='best', fontsize=14, ncol=1)
+    # Legend pinned top-right with headroom added above the data for it (loc='best'
+    # can't avoid the data when the curves fill the whole frame).
+    leg = ax.legend(loc='upper right', fontsize=legend_fs, ncol=1)
+    plt.tight_layout()
+    _legend_headroom(ax, leg)
 
     os.makedirs(outdir, exist_ok=True)
     plt.tight_layout()
@@ -251,8 +297,7 @@ def plot_background(b_hists, bkg_cats, var, cut, outdir):
         print(f"Skipping {var} (background): nothing to plot at cut='{cut}'")
         return
 
-    fig, ax = plt.subplots(figsize=(12, 10))
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = _new_fig()
 
     cats_sorted = sorted(bkg_hists, key=lambda c: bkg_integrals[c], reverse=True)
     for i, cat in enumerate(cats_sorted):
@@ -290,8 +335,7 @@ def plot_signal(s_hists, s_pts, var, cut, outdir):
         print(f"Skipping {var} (signal): nothing to plot at cut='{cut}'")
         return
 
-    fig, ax = plt.subplots(figsize=(12, 10))
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = _new_fig()
 
     # signal: color by isMerged category (sig_colors), one linestyle per mass
     # point (shared across all categories). Legend gives each category's
@@ -313,7 +357,8 @@ def plot_signal(s_hists, s_pts, var, cut, outdir):
             ax.plot([], [], linestyle='none',
                      label=rf'Signal $m_1$ = {m1} GeV (no candidate electron, {sig_no_cand_fracs[m1]:.1%})')
 
-    _finalize_plot(ax, hs_cut, var, cut, f'{outdir}/signal', 'sig', 'Signal')
+    # 8 long entries: a size down from the default so the legend doesn't eat half the frame.
+    _finalize_plot(ax, hs_cut, var, cut, f'{outdir}/signal', 'sig', 'Signal', legend_fs=20)
 
 
 def plot_summary(s_hists, b_hists, bkg_cats, s_pts, var, cut, outdir):
@@ -338,8 +383,7 @@ def plot_summary(s_hists, b_hists, bkg_cats, s_pts, var, cut, outdir):
         print(f"Skipping {var} (summary): nothing to plot at cut='{cut}'")
         return
 
-    fig, ax = plt.subplots(figsize=(12, 10))
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = _new_fig()
 
     if bkg_total is not None:
         hep.histplot(bkg_total / bkg_total_integral, ax=ax, histtype='step', linewidth=2,
@@ -386,8 +430,7 @@ def plot_summarysimple(s_hists, b_hists, bkg_cats, s_pts, var, cut, outdir, logy
         print(f"Skipping {var} (summarysimple): nothing to plot at cut='{cut}'")
         return
 
-    fig, ax = plt.subplots(figsize=(12, 10))
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = _new_fig()
 
     if bkg_total is not None:
         hep.histplot(bkg_total / bkg_total_integral, ax=ax, histtype='step', linewidth=2,

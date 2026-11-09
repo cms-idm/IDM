@@ -6,14 +6,23 @@ import analysisTools.utils as utils
 import os
 
 plt.rcParams.update({
-    'font.size':        20,
-    'axes.titlesize':   24,
-    'axes.labelsize':   20,
-    'xtick.labelsize':  20,
-    'ytick.labelsize':  20,
-    'legend.fontsize':  18,
-    'figure.titlesize': 24,
+    'font.size':        24,
+    'axes.titlesize':   32,
+    # Lift the title clear of the CMS / lumi label hep.cms.label draws just
+    # above the axes.
+    'axes.titlepad':    44,
+    'axes.labelsize':   34,
+    'xtick.labelsize':  30,
+    'ytick.labelsize':  30,
+    'legend.fontsize':  28,
+    'figure.titlesize': 32,
 })
+
+CMS_LABEL_FS = 26
+
+
+def _cms_label(ax):
+    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax, fontsize=CMS_LABEL_FS)
 
 outdir    = 'workarea'
 vers      = 'Jul2026noID'
@@ -151,7 +160,7 @@ def _cats_overlay(field, cat_prefix, field_override=None, doLogy=False, varbin=F
     fname_key = fname_key or field
 
     fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    _cms_label(ax)
     any_drawn = False
     xlabel = None
     for cat, prefix in cat_prefix.items():
@@ -333,7 +342,7 @@ for hkey, doLogy in _VTX_ONLY_PAIR_FIELDS:
     if h is None or np.sum(h.values()) == 0:
         continue
     fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    _cms_label(ax)
     xlabel = h.axes[-1].label
     _histplot(h, ax, histtype='step', color=cat_styles['vtx']['color'], linewidth=2)
     ax.set_xlabel(xlabel)
@@ -401,6 +410,12 @@ _CAT_ORDER = ['zero', 'mele', 'mpho', 'res', 'vtx']
 _CAT_GEN_LXY_KEY = {c: f'{c}_gen_lxy' for c in _CAT_ORDER}
 
 
+def _wrap_cat(label):
+    # Two-line tick labels ("Merged\nelectron") so five categories fit side
+    # by side at slide-legible font sizes.
+    return label.replace(' ', '\n')
+
+
 def _cat_event_fracs(samp_sel):
     counts = {}
     for cat in _CAT_ORDER:
@@ -419,17 +434,17 @@ print("Section 2: category fractions (all-samples)")
 fracs, errs = _cat_event_fracs(sum)
 if sum(fracs.values()) > 0:
     fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    _cms_label(ax)
     x      = np.arange(len(_CAT_ORDER))
     vals   = [fracs[c] for c in _CAT_ORDER]
     errs_  = [errs[c]  for c in _CAT_ORDER]
     colors = [cat_styles[c]['color'] for c in _CAT_ORDER]
-    xlbls  = [cat_styles[c]['label'] for c in _CAT_ORDER]
+    xlbls  = [_wrap_cat(cat_styles[c]['label']) for c in _CAT_ORDER]
     ax.bar(x, vals, yerr=errs_,
            color=colors, alpha=0.8, edgecolor='black', linewidth=0.8,
            error_kw={'ecolor': 'black', 'capsize': 4, 'elinewidth': 1.2})
     ax.set_xticks(x)
-    ax.set_xticklabels(xlbls, fontsize=15)
+    ax.set_xticklabels(xlbls)
     ax.set_ylabel('Fraction of events')
     ax.set_ylim(0, None)
     ax.set_title('Reco category distribution — all samples')
@@ -448,7 +463,7 @@ def _cat_frac_series(pset):
         return False
 
     fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    _cms_label(ax)
     x     = np.arange(len(_CAT_ORDER))
     bar_w = 0.8 / n
     any_drawn = False
@@ -470,13 +485,13 @@ def _cat_frac_series(pset):
         plt.close(fig)
         return False
 
-    xlbls = [cat_styles[c]['label'] for c in _CAT_ORDER]
+    xlbls = [_wrap_cat(cat_styles[c]['label']) for c in _CAT_ORDER]
     ax.set_xticks(x)
-    ax.set_xticklabels(xlbls, fontsize=15)
+    ax.set_xticklabels(xlbls)
     ax.set_ylabel('Fraction of events')
     ax.set_ylim(0, None)
     ax.set_title('Reco category distribution')
-    ax.legend(fontsize=13)
+    ax.legend(fontsize=24)
     plt.tight_layout()
     tag = _param_tag(pset['m1s'], pset['deltas'], pset['ctaus'])
     plt.savefig(f'{plotdir}/hist_{seltag}_cat_frac_{tag}.png')
@@ -491,11 +506,12 @@ for pset in PARAM_SETS:
 print(f"  -> {n_made} per-series plots")
 
 
-# ── Section 2b: category fractions, zero match dropped, res+vtx merged ───────
-# Same per-series plots as above, but zero match is not drawn and res + vtx
-# are summed into a single "Resolved" bar. Fractions are still normalized to
-# all events (zero match included), so each bar matches the Section 2 values.
-_MERGED_CAT_GROUPS = {'mele': ['mele'], 'mpho': ['mpho'], 'res': ['res', 'vtx']}
+# ── Section 2b: category fractions, zero match + mpho dropped, res+vtx merged ─
+# Same per-series plots as above, but zero match and merged photon are not
+# drawn and res + vtx are summed into a single "Resolved" bar. Fractions are
+# still normalized to all events (zero match and mpho included), so each bar
+# matches the Section 2 values.
+_MERGED_CAT_GROUPS = {'mele': ['mele'], 'res': ['res', 'vtx']}
 
 
 def _merged_cat_event_fracs(samp_sel):
@@ -520,7 +536,7 @@ def _merged_cat_frac_series(pset):
         return False
 
     fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    _cms_label(ax)
     x     = np.arange(len(_MERGED_CAT_GROUPS))
     bar_w = 0.8 / n
     any_drawn = False
@@ -544,11 +560,11 @@ def _merged_cat_frac_series(pset):
 
     xlbls = [cat_styles[c]['label'] for c in _MERGED_CAT_GROUPS]
     ax.set_xticks(x)
-    ax.set_xticklabels(xlbls, fontsize=15)
+    ax.set_xticklabels(xlbls)
     ax.set_ylabel('Fraction of events')
     ax.set_ylim(0, None)
     ax.set_title('Reco category distribution')
-    ax.legend(fontsize=13)
+    ax.legend(fontsize=24)
     plt.tight_layout()
     tag = _param_tag(pset['m1s'], pset['deltas'], pset['ctaus'])
     plt.savefig(f'{plotdir}/hist_{seltag}_cat_frac_nozero_{tag}.png')
@@ -556,7 +572,7 @@ def _merged_cat_frac_series(pset):
     return True
 
 
-print("Section 2b: category fractions, no zero match, res+vtx merged (per-series)")
+print("Section 2b: category fractions, no zero match/mpho, res+vtx merged (per-series)")
 n_made = 0
 for pset in PARAM_SETS:
     n_made += _merged_cat_frac_series(pset)
@@ -590,8 +606,8 @@ def _reason_xtick_style(ncats):
     # rotate/shrink its tick labels further than the shorter reason plots to
     # keep them from overlapping.
     if ncats > 8:
-        return dict(rotation=40, ha='right', fontsize=14)
-    return dict(rotation=20, ha='right')
+        return dict(rotation=40, ha='right', rotation_mode='anchor', fontsize=24)
+    return dict(rotation=25, ha='right', rotation_mode='anchor', fontsize=26)
 
 
 def _reason_plot_allsamples(hkey, title, ylabel, fname):
@@ -599,9 +615,9 @@ def _reason_plot_allsamples(hkey, title, ylabel, fname):
     if cats is None:
         return False
     fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    _cms_label(ax)
     ax.bar(cats, fracs, color='C0')
-    val_fs = 12 if len(cats) > 8 else None
+    val_fs = 18 if len(cats) > 8 else 22
     for i, f in enumerate(fracs):
         ax.text(i, f, f'{f:.2f}', ha='center', va='bottom', fontsize=val_fs)
     ax.set_ylabel(ylabel)
@@ -627,7 +643,7 @@ def _reason_plot_series(hkey, pset, title, ylabel, fname):
         return False
 
     fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    _cms_label(ax)
     x = np.arange(len(ref_cats))
     width = 0.8 / n
     any_drawn = False
@@ -651,7 +667,7 @@ def _reason_plot_series(hkey, pset, title, ylabel, fname):
     ax.set_xticklabels(ref_cats, **_reason_xtick_style(len(ref_cats)))
     ax.set_ylabel(ylabel)
     ax.set_title(title)
-    ax.legend(fontsize=13)
+    ax.legend(fontsize=24)
     plt.tight_layout()
     tag = _param_tag(pset['m1s'], pset['deltas'], pset['ctaus'])
     plt.savefig(f'{plotdir}/hist_{seltag}_{fname}_{tag}.png')
@@ -660,10 +676,12 @@ def _reason_plot_series(hkey, pset, title, ylabel, fname):
 
 
 print("Section 3: why isn't this merged-electron event resolved? (all-samples + per-series)")
+# Two-line ylabel: the one-line version is taller than the axes at slide font sizes.
+_FAILREASON_YLABEL = 'Fraction of opposite-charge\nmele_nearestEle pairs'
 _reason_plot_allsamples(
     'mele_nearestEle_oppQ_failreason',
     'Why is this pair not resolved?',
-    'Fraction of opposite-charge mele_nearestEle pairs',
+    _FAILREASON_YLABEL,
     'mele_nearestEle_oppQ_failreason',
 )
 n_made = 0
@@ -671,7 +689,7 @@ for pset in PARAM_SETS:
     n_made += _reason_plot_series(
         'mele_nearestEle_oppQ_failreason', pset,
         'Why is this pair not resolved?',
-        'Fraction of opposite-charge mele_nearestEle pairs',
+        _FAILREASON_YLABEL,
         'mele_nearestEle_oppQ_failreason',
     )
 print(f"  -> {n_made} per-series plots")

@@ -2,10 +2,15 @@ import numpy as np
 import awkward as ak
 import json
 import os
-from analysisTools.analysisSubroutines import getBtagWPs, hasGoodVertex, getBDTscore_kfold
+try:
+    from analysisTools.analysisSubroutines import getBtagWPs, hasGoodVertex, getBDTscore_kfold
+except ModuleNotFoundError:  # run with ../analysisTools/ on sys.path (e.g. trainBDT/skimmerTools)
+    from analysisSubroutines import getBtagWPs, hasGoodVertex, getBDTscore_kfold
 
 # k-fold BDT (trainBDT/BDTutils_kfold.train_bdt). Note: any module-level name containing "cut" is picked up as a cut
 bdt_json = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../trainBDT/models/variables_BDT_AN_TestOct28.json')
+# key of this selection's threshold in the model JSON's thres_opt (written by trainBDT/step3_optimizeThreshold.py)
+sel_name = os.path.splitext(os.path.basename(__file__))[0]
 
 def _dphi(a, b):
     d = np.abs(a - b)
@@ -145,13 +150,13 @@ def cut12(events,info):
 
 def cut13(events, info):
     name = "cut13"
-    desc = "BDT score > medium WP"
+    desc = "BDT score > optimized threshold"
     plots = True
     with open(bdt_json) as fin:
         vars_dict = json.load(fin)
-    if 'thres_WP' not in vars_dict:
-        raise KeyError(f'{bdt_json} has no thres_WP; retrain with step2_trainBDT.py or add it by hand')
-    thres = vars_dict['thres_WP']['medium']
+    if sel_name not in vars_dict.get('thres_opt', {}):
+        raise KeyError(f'{bdt_json} has no thres_opt["{sel_name}"]; run trainBDT/step3_optimizeThreshold.py with cut_config = {sel_name}.py')
+    thres = vars_dict['thres_opt'][sel_name]['value']
     events['BDTScore'] = getBDTscore_kfold(events, bdt_json)
     cut = events.BDTScore > thres
     return events[cut], name, desc, plots

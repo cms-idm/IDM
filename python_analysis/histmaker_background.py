@@ -19,7 +19,7 @@ import glob
 
 # ---- SETTINGS ----
 vers = 'Aug2026'
-cuts = 'an'
+cuts = 'aptrk'
 hists = 'cutflow_only'
 
 
@@ -31,6 +31,7 @@ outdir = 'workarea'
 
 # ---- SIGNAL -------------------------------------
 sample_config = f"configs/sample_configs/bkg_2024_{vers}.json"
+#ample_config = f"configs/sample_configs/bkg_2024_{vers}_skimmed.json"
 slimmed_config = f"configs/sample_configs/bkg_2024_{vers}-slim.json"
 
 # slim ntuples are only needed to fill the cutflow_slim/'passHLT' entries -- set to

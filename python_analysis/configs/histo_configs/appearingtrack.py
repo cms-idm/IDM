@@ -30,6 +30,28 @@ _calIso    = Regular(50,  0,  50,  name='iso',       label='Calo Iso [GeV]')
 _calRelIso = Regular(50,  0,   5,  name='relIso',    label='Calo Relative Iso')
 _rhoEA     = Regular(50,  0,  20,  name='rhoEA',     label=r'$\rho \times EA$ [GeV]')
 _sieie     = Regular(50,  0,0.05,  name='sieie',     label=r'$\sigma_{i\eta i\eta}$')
+_scEtaW    = Regular(50,  0, 0.5,  name='scEtaWidth', label=r'SC $\eta$ Width')
+_scPhiW    = Regular(50,  0, 0.5,  name='scPhiWidth', label=r'SC $\phi$ Width')
+# Shower shape (full 5x5). The e1x5/e5x5 and e2x5Max/e5x5 ratios are -1
+# (underflow) when e5x5 <= 0 -- see _safe_ratio in fillHistos. Both ratios are
+# exactly 1 for a large fraction of electrons (~30-40% in signal), so the axes
+# extend one bin past 1 to keep those out of overflow. sigmaIphiIphi has a
+# sentinel at ~31.6 in the ntuple, which lands in overflow here.
+_r9        = Regular(50,  0, 1.2,  name='r9',        label=r'Full5x5 $R_9$')
+_sipip     = Regular(50,  0, 0.1,  name='sipip',     label=r'Full5x5 $\sigma_{i\phi i\phi}$')
+_e1x5Frac  = Regular(51,  0, 1.02, name='e1x5Frac',  label=r'Full5x5 $E_{1\times5}/E_{5\times5}$')
+_e2x5Frac  = Regular(51,  0, 1.02, name='e2x5Frac',  label=r'Full5x5 $E_{2\times5}^{max}/E_{5\times5}$')
+# Supercluster
+_scNClus   = Integer(0,   10,      name='scNClus',   label='N Clusters in SC')
+_scEoverP  = Regular(50,  0, 5,    name='scEoverP',  label=r'$E_{SC}/p$')
+_scRawFrac = Regular(50,  0, 1.5,  name='scRawFrac', label=r'$E_{SC}^{raw}/E_{SC}$')
+_dEtaSCTrk = Regular(50, 1e-4, 1,  name='dEtaSCTrk', label=r'$|\eta_{SC} - \eta_{trk}|$', transform=hist.axis.transform.log)
+# (full55hcalDepth1/2OverEcal not included: identically 0 in the current ntuples)
+# Jets / event level
+_dRj0      = Regular(50,  0,   5,  name='drj0',      label=r'$\Delta R(e, j_0)$')
+_metLeadPt = Regular(50,  0,  10,  name='metLeadPt', label=r'$p_T^{miss}/p_T^{j_0}$')
+_HT        = Regular(50,  0, 1000, name='HT',        label=r'$H_T$ [GeV]')
+_nJets     = Integer(0,   10,      name='nJets',     label=r'$N_{jets}$')
 _dEtaSeed  = Regular(50,  0,0.01,  name='dEtaSeed',  label=r'$|\Delta\eta_\mathrm{seed}|$')
 _dPhiIn    = Regular(50,  0, 0.1,  name='dPhiIn',    label=r'$|\Delta\phi_\mathrm{in}|$')
 _HoE       = Regular(50,  0,   1,  name='HoE',       label='H/E')
@@ -129,6 +151,17 @@ _ELE_HISTS = [
     ('mindRj',              _dRj),
     ('mindPhiJ',            _dPhiJ),
     ('full55sigmaIetaIeta', _sieie),
+    ('scEtaWidth',          _scEtaW),
+    ('scPhiWidth',          _scPhiW),
+    ('full55r9',            _r9),
+    ('full55sigmaIphiIphi', _sipip),
+    ('e1x5Frac',            _e1x5Frac),   # derived in fillHistos
+    ('e2x5Frac',            _e2x5Frac),   # derived in fillHistos
+    ('scClustersSize',      _scNClus),
+    ('scEoverP',            _scEoverP),   # derived in fillHistos
+    ('scRawFrac',           _scRawFrac),  # derived in fillHistos
+    ('dEtaSCTrk',           _dEtaSCTrk),  # derived in fillHistos
+    ('dRj0',                _dRj0),
     ('absdEtaSeed',         _dEtaSeed),
     ('absdPhiIn',           _dPhiIn),
     ('HoverE',              _HoE),
@@ -170,6 +203,9 @@ def make_histograms():
     histograms['AT_lxyEst']            = Hist(samp, cut, isMerged, _lxyEst_log,  storage=hist.storage.Weight())
     histograms['AT_log10dxydz']        = Hist(samp, cut, isMerged, _log10dxydz,  storage=hist.storage.Weight())
     histograms['AT_dxy_vs_dphi']       = Hist(samp, cut, isMerged, _dxy_log, _dphi_log, storage=hist.storage.Weight())
+    histograms['AT_met_leadPt_ratio']  = Hist(samp, cut, isMerged, _metLeadPt,   storage=hist.storage.Weight())
+    histograms['AT_HT']                = Hist(samp, cut, isMerged, _HT,          storage=hist.storage.Weight())
+    histograms['AT_nJets']             = Hist(samp, cut, isMerged, _nJets,       storage=hist.storage.Weight())
     return histograms
 
 subroutines = ['computeMergedCatVars']
@@ -209,6 +245,16 @@ def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
     ele = ak.with_field(ele, ak.fill_none(ak.min(ele.dPhiJets, axis=-1), 999), 'mindPhiJ')
     ele = ak.with_field(ele, ak.fill_none(ak.min(dr_ee,        axis=-1), 999), 'drNearestEle')
 
+    # Shower-shape / supercluster ratios. A non-positive denominator gives -1
+    # (lands in underflow) rather than inf/nan.
+    def _safe_ratio(num, den):
+        return ak.where(den > 0, num / ak.where(den > 0, den, 1), -1)
+    ele = ak.with_field(ele, _safe_ratio(ele.full55e1x5,    ele.full55e5x5), 'e1x5Frac')
+    ele = ak.with_field(ele, _safe_ratio(ele.full55e2x5Max, ele.full55e5x5), 'e2x5Frac')
+    ele = ak.with_field(ele, _safe_ratio(ele.scEnergy, ele.pt * np.cosh(ele.eta)), 'scEoverP')
+    ele = ak.with_field(ele, _safe_ratio(ele.scRawE,   ele.scEnergy),            'scRawFrac')
+    ele = ak.with_field(ele, np.abs(ele.scEta - ele.eta), 'dEtaSCTrk')
+
     # Merged-electron flag (signal only), computed by computeMergedCatVars
     # (analysisTools/analysisSubroutines.py) using the same definition as the
     # merged-electron category in mergedcats.py.
@@ -239,3 +285,10 @@ def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
     hists['AT_lxyEst'           ].fill(samp=samp, cut=cut, isMerged=isMerged_label, lxyEst=lxyEst,     weight=wgt)
     hists['AT_log10dxydz'       ].fill(samp=samp, cut=cut, isMerged=isMerged_label, log10dxydz=log10dxydz, weight=wgt)
     hists['AT_dxy_vs_dphi'      ].fill(samp=samp, cut=cut, isMerged=isMerged_label, dxy=np.abs(ele.dxy), dphi=dphi_e_met, weight=wgt)
+
+    # Jet/event-level. MET/leading-jet pT is -1 (underflow) for events with no PFJet.
+    lead_jet_pt = ak.fill_none(ak.firsts(evts.PFJet.pt), 0)
+    met_lead    = ak.where(lead_jet_pt > 0, ptmiss / ak.where(lead_jet_pt > 0, lead_jet_pt, 1), -1)
+    hists['AT_met_leadPt_ratio' ].fill(samp=samp, cut=cut, isMerged=isMerged_label, metLeadPt=met_lead, weight=wgt)
+    hists['AT_HT'               ].fill(samp=samp, cut=cut, isMerged=isMerged_label, HT=ak.sum(evts.PFJet.pt, axis=1), weight=wgt)
+    hists['AT_nJets'            ].fill(samp=samp, cut=cut, isMerged=isMerged_label, nJets=ak.num(evts.PFJet.pt, axis=1), weight=wgt)
