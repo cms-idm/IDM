@@ -20,6 +20,10 @@ public:
     void SetTree(TTree *tree);
     void CreateTreeBranches();
     void ClearTreeBranches();
+    // Slim tree: event-level-only branches, filled for every event regardless
+    // of any downstream preselection (see SetSlimTree/CreateSlimTreeBranches).
+    void SetSlimTree(TTree *tree);
+    void CreateSlimTreeBranches();
 
     // Trigger and event-level branches
     unsigned int fired_;
@@ -33,7 +37,6 @@ public:
     int numTrigs_ = 0;
     
     float fixedGridRhoFastjetAll_;
-
     // MET Filters
     uint32_t METFiltersFailBits_;
 
@@ -42,12 +45,16 @@ public:
     //////////////////////
     
     // Gen particles
-    int nGen_;
     float genwgt_;
     int genpuobs_;
     int genputrue_;
+
+    // All gen particles. This is the single complete gen-particle collection.
+    int nGen_;
     vector<int> genID_;
-    vector<int> genMotherID_;
+    vector<int> genMotherID_;                 // immediate mother PDG ID
+    vector<int> genPartFirstDifferentMotherID_;   // first mother after walking through same-PDG copies
+    vector<int> genPartStatus_;
     vector<int> genCharge_;
     vector<float> genPt_;
     vector<float> genEta_;
@@ -61,26 +68,6 @@ public:
     vector<float> genVx_;
     vector<float> genVy_;
     vector<float> genMass_;
-
-    // All gen particles. This is the single complete gen-particle collection.
-    int nGenParticle_;
-    vector<int> genPartID_;
-    vector<int> genPartMotherID_;                 // immediate mother PDG ID
-    vector<int> genPartFirstDifferentMotherID_;   // first mother after walking through same-PDG copies
-    vector<int> genPartStatus_;
-    vector<int> genPartCharge_;
-    vector<float> genPartPt_;
-    vector<float> genPartEta_;
-    vector<float> genPartPhi_;
-    vector<float> genPartEn_;
-    vector<float> genPartPx_;
-    vector<float> genPartPy_;
-    vector<float> genPartPz_;
-    vector<float> genPartVxy_;
-    vector<float> genPartVz_;
-    vector<float> genPartVx_;
-    vector<float> genPartVy_;
-    vector<float> genPartMass_;
     vector<int> genPartIsFirstCopy_;
     vector<int> genPartIsLastCopy_;
     vector<int> genPartIsLastCopyBeforeFSR_;
@@ -95,7 +82,7 @@ public:
     // This includes charged leptons and neutrinos. No kinematic, geometric,
     // hard-process, status, or copy requirement is applied.
     // genLeptonGenParticleIdx_ links each entry back to the authoritative
-    // GenParticle_* collection.
+    // GenPart_* collection.
     //
     // Station-2 propagation status:
     //   0 = not attempted because the lepton is neutral
@@ -571,7 +558,7 @@ public:
     vector<math::XYZTLorentzVector> propPFMuonSt4P4_;
     vector<float> propPFMuonSt4PositionEta_;
     vector<float> propPFMuonSt4PositionPhi_;
-
+    
     // Normal Electrons
     int nElectronDefault_;
     vector<float> recoElectronPt_;
@@ -597,6 +584,12 @@ public:
     vector<float> recoElectronE_;
     vector<float> recoElectronVxy_;
     vector<float> recoElectronVz_;
+    // SV-proxy displacement estimated from the tracker layer of the innermost valid hit
+    vector<bool> recoElectronSVProxyValid_;
+    vector<float> recoElectronSVProxyX_;
+    vector<float> recoElectronSVProxyY_;
+    vector<float> recoElectronSVProxyZ_;
+    vector<float> recoElectronSVProxyVxy_;
     vector<float> recoElectronDxy_;
     vector<float> recoElectronDxyError_;
     vector<float> recoElectronDz_;
@@ -653,6 +646,12 @@ public:
     vector<float> recoLowPtElectronE_;
     vector<float> recoLowPtElectronVxy_;
     vector<float> recoLowPtElectronVz_;
+    // SV-proxy displacement estimated from the tracker layer of the innermost valid hit
+    vector<bool> recoLowPtElectronSVProxyValid_;
+    vector<float> recoLowPtElectronSVProxyX_;
+    vector<float> recoLowPtElectronSVProxyY_;
+    vector<float> recoLowPtElectronSVProxyZ_;
+    vector<float> recoLowPtElectronSVProxyVxy_;
     vector<float> recoLowPtElectronDxy_;
     vector<float> recoLowPtElectronDxyError_;
     vector<float> recoLowPtElectronDz_;
@@ -693,11 +692,28 @@ public:
     vector<int> recoLowPtElectronExpMissingInnerHits_;
     vector<bool> recoLowPtElectronConversionVeto_;
     vector<bool> recoLowPtElectronIsEE_;
+    // supercluster
+    vector<float> recoLowPtElectronScRawE_;
+    vector<float> recoLowPtElectronScEnergy_;
+    vector<float> recoLowPtElectronScEta_;
+    vector<float> recoLowPtElectronScPhi_;
+    vector<float> recoLowPtElectronScEtaWidth_;
+    vector<float> recoLowPtElectronScPhiWidth_;
+    vector<int> recoLowPtElectronScClustersSize_;
+    // additional shower shapes
+    vector<float> recoLowPtElectronFull5x5R9_;
+    vector<float> recoLowPtElectronFull5x5E5x5_;
+    vector<float> recoLowPtElectronFull5x5E1x5_;
+    vector<float> recoLowPtElectronFull5x5E2x5Max_;
+    vector<float> recoLowPtElectronFull5x5SigmaIphiIphi_;
+    vector<float> recoLowPtElectronFull5x5HcalDepth1OverEcal_;
+    vector<float> recoLowPtElectronFull5x5HcalDepth2OverEcal_;
+    // special variables for the x-cleaning study
     vector<bool> recoLowPtElectronIsXCleaned_;
     vector<int> recoLowPtElectronGEDidx_;
     vector<bool> recoLowPtElectronGEDisMatched_;
 
-    // All Low pT electrons
+    // All Low pT electrons (includes cross-cleaned)
     int nElectronAllLowPt_;
     vector<float> recoAllLowPtElectronPt_;
     vector<float> recoAllLowPtElectronEta_;
@@ -709,6 +725,12 @@ public:
     vector<float> recoAllLowPtElectronE_;
     vector<float> recoAllLowPtElectronVxy_;
     vector<float> recoAllLowPtElectronVz_;
+    // SV-proxy displacement estimated from the tracker layer of the innermost valid hit
+    vector<bool> recoAllLowPtElectronSVProxyValid_;
+    vector<float> recoAllLowPtElectronSVProxyX_;
+    vector<float> recoAllLowPtElectronSVProxyY_;
+    vector<float> recoAllLowPtElectronSVProxyZ_;
+    vector<float> recoAllLowPtElectronSVProxyVxy_;
     vector<float> recoAllLowPtElectronDxy_;
     vector<float> recoAllLowPtElectronDxyError_;
     vector<float> recoAllLowPtElectronDz_;
@@ -749,6 +771,23 @@ public:
     vector<int> recoAllLowPtElectronExpMissingInnerHits_;
     vector<bool> recoAllLowPtElectronConversionVeto_;
     vector<bool> recoAllLowPtElectronIsEE_;
+    // supercluster
+    vector<float> recoAllLowPtElectronScRawE_;
+    vector<float> recoAllLowPtElectronScEnergy_;
+    vector<float> recoAllLowPtElectronScEta_;
+    vector<float> recoAllLowPtElectronScPhi_;
+    vector<float> recoAllLowPtElectronScEtaWidth_;
+    vector<float> recoAllLowPtElectronScPhiWidth_;
+    vector<int> recoAllLowPtElectronScClustersSize_;
+    // additional shower shapes
+    vector<float> recoAllLowPtElectronFull5x5R9_;
+    vector<float> recoAllLowPtElectronFull5x5E5x5_;
+    vector<float> recoAllLowPtElectronFull5x5E1x5_;
+    vector<float> recoAllLowPtElectronFull5x5E2x5Max_;
+    vector<float> recoAllLowPtElectronFull5x5SigmaIphiIphi_;
+    vector<float> recoAllLowPtElectronFull5x5HcalDepth1OverEcal_;
+    vector<float> recoAllLowPtElectronFull5x5HcalDepth2OverEcal_;
+    // x-cleaning status and GED match info
     vector<bool> recoAllLowPtElectronIsXCleaned_;
     vector<int> recoAllLowPtElectronGEDidx_;
     vector<bool> recoAllLowPtElectronGEDisMatched_;
@@ -864,16 +903,16 @@ public:
     std::vector<float> recoDSAMuonDzError_;
     std::vector<float> recoDSAMuonTrkChi2_;
     std::vector<float> recoDSAMuonTrkProb_;
-    std::vector<int> recoDSAMuonTrkNumTrackerHits_;
-    std::vector<int> recoDSAMuonTrkNumPixHits_;
-    std::vector<int> recoDSAMuonTrkNumStripHits_;
-    std::vector<int> recoDSAMuonCharge_;
-    std::vector<int> recoDSAMuonDisplacedId_;
-    std::vector<int> recoDSAMuonTrkNumCSCHits_;
-    std::vector<int> recoDSAMuonTrkNumHits_;
-    std::vector<int> recoDSAMuonTrkNumPlanes_;
-    std::vector<int> recoDSAMuonTrkNumDTHits_;
-    std::vector<int> recoDSAMuonIdx_;
+    std::vector<int>   recoDSAMuonTrkNumTrackerHits_;
+    std::vector<int>   recoDSAMuonTrkNumPixHits_;
+    std::vector<int>   recoDSAMuonTrkNumStripHits_;
+    std::vector<int>   recoDSAMuonCharge_;
+    std::vector<int>   recoDSAMuonDisplacedId_;
+    std::vector<int>   recoDSAMuonTrkNumCSCHits_;
+    std::vector<int>   recoDSAMuonTrkNumHits_;
+    std::vector<int>   recoDSAMuonTrkNumPlanes_;
+    std::vector<int>   recoDSAMuonTrkNumDTHits_;
+    std::vector<int>   recoDSAMuonIdx_;
     std::vector<math::XYZTLorentzVector> recoDSAMuonP4_;
     
     // DSA reco tracks propagated to muon-station surfaces
@@ -958,12 +997,33 @@ public:
     vector<float> PhotonEt_;
     vector<float> PhotonEta_;
     vector<float> PhotonPhi_;
+    vector<float> PhotonPt_;
 
     // OOT Photons
     int nOOTPhotons_;
     vector<float> ootPhotonEt_;
     vector<float> ootPhotonEta_;
     vector<float> ootPhotonPhi_;
+    vector<float> ootPhotonPt_;
+
+    // Isolated Tracks
+    int nIsoTrack_;
+    vector<float> isoTrackPt_;
+    vector<float> isoTrackEta_;
+    vector<float> isoTrackPhi_;
+
+    // PF Candidates (charged only, cross-cleaned against electrons)
+    int nPFCand_;
+    vector<float> pfCandPt_;
+    vector<float> pfCandEta_;
+    vector<float> pfCandPhi_;
+
+    // Lost Tracks (charged pat::PackedCandidates not promoted to PF candidates;
+    // cross-cleaned against electrons).
+    int nLostTrack_;
+    vector<float> lostTrackPt_;
+    vector<float> lostTrackEta_;
+    vector<float> lostTrackPhi_;
 
     // Photon conversions
     int nConversions_;
@@ -1061,6 +1121,8 @@ public:
     vector<float> PFJetCorrectedJERDownEta_;
     vector<float> PFJetCorrectedJERDownPhi_;
     bool PFHEMFlag_;
+    float PFHT_;
+    float PFJetPtLeading_;
 
     // MET
     float PFMET_ET_;
@@ -1148,9 +1210,64 @@ public:
     vector<float> vtx_e2_refitDzErr_;
     vector<float> vtx_e2_refitChi2_;
 
+    // LowPt-only Electron-positron vertices
+    int nlptvtx_;
+    vector<std::string> lptvtx_type_;
+    vector<float> lptvtx_recoVtxVxy_;
+    vector<float> lptvtx_recoVtxSigmaVxy_;
+    vector<float> lptvtx_recoVtxVx_;
+    vector<float> lptvtx_recoVtxVy_;
+    vector<float> lptvtx_recoVtxVz_;
+    vector<float> lptvtx_recoVtxReducedChi2_;
+    vector<float> lptvtx_prob_;
+    vector<float> lptvtx_recoVtxDr_;
+    vector<int> lptvtx_recoVtxSign_;
+    vector<float> lptvtx_minDxy_;
+    vector<float> lptvtx_METdPhi_;
+    vector<float> lptvtx_ll_pt_;
+    vector<float> lptvtx_ll_eta_;
+    vector<float> lptvtx_ll_phi_;
+    vector<float> lptvtx_ll_e_;
+    vector<float> lptvtx_ll_m_;
+    vector<float> lptvtx_ll_px_;
+    vector<float> lptvtx_ll_py_;
+    vector<float> lptvtx_ll_pz_;
+    vector<float> lptvtx_refit_m_;
+    vector<float> lptvtx_refit_pt_;
+    vector<float> lptvtx_refit_eta_;
+    vector<float> lptvtx_refit_phi_;
+    vector<float> lptvtx_refit_dr_;
+    vector<bool> lptvtx_isMatched_;
+    vector<int> lptvtx_matchSign_;
+    vector<vector<float> > lptvtx_dRtoJets_;
+    vector<vector<float> > lptvtx_dPhiToJets_;
+
+    vector<std::string> lptvtx_e1_type_;
+    vector<int> lptvtx_e1_idx_;
+    vector<bool> lptvtx_e1_isMatched_;
+    vector<int> lptvtx_e1_matchType_;
+    vector<float> lptvtx_e1_refitDxy_;
+    vector<float> lptvtx_e1_refitDxyErr_;
+    vector<float> lptvtx_e1_refitDz_;
+    vector<float> lptvtx_e1_refitDzErr_;
+    vector<float> lptvtx_e1_refitChi2_;
+
+    vector<std::string> lptvtx_e2_type_;
+    vector<int> lptvtx_e2_idx_;
+    vector<bool> lptvtx_e2_isMatched_;
+    vector<int> lptvtx_e2_matchType_;
+    vector<float> lptvtx_e2_refitDxy_;
+    vector<float> lptvtx_e2_refitDxyErr_;
+    vector<float> lptvtx_e2_refitDz_;
+    vector<float> lptvtx_e2_refitDzErr_;
+    vector<float> lptvtx_e2_refitChi2_;
+
 protected:
     TTree * outT;
+    // Slim, all-events tree (background only; see CreateSlimTreeBranches)
+    TTree * outT_slim;
 
 };
+
 
 #endif

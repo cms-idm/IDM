@@ -9,26 +9,65 @@ suffix=$6
 nsplit=$7
 CMSSW=$8
 compiled_CMSSW_envs=$9
+category=${10:-signal}
+outDirName=${11}
+
+# Match the submitted environment to the active release and architecture.
+if [ "$CMSSW" != "CMSSW_13_0_13" ] && [ "$CMSSW" != "CMSSW_14_0_21" ]; then
+    echo "Unsupported CMSSW release: $CMSSW" >&2
+    exit 1
+fi
+if [ "$CMSSW_VERSION" != "$CMSSW" ]; then
+    echo "Run cmsenv for $CMSSW before submitting." >&2
+    exit 1
+fi
+case "$SCRAM_ARCH" in
+    el8_*|el9_*) ;;
+    *) echo "Unsupported SCRAM_ARCH: $SCRAM_ARCH" >&2; exit 1 ;;
+esac
 
 flist_full=`realpath $flist`
 fname=`echo $flist_full | rev | cut -d "/" -f 1 | rev | cut -d "." -f 1`
 
-mass=`echo $fname | cut -d "_" -f 1-2`
-ctau=`echo $fname | cut -d "_" -f 3`
-outDirName="iDMmu/${mass}/${ctau}"
+if [ -z "$outDirName" ]; then
+	# default: iDMmu signal file-list names, <mass>_<dMchi>_<ctau>_flist (Alaa_Dev);
+	# pass outDirName (11th argument) for other naming schemes
+	mass=`echo $fname | cut -d "_" -f 1-2`
+	ctau=`echo $fname | cut -d "_" -f 3`
+	outDirName="iDMmu/${mass}/${ctau}"
+fi
 
 mkdir -p split_fileLists
 mkdir -p Logs
-xrdfs root://cmseos.fnal.gov/ mkdir -p /store/group/lpcmetx/iDMe//Samples/Ntuples/signal_${suffix}/${year}/${outDirName}/
-outPath=/store/group/lpcmetx/iDMe//Samples/Ntuples/signal_${suffix}/${year}/${outDirName}/
+xrdfs root://cmseos.fnal.gov/ mkdir -p /store/group/lpcmetx/iDMe//Samples/Ntuples/${category}_${suffix}/${year}/${outDirName}/
+outPath=/store/group/lpcmetx/iDMe//Samples/Ntuples/${category}_${suffix}/${year}/${outDirName}/
 
-cp ${flist_full} .
+# Background jobs also produce a slim, all-events tree alongside the full one (see
+# ElectronSkimmer.cc); it gets its own parallel EOS directory. Signal jobs never
+# produce a slim file, so skip creating a destination for it.
+slimOutPath=""
+if [ "$isSignal" != "True" ] && [ "$isSignal" != "1" ]; then
+	xrdfs root://cmseos.fnal.gov/ mkdir -p /store/group/lpcmetx/iDMe//Samples/Ntuples/${category}_${suffix}_slim/${year}/${outDirName}/
+	slimOutPath=/store/group/lpcmetx/iDMe//Samples/Ntuples/${category}_${suffix}_slim/${year}/${outDirName}/
+fi
+
+sort -V ${flist_full} > ${fname}.txt
 split -d -l ${nsplit} --additional-suffix ".txt" ${fname}.txt ${fname}_
 rm ${fname}.txt
+
+itemdata=`realpath split_fileLists`/${fname}_items.txt
+> ${itemdata}
 for sublist in `ls ${fname}_*.txt`
 do
 	mv $sublist split_fileLists/$sublist
 	sublist_name=`echo $sublist | cut -d "." -f 1`
 	sublist_full=`realpath split_fileLists/$sublist`
-	condor_submit ElectronNtuplizer_config.jdl -append "Arguments = ${sublist_name} ${year} ${nThreads} ${isData} ${isSignal} ${outPath} ${CMSSW} ${compiled_CMSSW_envs}" -append "transfer_input_files = ${sublist_full}" -append "request_cpus = ${nThreads}"
+	echo "${sublist_name},${sublist_full}" >> ${itemdata}
 done
+
+# one condor_submit call queues every split file for this dataset as a single cluster
+condor_submit ElectronNtuplizer_config_batch.jdl \
+	-append 'Arguments = $(sublist_name) '"${year} ${nThreads} ${isData} ${isSignal} ${outPath} ${CMSSW} ${compiled_CMSSW_envs} ${slimOutPath}" \
+	-append 'transfer_input_files = $(sublist_full)' \
+	-append "request_cpus = ${nThreads}" \
+	-queue "sublist_name,sublist_full from ${itemdata}"
