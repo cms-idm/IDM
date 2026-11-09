@@ -45,25 +45,9 @@ public:
     //////////////////////
     
     // Gen particles
-    int nGen_;
     float genwgt_;
     int genpuobs_;
     int genputrue_;
-    vector<int> genID_;
-    vector<int> genMotherID_;
-    vector<int> genCharge_;
-    vector<float> genPt_;
-    vector<float> genEta_;
-    vector<float> genPhi_;
-    vector<float> genEn_;
-    vector<float> genPx_;
-    vector<float> genPy_;
-    vector<float> genPz_;
-    vector<float> genVxy_;
-    vector<float> genVz_;
-    vector<float> genVx_;
-    vector<float> genVy_;
-    vector<float> genMass_;
 
     // All gen particles. This is the single complete gen-particle collection.
     int nGenParticle_;

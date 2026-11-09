@@ -1258,22 +1258,6 @@ void NtupleContainerV2::ClearTreeBranches() {
     METFiltersFailBits_ = 0;
 
     // Gen particles
-    nGen_ = 0;
-    genID_.clear();
-    genMotherID_.clear();
-    genCharge_.clear();
-    genPt_.clear();
-    genEta_.clear();
-    genPhi_.clear();
-    genEn_.clear();
-    genPx_.clear();
-    genPy_.clear();
-    genPz_.clear();
-    genVxy_.clear();
-    genVx_.clear();
-    genVy_.clear();
-    genVz_.clear();
-    genMass_.clear();
 
     nGenParticle_ = 0;
     genPartID_.clear();

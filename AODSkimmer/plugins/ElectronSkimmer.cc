@@ -3128,7 +3128,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          }
       }
 
-      // Second pass: save the original reduced gen collection used by the electron analysis.
+      // Second pass: electron-analysis truth calculations.
       // This keeps the original hard-process/status-1-lepton logic intact.
       math::XYZTLorentzVector gen_ele_p4, gen_pos_p4;
       for (const auto & genParticle : *genParticleHandle_) {
@@ -3137,27 +3137,10 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          if ((!genParticle.isHardProcess()) && (genParticle.status() != 1 || (absID < 11) || (absID > 16))) {
             continue;
          }
-         nt.nGen_++;
          int motherID = -999;
          if (genParticle.numberOfMothers() > 0 && genParticle.mother(0) != nullptr) {
             motherID = genParticle.mother(0)->pdgId();
          }
-
-         nt.genID_.push_back(genParticle.pdgId());
-         nt.genMotherID_.push_back(motherID);
-         nt.genCharge_.push_back(genParticle.charge());
-         nt.genPt_.push_back(genParticle.pt());
-         nt.genEta_.push_back(genParticle.eta());
-         nt.genPhi_.push_back(genParticle.phi());
-         nt.genEn_.push_back(genParticle.energy());
-         nt.genPx_.push_back(genParticle.px());
-         nt.genPy_.push_back(genParticle.py());
-         nt.genPz_.push_back(genParticle.pz());
-         nt.genVxy_.push_back(std::sqrt(genParticle.vx()*genParticle.vx() + genParticle.vy()*genParticle.vy()));
-         nt.genVx_.push_back(genParticle.vx());
-         nt.genVy_.push_back(genParticle.vy());
-         nt.genVz_.push_back(genParticle.vz());
-         nt.genMass_.push_back(genParticle.mass());
 
          if (isSignal) {
             if ((std::abs(genParticle.pdgId()) == 11) && (motherID == 1000023)) {
