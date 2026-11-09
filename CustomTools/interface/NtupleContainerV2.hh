@@ -225,6 +225,19 @@ public:
     vector<int> recoElectronExpMissingInnerHits_;
     vector<bool> recoElectronConversionVeto_;
     vector<bool> recoElectronIsEE_;
+    // supercluster
+    vector<float> recoElectronScRawE_;
+    vector<float> recoElectronScEnergy_;
+    vector<float> recoElectronScEta_;
+    vector<float> recoElectronScPhi_;
+    vector<float> recoElectronScEtaWidth_;
+    vector<float> recoElectronScPhiWidth_;
+    vector<int> recoElectronScClustersSize_;
+    // additional shower shapes (energy ratios use SC raw energy)
+    vector<float> recoElectronFull5x5SigmaIetaIphi_;
+    vector<float> recoElectronSeedEoverScRawE_;
+    vector<float> recoElectronFull5x5EMaxOverScRawE_;
+    vector<float> recoElectronFull5x5E2ndOverScRawE_;
     // special variables for the x-cleaning study
     vector<bool> recoElectronHasLptMatch_;
     vector<int> recoElectronLptMatchIdx_;
@@ -305,6 +318,10 @@ public:
     vector<float> recoLowPtElectronFull5x5SigmaIphiIphi_;
     vector<float> recoLowPtElectronFull5x5HcalDepth1OverEcal_;
     vector<float> recoLowPtElectronFull5x5HcalDepth2OverEcal_;
+    vector<float> recoLowPtElectronFull5x5SigmaIetaIphi_;
+    vector<float> recoLowPtElectronSeedEoverScRawE_;
+    vector<float> recoLowPtElectronFull5x5EMaxOverScRawE_;
+    vector<float> recoLowPtElectronFull5x5E2ndOverScRawE_;
     // special variables for the x-cleaning study
     vector<bool> recoLowPtElectronIsXCleaned_;
     vector<int> recoLowPtElectronGEDidx_;
@@ -384,6 +401,10 @@ public:
     vector<float> recoAllLowPtElectronFull5x5SigmaIphiIphi_;
     vector<float> recoAllLowPtElectronFull5x5HcalDepth1OverEcal_;
     vector<float> recoAllLowPtElectronFull5x5HcalDepth2OverEcal_;
+    vector<float> recoAllLowPtElectronFull5x5SigmaIetaIphi_;
+    vector<float> recoAllLowPtElectronSeedEoverScRawE_;
+    vector<float> recoAllLowPtElectronFull5x5EMaxOverScRawE_;
+    vector<float> recoAllLowPtElectronFull5x5E2ndOverScRawE_;
     // x-cleaning status and GED match info
     vector<bool> recoAllLowPtElectronIsXCleaned_;
     vector<int> recoAllLowPtElectronGEDidx_;
