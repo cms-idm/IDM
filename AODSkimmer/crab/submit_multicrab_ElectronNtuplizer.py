@@ -101,7 +101,6 @@ def main():
 
     # Basic settings common to all runs 
     config.General.workArea = base_dir+'/src/iDMe/AODSkimmer/crab/submissions_ElectronNtuplizer_/' + options.name
-
     config.General.transferOutputs = True
     config.General.transferLogs = False
     config.JobType.pluginName = 'Analysis'
@@ -109,7 +108,6 @@ def main():
     config.JobType.allowUndistributedCMSSW = True
     config.JobType.numCores = 1
     config.Data.splitting = 'Automatic'
-
     config.JobType.maxMemoryMB = 2500
     #config.Data.totalUnits = 1
     #config.Data.splitting = 'EventAwareLumiBased'

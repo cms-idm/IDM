@@ -4,18 +4,18 @@ from coffea.nanoevents import NanoEventsFactory, NanoAODSchema, BaseSchema
 from mySchema import MySchema
 from coffea import processor
 
-# from coffea.dataset_tools import (
+#from coffea.dataset_tools import (
 #    apply_to_fileset,
 #    max_chunks,
 #    preprocess,
-# )
-# import dask
+#)
+#import dask
 
 import uproot
 import awkward as ak
 
 import vector
-# vector.register_awkward()
+#vector.register_awkward()
 
 import vector
 # vector.register_awkward()
@@ -36,7 +36,6 @@ from collections import defaultdict
 from hist import Hist
 from hist.axis import StrCategory, Regular, Integer, IntCategory
 import hist
-
 import corrections
 
 match_names = {"Default":"match0","lowpt":"match1"}
@@ -78,7 +77,6 @@ class Analyzer:
         self.cuts = cuts
 
         self.sample_names = [] # list of sample names, readable names are generated from data in the fileList json
-        
         self.sample_locs = {} # dictionary mapping sample name to file/directory location
         self.sample_info = {} # dictionary with sample metadata
         self.max_samples = max_samples
@@ -89,7 +87,6 @@ class Analyzer:
         self.mode = None
 
         self.model = model_json # BDT model for inference (if used in selections)
-
         self.nJet_isNom = nJet_isNominal # nomial njet range of NJet > 0 and NJet < 3
         self.good_vtx = good_vtx
         
@@ -120,7 +117,6 @@ class Analyzer:
                     exit()
             
             loc = sample['location']
-            
             if '.root' in loc:
                 # if the location is just a single file, load it in
                 if self.newCoffea:
@@ -149,7 +145,6 @@ class Analyzer:
                         fullList.extend(["root://cmsxrootd.fnal.gov/"+l+item.name for item in flist if (('.root' in item.name) and (item.name not in sample.get('blacklist', [])))])
                 if self.max_files_per_samp > 0 and len(fullList) > self.max_files_per_samp:
                     fullList = fullList[:self.max_files_per_samp]
-
                 if self.newCoffea:
                      self.sample_locs[name] = {'files':{f:'ntuples/outT' for f in fullList}}
                 else:
@@ -186,31 +181,26 @@ class Analyzer:
             else:
                 print("Invalid executor type specification!")
                 return
-
             runner = processor.Runner(executor=executor,schema=MySchema,savemetrics=True)
             accumulator = runner(fileset,
                                 treename=treename,
                                 processor_instance=proc)
-
         else:
             print("Preprocessing")
             dataset_runnable, dataset_updated = preprocess(fileset,step_size=100_000,files_per_batch=1)
             print("Done Preprocessing")
             to_compute = apply_to_fileset(proc,dataset_runnable,schemaclass=MySchema)
             (accumulator,) = dask.compute(to_compute)
-
+        
         return accumulator
 
 class iDMeProcessor(processor.ProcessorABC):
-
     def __init__(self,samples,sampleInfo,fileSet,histoFile,cutFile,mode='signal',model_json=None,nJet_isNom=None,isSFstudies=False,good_vtx='v11',systematics=None,**kwargs):
-
         self.samples = samples
         self.sampleInfo = sampleInfo
         self.sampleLocs = fileSet
         self.mode = mode
         self.model = model_json
-
         self.nJet_isNom = nJet_isNom
         self.good_vtx = good_vtx
         self.systematics = systematics
@@ -220,7 +210,7 @@ class iDMeProcessor(processor.ProcessorABC):
         self.histoMod = importlib.import_module(histoFile)
         self.histoFill = self.histoMod.fillHistos
         self.subroutines = self.histoMod.subroutines
-
+        
         # load in cuts module
         self.cutFile = cutFile
         if "/" in self.cutFile: # if cut file is in a different directory
@@ -243,7 +233,6 @@ class iDMeProcessor(processor.ProcessorABC):
             print(f"Registering extra input {k} = {v}")
     
     def process(self,events):
-        
         samp = events.metadata["dataset"]
         info = self.sampleInfo[samp]
         isMC = info["type"] == "signal" or info["type"] == "bkg"
@@ -251,7 +240,7 @@ class iDMeProcessor(processor.ProcessorABC):
         info['selectBestVertex'] = routines.selectBestVertex
         for k,v in self.extraStuff.items():
             info[f"extras_{k}"] = v
- 
+        
         histObj = self.histoMod.make_histograms(info)
         cutDesc = defaultdict(str)
 
@@ -278,10 +267,9 @@ class iDMeProcessor(processor.ProcessorABC):
                 xsec = xsec*info['filter_eff']
             # register event weight branch
             events.__setitem__("eventWgt",xsec*lumi*events.genWgt)
-  
         else:
             sum_wgt = info["num_events"]
-            
+
         # Initial number of events
         if isMC:
             cutflow['all'] += ak.sum(events.genWgt)/sum_wgt
@@ -294,14 +282,13 @@ class iDMeProcessor(processor.ProcessorABC):
             
         cutDesc['all'] = 'No cuts@'
 
-
         ######################################################################################
         ## Add HEM flags to Event (before applying any quality cuts to jet, electrons ##
         ######################################################################################
 
         routines.checkHEMjet(events)
         routines.checkHEMelectron(events)
-        
+
         #################################
         ## Calculating Additional Vars ##
         #################################
@@ -354,6 +341,7 @@ class iDMeProcessor(processor.ProcessorABC):
                 if not isMC:
                     sf_trig_data = corrections.get_trigger_MC(iov, jsonPath, events.PFMET.pt, isMC, type=self.systematics['trigger_data'])
                     events['eventWgt'] = events['eventWgt'] * sf_trig_data
+            
 
         #################################
         ##### Hard-coded basic cuts #####
@@ -420,7 +408,8 @@ class iDMeProcessor(processor.ProcessorABC):
         # computing any extra quantities specified in the histogram config file
         for subroutine in self.subroutines:
             getattr(routines,subroutine)(events)
-  
+
+        
         # SF studies
         if self.isSFstudies:
             if isMC:
@@ -430,18 +419,17 @@ class iDMeProcessor(processor.ProcessorABC):
                     print('After cutting on ZG pT', len(events[events.sel_vtx.refit_pt > 17]))
                 elif 'DY' in info['name']:
                     events = events[events.sel_vtx.refit_pt < 17]
-
+        
+        
         ###############################
         ######## CUTS & HISTOS ########
         ###############################
-
         for cut in self.cuts:
             events, cutName, cutDescription, savePlots = cut(events,info)
             if isMC:
                 cutflow[cutName] += ak.sum(events.genWgt)/sum_wgt
             else:
                 cutflow[cutName] += len(events)/sum_wgt
-
             cutflow_nevts[cutName] += len(events)            
             if info['type'] == "signal":
                 vtx_matched_events = events[events.sel_vtx.isMatched]
@@ -505,9 +493,7 @@ class genProcessor(iDMeProcessor):
         #################################
         routines.jetBtag(events,info['year'])
         routines.vtxElectronConnection(events)
-
         events = routines.computeExtraVariables(events,info)
-
         #if info['type'] == 'signal':
         #    routines.genMatchExtraVtxVariables(events)
 
@@ -525,7 +511,6 @@ class genProcessor(iDMeProcessor):
         #### Demand >= 1 ee vertices ####
         #################################
         #routines.defineGoodVertices(events) # define "good" vertices based on whether associated electrons pass ID cuts
-
         routines.defineGoodVertices(events,version='none') # define "good" vertices based on whether associated electrons pass ID cuts
 
         #events.__setitem__("nGoodVtx",ak.count(events.good_vtx.vxy,axis=1))
@@ -537,7 +522,7 @@ class genProcessor(iDMeProcessor):
         cutflow['hasVtx'] += ak.sum(events.genWgt)/sum_wgt
         cutflow_nevts['hasVtx'] += len(events)
         cutDesc['hasVtx'] = 'Baseline Selection'
-
+        
         # computing any extra quantities specified in the histogram config file
         for subroutine in self.subroutines:
             getattr(routines,subroutine)(events)
@@ -556,13 +541,14 @@ class genProcessor(iDMeProcessor):
         
         for k in cutflow.keys():
             cutflow_counts[k] = xsec*lumi*cutflow[k]
-
+        
+        
         histos = histObj.histograms
         histos['cutDesc'] = cutDesc
         histos['cutflow'] = {samp:cutflow}
         histos['cutflow_cts'] = {samp:cutflow_counts}
         histos['cutflow_nevts'] = {samp:cutflow_nevts}
-
+        
         return histos
 
 # processor for doing nothing but filling histos
@@ -725,9 +711,9 @@ class trigProcessor(iDMeProcessor):
 
         # fill histos
         #MET_passTrig.fill(samp=samp,
-        #                    met=events.PFMET.pt,
-        #                    passTrig=ak.values_astype(events.trig.HLT_PFMET120_PFMHT120_IDTight,int),
-        #                    weight=events.wgt)
+        #                     met=events.PFMET.pt,
+        #                     passTrig=ak.values_astype(events.trig.HLT_PFMET120_PFMHT120_IDTight,int),
+        #                     weight=events.wgt)
         #jet_pt_passTrig.fill(samp=samp,pt=events.PFJet.pt[:,0],passTrig=ak.values_astype(events.trig.HLT_PFMET120_PFMHT120_IDTight,int),weight=events.wgt)
 
         output = {"MET_passTrig":MET_passTrig,"MET_all":MET_all, "MET_passTrig_all":MET_passTrig_all,

@@ -886,7 +886,6 @@ void NtupleContainerV2::CreateTreeBranches() {
         outT->Branch("GenMET_py",&genLeadMETPy_);
         outT->Branch("GenMET_ET",&genLeadMETET_);
     }
-
     if (!isData_) {
         // Authoritative complete gen-particle collection. GenLepton_* below is
         // the all-lepton view linked back by genParticleIdx.
@@ -1202,6 +1201,7 @@ void NtupleContainerV2::CreateTreeBranches() {
             outT->Branch("signalDimuonReconstructed",&signalDimuonReconstructed_);
         }
     }
+
 }
 
 // Mirrors the subset of CreateTreeBranches() that ElectronSkimmer::analyze() fills
@@ -1581,7 +1581,7 @@ void NtupleContainerV2::ClearTreeBranches() {
     genJetPhi_.clear();
     genJetMETdPhi_.clear();
 
-    // Gen MET
+    //Gen MET
     genLeadMETPt_ = -9999;
     genLeadMETPhi_ = -9999;
     genLeadMETET_ = -9999;
@@ -2259,6 +2259,7 @@ void NtupleContainerV2::ClearTreeBranches() {
     CaloMET_Phi_ = -999;
 
     rho_ = -9999;
+
     fixedGridRhoFastjetAll_ = -999.;
 
     // PV

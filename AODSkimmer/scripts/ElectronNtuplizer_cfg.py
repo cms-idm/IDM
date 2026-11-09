@@ -8,11 +8,10 @@ from Configuration.Eras.Era_Run2_2017_cff import Run2_2017
 from Configuration.Eras.Era_Run2_2016_cff import Run2_2016
 from Configuration.Eras.Era_Run2_2016_HIPM_cff import Run2_2016_HIPM
 
-# Run3 imports
+#Run3 imports
 from Configuration.Eras.Era_Run3_cff import Run3
 
 import sys
-
 
 # argument parsing
 options = VarParsing.VarParsing("analysis")
@@ -114,7 +113,7 @@ if options.signal and 'selectionMode' in _explicitArgs:
 
 # input files
 if ".txt" in options.flist:
-    print("reading input file list: " + options.flist)
+    print("reading input file list: "+options.flist)
     options.inputFiles = FileUtils.loadListFromFile(options.flist)
 else:
     options.inputFiles = options.flist
@@ -162,7 +161,6 @@ else:
 #######################
 ##### MET Filters #####
 #######################
-
 metFilters = []
 
 if options.year in ["2016", "2016APV"]:
@@ -192,7 +190,6 @@ elif options.year in ["2017", "2018", "2022", "2022EE"]:
         "Flag_ecalBadCalibFilter",
     ]
 
-
 #######################
 ###### Triggers #######
 #######################
@@ -214,6 +211,7 @@ metTrigs = [
     "HLT_PFMET105_IsoTrk50",
 ]
 
+
 jetTrigs = [
     "HLT_PFJet40",
     "HLT_PFJet60",
@@ -227,7 +225,6 @@ jetTrigs = [
     "HLT_PFJet500",
     "HLT_PFJet550",
 ]
-
 eleTrigs = list(set([
     "HLT_Ele50_CaloIdVT_GsfTrkIdT_PFJet165",
     "HLT_Ele30_eta2p1_WPTight_Gsf_CentralPFJet35_EleCleaned",
@@ -264,7 +261,6 @@ muTrigs = [
 
 triggerPaths = metTrigs + jetTrigs + eleTrigs + muTrigs
 
-
 # Electron effective area input file for PU-corrected PF isolation calculations
 effAreaInputPath = (
     "RecoEgamma/ElectronIdentification/data/Run3_Winter22/"
@@ -276,7 +272,7 @@ effAreaInputPath = (
 ###### Process ########
 #######################
 
-process = cms.Process("USER", era)
+process = cms.Process("USER",era)
 
 process.load("FWCore.MessageService.MessageLogger_cfi")
 process.load("Configuration.StandardSequences.Services_cff")
@@ -300,9 +296,9 @@ from Configuration.AlCa.GlobalTag import GlobalTag
 process.GlobalTag = GlobalTag(process.GlobalTag, globaltag, "")
 
 process.options = cms.untracked.PSet()
-process.options.numberOfThreads = cms.untracked.uint32(options.numThreads)
-process.options.numberOfStreams = cms.untracked.uint32(0)
-process.options.numberOfConcurrentLuminosityBlocks = cms.untracked.uint32(1)
+process.options.numberOfThreads=cms.untracked.uint32(options.numThreads)
+process.options.numberOfStreams=cms.untracked.uint32(0)
+process.options.numberOfConcurrentLuminosityBlocks=cms.untracked.uint32(1)
 
 process.maxEvents = cms.untracked.PSet(
     input = cms.untracked.int32(options.nEvents)
@@ -320,13 +316,11 @@ process.TFileService = cms.Service(
     closeFileFast = cms.untracked.bool(True)
 )
 
-
 ##############################
 ###### Main iDM analyzer #####
 ##############################
 
 from iDMe.AODSkimmer.ElectronSkimmer_cfi import ElectronSkimmer
-
 process.ntuples = ElectronSkimmer.clone(
     isData = cms.bool(options.data),
     isSignal = cms.bool(options.signal),

@@ -8,7 +8,6 @@
 <use name="FWCore/ServiceRegistry"/>
 <use name="FWCore/Utilities"/>
 <use name="CommonTools/UtilAlgos"/>
-
 <use name="DataFormats/TrackReco"/>
 <use name="DataFormats/MuonReco"/>
 <use name="DataFormats/MuonDetId"/>
@@ -26,7 +25,6 @@
 <use name="DataFormats/EgammaCandidates"/>
 <use name="DataFormats/ParticleFlowCandidate"/>
 <use name="DataFormats/Common"/>
-
 <use name="TrackingTools/TransientTrack"/>
 <use name="TrackingTools/Records"/>
 <use name="TrackingTools/GeomPropagators"/>
@@ -44,10 +42,8 @@
 <use name="RecoVertex/KalmanVertexFit"/>
 <use name="RecoVertex/KinematicFitPrimitives"/>
 <use name="RecoVertex/KinematicFit"/>
-
 <use name="SimDataFormats/PileupSummaryInfo"/>
 <use name="SimDataFormats/GeneratorProducts"/>
-
 <use name="RecoEgamma/EgammaTools"/>
 <use name="CommonTools/Egamma"/>
 

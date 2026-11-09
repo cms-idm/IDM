@@ -1515,21 +1515,21 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       pf_muon_p4s.push_back(mu.p4());
       pf_muon_charges.push_back(mu.charge());
 
-      nt.nMuon_++;
+         nt.nMuon_++;
       nt.recoMuonPatIdx_.push_back(static_cast<int>(iMuon));
-      nt.recoMuonPt_.push_back(mu.pt());     
-      nt.recoMuonEta_.push_back(mu.eta());     
-      nt.recoMuonPhi_.push_back(mu.phi());     
-      nt.recoMuonEnergy_.push_back(mu.energy());
-      nt.recoMuonCharge_.push_back(mu.charge());     
+         nt.recoMuonPt_.push_back(mu.pt());     
+         nt.recoMuonEta_.push_back(mu.eta());     
+         nt.recoMuonPhi_.push_back(mu.phi());     
+         nt.recoMuonEnergy_.push_back(mu.energy());
+         nt.recoMuonCharge_.push_back(mu.charge());     
       nt.recoMuonIDcutBasedLoose_.push_back(mu.passed(reco::Muon::CutBasedIdLoose));
       nt.recoMuonIDcutBasedMedium_.push_back(mu.passed(reco::Muon::CutBasedIdMedium));
       nt.recoMuonIDcutBasedMediumPrompt_.push_back(mu.passed(reco::Muon::CutBasedIdMediumPrompt));
       nt.recoMuonIDcutBasedTight_.push_back(mu.passed(reco::Muon::CutBasedIdTight));
-      nt.recoMuonIsPFMuon_.push_back(mu.isPFMuon());
-      nt.recoMuonIsGlobalMuon_.push_back(mu.isGlobalMuon());
-      nt.recoMuonIsStandAloneMuon_.push_back(mu.isStandAloneMuon());
-   }
+         nt.recoMuonIsPFMuon_.push_back(mu.isPFMuon());
+         nt.recoMuonIsGlobalMuon_.push_back(mu.isGlobalMuon());
+         nt.recoMuonIsStandAloneMuon_.push_back(mu.isStandAloneMuon());
+   } 
    
    ////////////////////////////////
    // Handling default electrons // 
@@ -2116,13 +2116,11 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       dsa_muonTracks.push_back(track);
       const int dsaMuonIdx = nt.nDSAMuon_;
       nt.nDSAMuon_++;
-
       // Construct TLorentzVector from track (muon mass assumed)
       float mass = 0.10566; // GeV
       float p = track.p();
       float energy = sqrt(p*p + mass*mass);
       math::XYZTLorentzVector p4(track.px(), track.py(), track.pz(), energy);
-
       dsa_muon_p4s.push_back(p4);
       dsa_muon_charges.push_back(track.charge());
       nt.recoDSAMuonP4_.push_back(p4);

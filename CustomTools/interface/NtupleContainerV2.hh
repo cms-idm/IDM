@@ -37,7 +37,6 @@ public:
     int numTrigs_ = 0;
     
     float fixedGridRhoFastjetAll_;
-
     // MET Filters
     uint32_t METFiltersFailBits_;
 
@@ -575,7 +574,7 @@ public:
     vector<math::XYZTLorentzVector> propPFMuonSt4P4_;
     vector<float> propPFMuonSt4PositionEta_;
     vector<float> propPFMuonSt4PositionPhi_;
-
+    
     // Normal Electrons
     int nElectronDefault_;
     vector<float> recoElectronPt_;
@@ -920,16 +919,16 @@ public:
     std::vector<float> recoDSAMuonDzError_;
     std::vector<float> recoDSAMuonTrkChi2_;
     std::vector<float> recoDSAMuonTrkProb_;
-    std::vector<int> recoDSAMuonTrkNumTrackerHits_;
-    std::vector<int> recoDSAMuonTrkNumPixHits_;
-    std::vector<int> recoDSAMuonTrkNumStripHits_;
-    std::vector<int> recoDSAMuonCharge_;
-    std::vector<int> recoDSAMuonDisplacedId_;
-    std::vector<int> recoDSAMuonTrkNumCSCHits_;
-    std::vector<int> recoDSAMuonTrkNumHits_;
-    std::vector<int> recoDSAMuonTrkNumPlanes_;
-    std::vector<int> recoDSAMuonTrkNumDTHits_;
-    std::vector<int> recoDSAMuonIdx_;
+    std::vector<int>   recoDSAMuonTrkNumTrackerHits_;
+    std::vector<int>   recoDSAMuonTrkNumPixHits_;
+    std::vector<int>   recoDSAMuonTrkNumStripHits_;
+    std::vector<int>   recoDSAMuonCharge_;
+    std::vector<int>   recoDSAMuonDisplacedId_;
+    std::vector<int>   recoDSAMuonTrkNumCSCHits_;
+    std::vector<int>   recoDSAMuonTrkNumHits_;
+    std::vector<int>   recoDSAMuonTrkNumPlanes_;
+    std::vector<int>   recoDSAMuonTrkNumDTHits_;
+    std::vector<int>   recoDSAMuonIdx_;
     std::vector<math::XYZTLorentzVector> recoDSAMuonP4_;
     
     // DSA reco tracks propagated to muon-station surfaces
@@ -1285,5 +1284,6 @@ protected:
     TTree * outT_slim;
 
 };
+
 
 #endif

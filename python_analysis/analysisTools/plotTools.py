@@ -64,7 +64,7 @@ def get_signal_list_of_cuts(sig_histo, get_cut_idx = False):
         cut = cut_idx
     else:
         cut = cut_name
-    
+
     return cut
 
 # Data
@@ -156,14 +156,14 @@ def get_bkg_cutflow_df(bkg_histos, branch, process = 'all', isLegacy = False):
             histos = bkg_histos[process]
         else:
             histos = bkg_histos
-        
+
         cutflow = histos[branch]
         cutflow = pd.DataFrame.from_dict(cutflow, orient='index')
     
         if branch != 'cutflow':
             cutflow.loc["Total"] = cutflow.sum()
             
-        else:            
+        else:
             total_cts_nocut = 0
             total_cts_after_cut = {cut: 0 for cut in cut_idx}
             
@@ -304,23 +304,23 @@ def bkg_categories(cutflow):
         output_samples[bgkCat].append(name)
         output_names[bgkCat].append(subSample)
     return output_samples, output_names
-
+    
 
 def add_signal_info_to_df(df):
     m1_list = []
     delta_list = []
     ctau_list = []
-    
+        
     for point in df.index.values:
         sig_dict = ptools.signalPoint(point)
         m1_list.append(sig_dict['m1'])
         delta_list.append(sig_dict['delta'])
         ctau_list.append(sig_dict['ctau'])
-    
+
     df['m1'] = m1_list
     df['delta'] = delta_list
     df['ctau'] = ctau_list
-    
+
     df = df.sort_values(by=['m1']) # sort by m1
 
     return df
@@ -330,7 +330,7 @@ def save_df_to_csv(df, outdir, outname, isSignal = False):
 
     if isSignal:
         df = add_signal_info_to_df(df)
-    
+
     df.to_csv(f'{outdir}/{outname}.csv')
 
     print(f'Saved: {outdir}/{outname}.csv')
@@ -339,7 +339,7 @@ def save_df_to_csv(df, outdir, outname, isSignal = False):
 def dict_to_sorted_df(dict, m1=None, delta=None, ctau=None):
     df = pd.DataFrame.from_dict(dict, orient='index')
     df.pop(0)
-    
+
     m1_list = []
     delta_list = []
     ctau_list = []
@@ -349,14 +349,14 @@ def dict_to_sorted_df(dict, m1=None, delta=None, ctau=None):
         m1_list.append(sig_dict['m1'])
         delta_list.append(sig_dict['delta'])
         ctau_list.append(sig_dict['ctau'])
-    
+
     df['m1'] = m1_list
     df['delta'] = delta_list
     df['ctau'] = ctau_list
     
     df = df.sort_values(by=['m1']) # sort by m1
-
+    
     if (m1 != None) and (delta != None) and (ctau != None):
         df = df[ (df.m1 == m1) & (df.ctau == ctau) & (df.delta == delta) ]
-    
+        
     return df
