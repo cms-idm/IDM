@@ -24,6 +24,16 @@ STAGES = [("events", "All events"), ("events_eligible_pair", "Eligible pair"), (
           ("events_valid_vertex", "Valid vertex"), ("events_chi2", "#chi^{2}/ndof < 4"), ("events_pca_valid", "PCA valid"),
           ("events_dr", "PCA #DeltaR < 0.9"), ("events_met_angle", "|#Delta#phi(MET,#mu#mu)| < 0.5"),
           ("selected_met_and_jet", CUT_LAB)]
+# Stages drawn on the cutflow plots and in their caption table. "PCA valid" (valid momenta propagated to the vertex)
+# is not shown (user 2026-11-09): it is required to compute the PCA dR, so that stage includes it. All stages are still
+# loaded and checked, and the fraction and FOM sections are unchanged.
+SHOWN = [i for i, (k, _) in enumerate(STAGES) if k != "events_pca_valid"]
+
+
+def shown(v):
+    return [v[i] for i in SHOWN]
+
+
 GROUPS = ["ZJets", "WJets", "QCD", "TTbar", "SingleTop", "DYJets", "Multiboson", "WWZ", "WZZ", "ZZ", "ZZZ", "ZGamma"]
 MAJOR = GROUPS[:5]  # FOM overlays split in two for legibility: the five largest groups, then the rest
 LEVEL = 0.6827
@@ -218,7 +228,7 @@ def main():
     sig, bkg, n_bkg = load(args)
     ALLB = "all %d" % n_bkg
     P = Plotter(cs, out, args.log)
-    stage_labels = [lab for _, lab in STAGES]
+    stage_labels = [lab for i, (_, lab) in enumerate(STAGES) if i in SHOWN]
     taus = sorted((k for k in sig if k.startswith("lifetime/")), key=lambda k: float(k.split("-")[1]))
     masses = sorted((k for k in sig if k.startswith("mass/")), key=lambda k: mass_key(k[5:]))
     tau_label = lambda k: "c#tau = %s mm" % k.split("-")[1]
@@ -234,8 +244,9 @@ def main():
         "unweighted. A background group pools its samples (name prefix); the pooled background is all %d." % n_bkg,
         "Reco-only dimuon chain (cumulative; an event passes a stage if >= 1 pair reaches it): eligible pair (two "
         "cleanedDisplacedMuons objects, each at its G > I > DSA component), opposite sign, valid vertex fit, "
-        "chi2/ndof < 4, PCA valid, PCA dR < 0.9, |dphi(Type-1 PF MET, mumu at the PCA)| < 0.5. 'Selected mumu' = all "
-        "of these.",
+        "chi2/ndof < 4, PCA dR < 0.9, |dphi(Type-1 PF MET, mumu at the PCA)| < 0.5. 'Selected mumu' = all "
+        "of these. PCA = the two muon momenta propagated to their points of closest approach to the vertex; the PCA dR "
+        "stage includes the requirement that this propagation succeeds (no separate stage on the plots).",
         "MET, jet cut ('after cut' in the legends, spelled out as the last cutflow stage, not labelled on single-selection plots): Type-1 PF MET (slimmedMETs[0]) > 80 GeV and highest-pT slimmedJets jet pT > 80 GeV "
         "with |eta| < 2.4 (as stored: no jet ID, no muon cleaning); an event without jets fails.",
         "Fractions are over all events of the slice. Error bars: Clopper-Pearson 68%.",
@@ -252,10 +263,10 @@ def main():
     for k in ["overall"] + taus + masses:
         d = "cutflow/" + ("overall" if k == "overall" else k)
         v = sig[k]
-        P.draw(d + "_signal", [P.eff(v, v[0], cs.BLUE, S, d + "s")], [sig_label[k]], stage_labels,
+        P.draw(d + "_signal", [P.eff(shown(v), v[0], cs.BLUE, S, d + "s")], [sig_label[k]], stage_labels,
                "Fraction of all events", [CHAIN], log=args.log, above=True)
         b = bkg["overall"]
-        P.draw(d + "_signal_bkg", [P.eff(v, v[0], cs.BLUE, S, d + "s2"), P.eff(b, b[0], cs.BLACK, B, d + "b")],
+        P.draw(d + "_signal_bkg", [P.eff(shown(v), v[0], cs.BLUE, S, d + "s2"), P.eff(shown(b), b[0], cs.BLACK, B, d + "b")],
                [sig_label[k], bkg_label["overall"]], stage_labels, "Fraction of all events", [CHAIN],
                log=args.log, above=True)
     slices = "<slice> = overall, lifetime/ctau-<1|10|100|1000> or mass/Mchi-<m>_dMchi-<dm>."
@@ -263,25 +274,25 @@ def main():
              "with the MET, jet cut. " + slices)
     caps.add("cutflow/<slice>_signal_bkg.png", "As cutflow/<slice>_signal.png, with the pooled background overlaid. "
              "Event counts per stage (all plotted slices and background groups):",
-             ["slice"] + [k.replace("events_", "") for k, _ in STAGES],
-             [[k] + ["%d" % x for x in sig[k]] for k in ["overall"] + taus + masses] +
-             [["background " + g] + ["%d" % x for x in bkg[g]] for g in ["overall"] + ["group/" + x for x in GROUPS]])
+             ["slice"] + [k.replace("events_", "") for k, _ in shown(STAGES)],
+             [[k] + ["%d" % x for x in shown(sig[k])] for k in ["overall"] + taus + masses] +
+             [["background " + g] + ["%d" % x for x in shown(bkg[g])] for g in ["overall"] + ["group/" + x for x in GROUPS]])
     palette = [cs.BLUE, cs.ORANGE, cs.GREEN, cs.YELLOW, cs.SKY, cs.PURPLE]
     bstyle = {g: (palette[i % 6], (1, 20 + i % 6) if i < 6 else (2, 24 + i % 6)) for i, g in enumerate(GROUPS)}
     for g in ["overall"] + ["group/" + x for x in GROUPS]:
         b = bkg[g]
-        P.draw("cutflow/background_" + g.replace("group/", ""), [P.eff(b, b[0], cs.BLACK, S, "cb" + g)], [bkg_label[g]],
+        P.draw("cutflow/background_" + g.replace("group/", ""), [P.eff(shown(b), b[0], cs.BLACK, S, "cb" + g)], [bkg_label[g]],
                stage_labels, "Fraction of all events", [CHAIN], log=args.log, above=True)
     caps.add("cutflow/background_<overall|group>.png", "Background cutflow, pooled over all background samples (overall) "
              "or over one process group (counts in the table above).")
-    gr = [P.eff(bkg["overall"], bkg["overall"][0], cs.BLACK, S, "cbo")]
-    gr += [P.eff(bkg["group/" + g], bkg["group/" + g][0], bstyle[g][0], bstyle[g][1], "cbg" + g) for g in GROUPS]
+    gr = [P.eff(shown(bkg["overall"]), bkg["overall"][0], cs.BLACK, S, "cbo")]
+    gr += [P.eff(shown(bkg["group/" + g]), bkg["group/" + g][0], bstyle[g][0], bstyle[g][1], "cbg" + g) for g in GROUPS]
     P.draw("cutflow/overlay_background_groups", gr, [bkg_label["overall"]] + GROUPS, stage_labels,
            "Fraction of all events", [CHAIN], log=args.log, above=True)
     caps.add("cutflow/overlay_background_groups.png", "Cutflows of the 12 background process groups and of the pooled "
              "background, overlaid.")
-    gr = [P.eff(sig[k], sig[k][0], palette[i], (1, 20 + i), "cto" + k) for i, k in enumerate(taus)]
-    gr.append(P.eff(bkg["overall"], bkg["overall"][0], cs.BLACK, B, "ctob"))
+    gr = [P.eff(shown(sig[k]), sig[k][0], palette[i], (1, 20 + i), "cto" + k) for i, k in enumerate(taus)]
+    gr.append(P.eff(shown(bkg["overall"]), bkg["overall"][0], cs.BLACK, B, "ctob"))
     P.draw("cutflow/overlay_ctau", gr, ["Signal, " + tau_label(k) for k in taus] + [bkg_label["overall"]], stage_labels,
            "Fraction of all events", [CHAIN, "Signal pooled over masses"], log=args.log, above=True)
     caps.add("cutflow/overlay_ctau.png", "Signal cutflows of the four lifetimes (each pooled over the 18 masses) and of the "
@@ -291,9 +302,9 @@ def main():
     gr = []
     for k in masses:
         m1, dm = mass_key(k[5:])
-        gr.append(P.eff(sig[k], sig[k][0], palette[fam.index(m1)], fstyle[[0.1, 0.2, 0.4].index(round(dm / m1, 3))],
+        gr.append(P.eff(shown(sig[k]), sig[k][0], palette[fam.index(m1)], fstyle[[0.1, 0.2, 0.4].index(round(dm / m1, 3))],
                         "cmo" + k))
-    gr.append(P.eff(bkg["overall"], bkg["overall"][0], cs.BLACK, (1, 21), "cmob"))
+    gr.append(P.eff(shown(bkg["overall"]), bkg["overall"][0], cs.BLACK, (1, 21), "cmob"))
     groups = {"%g GeV" % m: palette[i] for i, m in enumerate(fam)}
     groups["Background, " + ALLB] = cs.BLACK
     stages = dict(zip(M_KEYS, fstyle))
