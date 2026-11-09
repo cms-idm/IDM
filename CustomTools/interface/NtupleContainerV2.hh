@@ -50,24 +50,24 @@ public:
     int genputrue_;
 
     // All gen particles. This is the single complete gen-particle collection.
-    int nGenParticle_;
-    vector<int> genPartID_;
-    vector<int> genPartMotherID_;                 // immediate mother PDG ID
+    int nGen_;
+    vector<int> genID_;
+    vector<int> genMotherID_;                 // immediate mother PDG ID
     vector<int> genPartFirstDifferentMotherID_;   // first mother after walking through same-PDG copies
     vector<int> genPartStatus_;
-    vector<int> genPartCharge_;
-    vector<float> genPartPt_;
-    vector<float> genPartEta_;
-    vector<float> genPartPhi_;
-    vector<float> genPartEn_;
-    vector<float> genPartPx_;
-    vector<float> genPartPy_;
-    vector<float> genPartPz_;
-    vector<float> genPartVxy_;
-    vector<float> genPartVz_;
-    vector<float> genPartVx_;
-    vector<float> genPartVy_;
-    vector<float> genPartMass_;
+    vector<int> genCharge_;
+    vector<float> genPt_;
+    vector<float> genEta_;
+    vector<float> genPhi_;
+    vector<float> genEn_;
+    vector<float> genPx_;
+    vector<float> genPy_;
+    vector<float> genPz_;
+    vector<float> genVxy_;
+    vector<float> genVz_;
+    vector<float> genVx_;
+    vector<float> genVy_;
+    vector<float> genMass_;
     vector<int> genPartIsFirstCopy_;
     vector<int> genPartIsLastCopy_;
     vector<int> genPartIsLastCopyBeforeFSR_;
@@ -82,7 +82,7 @@ public:
     // This includes charged leptons and neutrinos. No kinematic, geometric,
     // hard-process, status, or copy requirement is applied.
     // genLeptonGenParticleIdx_ links each entry back to the authoritative
-    // GenParticle_* collection.
+    // GenPart_* collection.
     //
     // Station-2 propagation status:
     //   0 = not attempted because the lepton is neutral

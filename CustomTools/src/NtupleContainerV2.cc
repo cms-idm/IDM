@@ -889,24 +889,24 @@ void NtupleContainerV2::CreateTreeBranches() {
     if (!isData_) {
         // Authoritative complete gen-particle collection. GenLepton_* below is
         // the all-lepton view linked back by genParticleIdx.
-        outT->Branch("nGenPart",&nGenParticle_);
-        outT->Branch("GenPart_ID",&genPartID_);
-        outT->Branch("GenPart_motherID",&genPartMotherID_);
+        outT->Branch("nGenPart",&nGen_);
+        outT->Branch("GenPart_ID",&genID_);
+        outT->Branch("GenPart_motherID",&genMotherID_);
         outT->Branch("GenPart_firstDifferentMotherID",&genPartFirstDifferentMotherID_);
         outT->Branch("GenPart_status",&genPartStatus_);
-        outT->Branch("GenPart_charge",&genPartCharge_);
-        outT->Branch("GenPart_pt",&genPartPt_);
-        outT->Branch("GenPart_eta",&genPartEta_);
-        outT->Branch("GenPart_phi",&genPartPhi_);
-        outT->Branch("GenPart_e",&genPartEn_);
-        outT->Branch("GenPart_px",&genPartPx_);
-        outT->Branch("GenPart_py",&genPartPy_);
-        outT->Branch("GenPart_pz",&genPartPz_);
-        outT->Branch("GenPart_vxy",&genPartVxy_);
-        outT->Branch("GenPart_vx",&genPartVx_);
-        outT->Branch("GenPart_vy",&genPartVy_);
-        outT->Branch("GenPart_vz",&genPartVz_);
-        outT->Branch("GenPart_mass",&genPartMass_);
+        outT->Branch("GenPart_charge",&genCharge_);
+        outT->Branch("GenPart_pt",&genPt_);
+        outT->Branch("GenPart_eta",&genEta_);
+        outT->Branch("GenPart_phi",&genPhi_);
+        outT->Branch("GenPart_e",&genEn_);
+        outT->Branch("GenPart_px",&genPx_);
+        outT->Branch("GenPart_py",&genPy_);
+        outT->Branch("GenPart_pz",&genPz_);
+        outT->Branch("GenPart_vxy",&genVxy_);
+        outT->Branch("GenPart_vx",&genVx_);
+        outT->Branch("GenPart_vy",&genVy_);
+        outT->Branch("GenPart_vz",&genVz_);
+        outT->Branch("GenPart_mass",&genMass_);
         outT->Branch("GenPart_isFirstCopy",&genPartIsFirstCopy_);
         outT->Branch("GenPart_isLastCopy",&genPartIsLastCopy_);
         outT->Branch("GenPart_isLastCopyBeforeFSR",&genPartIsLastCopyBeforeFSR_);
@@ -1259,24 +1259,24 @@ void NtupleContainerV2::ClearTreeBranches() {
 
     // Gen particles
 
-    nGenParticle_ = 0;
-    genPartID_.clear();
-    genPartMotherID_.clear();
+    nGen_ = 0;
+    genID_.clear();
+    genMotherID_.clear();
     genPartFirstDifferentMotherID_.clear();
     genPartStatus_.clear();
-    genPartCharge_.clear();
-    genPartPt_.clear();
-    genPartEta_.clear();
-    genPartPhi_.clear();
-    genPartEn_.clear();
-    genPartPx_.clear();
-    genPartPy_.clear();
-    genPartPz_.clear();
-    genPartVxy_.clear();
-    genPartVx_.clear();
-    genPartVy_.clear();
-    genPartVz_.clear();
-    genPartMass_.clear();
+    genCharge_.clear();
+    genPt_.clear();
+    genEta_.clear();
+    genPhi_.clear();
+    genEn_.clear();
+    genPx_.clear();
+    genPy_.clear();
+    genPz_.clear();
+    genVxy_.clear();
+    genVx_.clear();
+    genVy_.clear();
+    genVz_.clear();
+    genMass_.clear();
     genPartIsFirstCopy_.clear();
     genPartIsLastCopy_.clear();
     genPartIsLastCopyBeforeFSR_.clear();
