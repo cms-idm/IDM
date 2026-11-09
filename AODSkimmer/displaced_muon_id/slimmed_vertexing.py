@@ -53,6 +53,9 @@ def wrap(x):
 def stages(t):
     """reco and vertexed masks (all events) for one case's arrays."""
     two = t["twoAcc"] > 0
+    t = dict(t)  # float64 for all cut inputs: float32 compared with 0.9 etc. would differ from validate at the boundary
+    t.update({k: np.asarray(t[k], dtype=np.float64) for k in ("bbChi2", "bbNdof", "bbRecoDR", "bbRecoMuMuPt",
+                                                              "bbRecoMuMuPhi", "pfMetPt", "pfMetPhi")})
     reco = np.array([bool(tw) and len(m) == 2 and m[0] >= 0 and m[1] >= 0 for tw, m in zip(two, t["matchObj"])])
     st = t["bbStatus"]
     with np.errstate(invalid="ignore", divide="ignore"):
