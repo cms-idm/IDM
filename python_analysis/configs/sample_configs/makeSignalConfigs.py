@@ -23,9 +23,22 @@ mode = args.mode
 year = args.year
 alpha = args.aEM
 prefix = args.prefix
-name = args.name
+versname = args.name
 skimmed = args.skimmed
 ref_file = args.ref_file
+
+def stringfy_friendly(num):
+    if isinstance(num, int):
+        return str(num)
+    elif isinstance(num, float):
+        if int(num*1000) > 0:
+            num = round(num, 3)
+            return str(num).replace('.', 'p') if '.' in str(num) else str(num)
+        else:
+            num = '%.3e' % num
+            return num.replace('.', 'p')
+    else:
+        raise ValueError("{0} is not a number!".format(num))
 
 if skimmed:
     ref_info = {}
@@ -60,12 +73,16 @@ if mode == "sig":
                     entry['location'] = f"{prefix}/{p}/"
                     output.append(entry)
         else:
-            mchi = float(p.split("_")[0].split("-")[1].replace("p","."))
-            dmchi = float(p.split("_")[1].split("-")[1].replace("p","."))
-            if 'mZD' in p:
-                mzd = p.split("_")[2]
-            else:
-                mzd = ""
+            # acrobert 
+            M1s = p.split('_')[0].split("M1-")[1]
+            dMs = p.split('_')[1].split("dM-")[1]
+            mzds = p.split('_')[2].split("mZD-")[1]
+            M1 = float(M1s.replace("p","."))
+            dM = float(dMs.replace("p","."))
+            mzd = float(mzds.replace("p","."))
+            mchi = round((M1 + M1*(1+dM))/2., 5)
+            dmchi = round(M1*dM, 5)
+
             status, lifetimes = xrdClient.dirlist(f"{prefix}/{year}/{p}")
             lifetimes = [l.name for l in lifetimes]
             
@@ -76,10 +93,11 @@ if mode == "sig":
                 info["Mchi"] = mchi
                 info["dMchi"] = dmchi
                 info["ctau"] = ct
-                if mzd != "":
-                    info["name"] = "sig_Mchi-{0}_dMchi-{1}_ct-{2}_{3}".format(info["Mchi"],info["dMchi"],info["ctau"],mzd)
-                else:
-                    info["name"] = "sig_Mchi-{0}_dMchi-{1}_ct-{2}".format(info["Mchi"],info["dMchi"],info["ctau"])
+                info["M1"] = M1
+                info["dM"] = dM
+                info["mZD"] = mzd
+                info["name"] = "sig_Mchi-{0}_dMchi-{1}_ct-{2}_{3}_{4}".format(info["Mchi"],info["dMchi"],info["ctau"],mzd,versname)
+                info["designation"] = f'signal_ntuples_{versname}_M1-{M1s}_dM-{dMs}_mZD-{mzds}_ctau-{ct}'
                 info["sum_wgt"] = 0.0
                 info["type"] = "signal"
                 info["year"] = int(year)
@@ -90,11 +108,12 @@ if mode == "sig":
                 output.append(info)
 
     if skimmed:
-        out_json = "skimmed_signal_{0}_{1}.json".format(year,name)
+        out_json = "skimmed_signal_{0}_{1}.json".format(year,versname)
     else:
-        out_json = "signal_{0}_{1}_{2}.json".format(year,name,alpha)
+        out_json = "signal_{0}_{1}_{2}.json".format(year,versname,alpha)
     with open(out_json,"w") as outfile:
         json.dump(output,outfile,indent=4)
+    print(f' > json: {outfile}')
 elif mode == "bkg":
     if skimmed:
         status,bkgs = xrdClient.dirlist(f"{prefix}/")
@@ -146,9 +165,9 @@ elif mode == "bkg":
             output.append(info)
 
     if skimmed:
-        out_json = "skimmed_bkg_{0}_{1}.json".format(year,name)
+        out_json = "skimmed_bkg_{0}_{1}.json".format(year,versname)
     else:
-        out_json = "bkg_{0}_{1}.json".format(year,name)
+        out_json = "bkg_{0}_{1}.json".format(year,versname)
     with open(out_json,"w") as outfile:
         json.dump(output,outfile,indent=4)
 elif mode == "data":
@@ -198,8 +217,8 @@ elif mode == "data":
             output.append(info)
 
     if skimmed:
-        out_json = "skimmed_data_{0}_{1}.json".format(year,name)
+        out_json = "skimmed_data_{0}_{1}.json".format(year,versname)
     else:
-        out_json = "data_{0}_{1}.json".format(year,name)
+        out_json = "data_{0}_{1}.json".format(year,versname)
     with open(out_json,"w") as outfile:
         json.dump(output,outfile,indent=4)

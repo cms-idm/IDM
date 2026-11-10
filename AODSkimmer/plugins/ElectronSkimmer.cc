@@ -1646,6 +1646,23 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       nt.recoElectronExpMissingInnerHits_.push_back(ele.gsfTrack()->hitPattern().numberOfLostHits(missingHitType));
       nt.recoElectronConversionVeto_.push_back(!ConversionTools::hasMatchedConversion(ele,*conversionsHandle_,beamspot.position()));
       nt.recoElectronIsEE_.push_back(ele.isEE());
+      // supercluster and additional shower shapes
+      {
+         const auto & sc = ele.superCluster();
+         nt.recoElectronScRawE_.push_back(sc.isNonnull() ? sc->rawEnergy() : -999.);
+         nt.recoElectronScEnergy_.push_back(sc.isNonnull() ? sc->energy() : -999.);
+         nt.recoElectronScEta_.push_back(sc.isNonnull() ? sc->eta() : -999.);
+         nt.recoElectronScPhi_.push_back(sc.isNonnull() ? sc->phi() : -999.);
+         nt.recoElectronScEtaWidth_.push_back(sc.isNonnull() ? sc->etaWidth() : -999.);
+         nt.recoElectronScPhiWidth_.push_back(sc.isNonnull() ? sc->phiWidth() : -999.);
+         nt.recoElectronScClustersSize_.push_back(sc.isNonnull() ? (int)sc->clustersSize() : -999);
+         const bool validRawE = sc.isNonnull() && sc->rawEnergy() > 0;
+         const bool validSeed = validRawE && sc->seed().isNonnull();
+         nt.recoElectronSeedEoverScRawE_.push_back(validSeed ? sc->seed()->energy()/sc->rawEnergy() : -999.);
+         nt.recoElectronFull5x5EMaxOverScRawE_.push_back(validRawE ? ele.full5x5_showerShape().eMax/sc->rawEnergy() : -999.);
+         nt.recoElectronFull5x5E2ndOverScRawE_.push_back(validRawE ? ele.full5x5_showerShape().e2nd/sc->rawEnergy() : -999.);
+      }
+      nt.recoElectronFull5x5SigmaIetaIphi_.push_back(ele.full5x5_showerShape().sigmaIetaIphi);
       // x-cleaning study
       nt.recoElectronHasLptMatch_.push_back(false);
       nt.recoElectronLptMatchIdx_.push_back(-999);
@@ -1803,7 +1820,13 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          nt.recoAllLowPtElectronScEtaWidth_.push_back(sc.isNonnull() ? sc->etaWidth() : -999.);
          nt.recoAllLowPtElectronScPhiWidth_.push_back(sc.isNonnull() ? sc->phiWidth() : -999.);
          nt.recoAllLowPtElectronScClustersSize_.push_back(sc.isNonnull() ? (int)sc->clustersSize() : -999);
+         const bool validRawE = sc.isNonnull() && sc->rawEnergy() > 0;
+         const bool validSeed = validRawE && sc->seed().isNonnull();
+         nt.recoAllLowPtElectronSeedEoverScRawE_.push_back(validSeed ? sc->seed()->energy()/sc->rawEnergy() : -999.);
+         nt.recoAllLowPtElectronFull5x5EMaxOverScRawE_.push_back(validRawE ? ele.full5x5_showerShape().eMax/sc->rawEnergy() : -999.);
+         nt.recoAllLowPtElectronFull5x5E2ndOverScRawE_.push_back(validRawE ? ele.full5x5_showerShape().e2nd/sc->rawEnergy() : -999.);
       }
+      nt.recoAllLowPtElectronFull5x5SigmaIetaIphi_.push_back(ele.full5x5_showerShape().sigmaIetaIphi);
       nt.recoAllLowPtElectronFull5x5R9_.push_back(ele.full5x5_r9());
       nt.recoAllLowPtElectronFull5x5E5x5_.push_back(ele.full5x5_e5x5());
       nt.recoAllLowPtElectronFull5x5E1x5_.push_back(ele.full5x5_e1x5());
@@ -1913,7 +1936,13 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
             nt.recoLowPtElectronScEtaWidth_.push_back(sc.isNonnull() ? sc->etaWidth() : -999.);
             nt.recoLowPtElectronScPhiWidth_.push_back(sc.isNonnull() ? sc->phiWidth() : -999.);
             nt.recoLowPtElectronScClustersSize_.push_back(sc.isNonnull() ? (int)sc->clustersSize() : -999);
+            const bool validRawE = sc.isNonnull() && sc->rawEnergy() > 0;
+            const bool validSeed = validRawE && sc->seed().isNonnull();
+            nt.recoLowPtElectronSeedEoverScRawE_.push_back(validSeed ? sc->seed()->energy()/sc->rawEnergy() : -999.);
+            nt.recoLowPtElectronFull5x5EMaxOverScRawE_.push_back(validRawE ? ele.full5x5_showerShape().eMax/sc->rawEnergy() : -999.);
+            nt.recoLowPtElectronFull5x5E2ndOverScRawE_.push_back(validRawE ? ele.full5x5_showerShape().e2nd/sc->rawEnergy() : -999.);
          }
+         nt.recoLowPtElectronFull5x5SigmaIetaIphi_.push_back(ele.full5x5_showerShape().sigmaIetaIphi);
          nt.recoLowPtElectronFull5x5R9_.push_back(ele.full5x5_r9());
          nt.recoLowPtElectronFull5x5E5x5_.push_back(ele.full5x5_e5x5());
          nt.recoLowPtElectronFull5x5E1x5_.push_back(ele.full5x5_e1x5());
@@ -2585,16 +2614,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          for (size_t j = 0; j < coll_2.size(); j++) {
             if ( (type1==type2) && (j <= i) ) continue; // don't vertex ele with itself or ones prior (if vertexing with same type)
 
-            // don't vertex a GED electron with a matching low-pT (only for x-clean study where we keep xcleaned lpt)
-	    // even if the cross cleaning is removed; this part needs to be done because you dont want to vertex an electron with itself
-            if (type1 == "L" && type2 == "R") {
-	       std::cout << "should never print this if xclean on (LR)" << std::endl;
-	       if (nt.recoLowPtElectronIsXCleaned_[i]) continue; // nested if b/c will error if checking condition with i > n_lpt
-            }
-            if (type1 == "R" && type2 == "L") {
-	       std::cout << "should never print this if xclean on (RL)" << std::endl;
-	       if (nt.recoLowPtElectronIsXCleaned_[j]) continue; // nested if b/c will error if checking condition with j > n_lpt
-            }
+	    // cannot have xcleaned electrons here, so no need to check
 
             pat::Electron ei = *coll_1[i];
             pat::Electron ej = *coll_2[j];
@@ -2603,7 +2623,8 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
             reco::GsfTrackRef ele_j = ej.gsfTrack();
             if (ele_i == ele_j) continue; // skip if same ele is in reg and low-pT collections
             if (!ele_i.isNonnull() || !ele_j.isNonnull()) continue; // skip if there's a bad track
-            if (reco::deltaR(ei,ej) < 0.01) continue; // skip if they're likely to be the same electron un-cross-cleaned
+	    // disable to check cut
+	    //if (reco::deltaR(ei,ej) < 0.001) continue; // skip if they're likely to be the same electron un-cross-cleaned
 
             TransientVertex tv;
             vector<reco::TransientTrack> transient_tracks{};
@@ -2628,6 +2649,30 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
             float dxy2 = (type2 == "R") ? nt.recoElectronDxy_[j] : (type2 == "A" ? nt.recoAllLowPtElectronDxy_[j] : nt.recoLowPtElectronDxy_[j]);
             float mindxy = std::min(abs(dxy1),abs(dxy2));
 
+            // Duplicate-electron flags: shared SC / seed crystal, and track-parameter similarity
+            bool sharedSC = false, sharedSeed = false;
+            if (ei.superCluster().isNonnull() && ej.superCluster().isNonnull()) {
+               sharedSC = (ei.superCluster() == ej.superCluster());
+               if (ei.superCluster()->seed().isNonnull() && ej.superCluster()->seed().isNonnull())
+                  sharedSeed = (ei.superCluster()->seed()->seed() == ej.superCluster()->seed()->seed());
+            }
+            float dPtRel = std::abs(ele_i->pt() - ele_j->pt()) / (ele_i->pt() + ele_j->pt());
+            float dDxy = std::abs(ele_i->dxy(pv.position()) - ele_j->dxy(pv.position()));
+            float dDz = std::abs(ele_i->dz(pv.position()) - ele_j->dz(pv.position()));
+
+            // Shared closest-CTF track: in MiniAOD the track is embedded per electron, so Refs never match;
+            // compare contents instead (copies of the same KF track are bitwise identical)
+            bool sharedCtf = false;
+            reco::TrackRef ctf_i = ei.closestCtfTrackRef();
+            reco::TrackRef ctf_j = ej.closestCtfTrackRef();
+            if (ctf_i.isNonnull() && ctf_j.isNonnull()) {
+               sharedCtf = (ctf_i->pt() == ctf_j->pt() && ctf_i->eta() == ctf_j->eta() &&
+                            ctf_i->phi() == ctf_j->phi() && ctf_i->vz() == ctf_j->vz() &&
+                            ctf_i->charge() == ctf_j->charge());
+            }
+            float ctfOverlap_i = ctf_i.isNonnull() ? ei.ctfGsfOverlap() : -1; // -1 = no associated CTF track
+            float ctfOverlap_j = ctf_j.isNonnull() ? ej.ctfGsfOverlap() : -1;
+
             (fillLpt ? nt.lptvtx_type_             : nt.vtx_type_            ).push_back(vtxType);
             (fillLpt ? nt.lptvtx_recoVtxReducedChi2_ : nt.vtx_recoVtxReducedChi2_).push_back(vtx_chi2);
             (fillLpt ? nt.lptvtx_prob_             : nt.vtx_prob_            ).push_back(vtx_prob);
@@ -2639,6 +2684,14 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
             (fillLpt ? nt.lptvtx_recoVtxDr_        : nt.vtx_recoVtxDr_      ).push_back(dr);
             (fillLpt ? nt.lptvtx_recoVtxSign_      : nt.vtx_recoVtxSign_    ).push_back(ei.charge()*ej.charge());
             (fillLpt ? nt.lptvtx_minDxy_           : nt.vtx_minDxy_         ).push_back(mindxy);
+            (fillLpt ? nt.lptvtx_sharedSC_         : nt.vtx_sharedSC_       ).push_back(sharedSC);
+            (fillLpt ? nt.lptvtx_sharedSeed_       : nt.vtx_sharedSeed_     ).push_back(sharedSeed);
+            (fillLpt ? nt.lptvtx_dPtRel_           : nt.vtx_dPtRel_         ).push_back(dPtRel);
+            (fillLpt ? nt.lptvtx_dDxy_             : nt.vtx_dDxy_           ).push_back(dDxy);
+            (fillLpt ? nt.lptvtx_dDz_              : nt.vtx_dDz_            ).push_back(dDz);
+            (fillLpt ? nt.lptvtx_sharedCtf_        : nt.vtx_sharedCtf_      ).push_back(sharedCtf);
+            (fillLpt ? nt.lptvtx_e1_ctfGsfOverlap_ : nt.vtx_e1_ctfGsfOverlap_).push_back(ctfOverlap_i);
+            (fillLpt ? nt.lptvtx_e2_ctfGsfOverlap_ : nt.vtx_e2_ctfGsfOverlap_).push_back(ctfOverlap_j);
             (fillLpt ? nt.lptvtx_METdPhi_          : nt.vtx_METdPhi_        ).push_back(reco::deltaPhi(ll.phi(),nt.PFMET_Phi_));
             (fillLpt ? nt.lptvtx_ll_pt_            : nt.vtx_ll_pt_          ).push_back(ll.pt());
             (fillLpt ? nt.lptvtx_ll_eta_           : nt.vtx_ll_eta_         ).push_back(ll.eta());
@@ -3703,6 +3756,12 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          }
          if (mindR >= PFmatch_threshold) nt.nElectronLowPt_++;
       }
+
+      // Muon counts, same definitions as the full tree: slimmed muons with pT > 3 GeV, all DSA muons
+      for (const auto & mu : *pfRecoMuHandle_) {
+         if (mu.pt() >= 3) nt.nMuon_++;
+      }
+      nt.nDSAMuon_ = dsaMuonHandle_->size();
    }
 
    if (!isSignal) outT_slim->Fill();

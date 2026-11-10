@@ -641,6 +641,20 @@ public:
     vector<int> recoElectronExpMissingInnerHits_;
     vector<bool> recoElectronConversionVeto_;
     vector<bool> recoElectronIsEE_;
+    // supercluster
+    vector<float> recoElectronScRawE_;
+    vector<float> recoElectronScEnergy_;
+    vector<float> recoElectronScEta_;
+    vector<float> recoElectronScPhi_;
+    vector<float> recoElectronScEtaWidth_;
+    vector<float> recoElectronScPhiWidth_;
+    vector<int> recoElectronScClustersSize_;
+    // additional shower shapes (energy ratios use SC raw energy)
+    vector<float> recoElectronFull5x5SigmaIetaIphi_;
+    vector<float> recoElectronSeedEoverScRawE_;
+    vector<float> recoElectronFull5x5EMaxOverScRawE_;
+    vector<float> recoElectronFull5x5E2ndOverScRawE_;
+    // special variables for the x-cleaning study
     vector<bool> recoElectronHasLptMatch_;
     vector<int> recoElectronLptMatchIdx_;
     vector<bool> recoElectronHasAllLptMatch_;
@@ -720,6 +734,10 @@ public:
     vector<float> recoLowPtElectronFull5x5SigmaIphiIphi_;
     vector<float> recoLowPtElectronFull5x5HcalDepth1OverEcal_;
     vector<float> recoLowPtElectronFull5x5HcalDepth2OverEcal_;
+    vector<float> recoLowPtElectronFull5x5SigmaIetaIphi_;
+    vector<float> recoLowPtElectronSeedEoverScRawE_;
+    vector<float> recoLowPtElectronFull5x5EMaxOverScRawE_;
+    vector<float> recoLowPtElectronFull5x5E2ndOverScRawE_;
     // special variables for the x-cleaning study
     vector<bool> recoLowPtElectronIsXCleaned_;
     vector<int> recoLowPtElectronGEDidx_;
@@ -799,6 +817,10 @@ public:
     vector<float> recoAllLowPtElectronFull5x5SigmaIphiIphi_;
     vector<float> recoAllLowPtElectronFull5x5HcalDepth1OverEcal_;
     vector<float> recoAllLowPtElectronFull5x5HcalDepth2OverEcal_;
+    vector<float> recoAllLowPtElectronFull5x5SigmaIetaIphi_;
+    vector<float> recoAllLowPtElectronSeedEoverScRawE_;
+    vector<float> recoAllLowPtElectronFull5x5EMaxOverScRawE_;
+    vector<float> recoAllLowPtElectronFull5x5E2ndOverScRawE_;
     // x-cleaning status and GED match info
     vector<bool> recoAllLowPtElectronIsXCleaned_;
     vector<int> recoAllLowPtElectronGEDidx_;
@@ -1183,6 +1205,14 @@ public:
     vector<float> vtx_recoVtxDr_;
     vector<int> vtx_recoVtxSign_;
     vector<float> vtx_minDxy_;
+    vector<bool> vtx_sharedSC_;
+    vector<bool> vtx_sharedSeed_;
+    vector<float> vtx_dPtRel_;
+    vector<float> vtx_dDxy_;
+    vector<float> vtx_dDz_;
+    vector<bool> vtx_sharedCtf_;
+    vector<float> vtx_e1_ctfGsfOverlap_;
+    vector<float> vtx_e2_ctfGsfOverlap_;
     vector<float> vtx_METdPhi_;
     vector<float> vtx_ll_pt_;
     vector<float> vtx_ll_eta_;
@@ -1235,6 +1265,14 @@ public:
     vector<float> lptvtx_recoVtxDr_;
     vector<int> lptvtx_recoVtxSign_;
     vector<float> lptvtx_minDxy_;
+    vector<bool> lptvtx_sharedSC_;
+    vector<bool> lptvtx_sharedSeed_;
+    vector<float> lptvtx_dPtRel_;
+    vector<float> lptvtx_dDxy_;
+    vector<float> lptvtx_dDz_;
+    vector<bool> lptvtx_sharedCtf_;
+    vector<float> lptvtx_e1_ctfGsfOverlap_;
+    vector<float> lptvtx_e2_ctfGsfOverlap_;
     vector<float> lptvtx_METdPhi_;
     vector<float> lptvtx_ll_pt_;
     vector<float> lptvtx_ll_eta_;

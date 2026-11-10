@@ -1,8 +1,25 @@
 import sys
 import pandas as pd
-import plotTools as ptools
+try:
+    import plotTools as ptools
+except ModuleNotFoundError:
+    import analysisTools.plotTools as ptools
 import json
 from pathlib import Path
+
+def stringfy_friendly(num):
+    if isinstance(num, int):
+        return str(num)
+    elif isinstance(num, float):
+        if int(num*1000) > 0:
+            num = round(num, 3)
+            return str(num).replace('.', 'p') if '.' in str(num) else str(num)
+        else:
+            num = '%.3e' % num
+            return num.replace('.', 'p')
+    else:
+        raise ValueError("{0} is not a number!".format(num))
+
 
 # Signal
 def get_dict_fromCutflow(cf):
@@ -64,8 +81,21 @@ def get_signal_list_of_cuts(sig_histo, get_cut_idx = False):
         cut = cut_idx
     else:
         cut = cut_name
-    
+
     return cut
+
+def find_cut_idx_by_desc(sig_histo, keyword):
+    '''
+    Find the cutflow index (e.g. 'cut9') whose raw cutDesc text matches `keyword`
+    (case-insensitive substring), instead of hardcoding a cut index -- so callers
+    keep working if cut configs are reordered/renumbered.
+    '''
+    matches = [cname for cname, desc in sig_histo['cutDesc'].items() if keyword.lower() in desc.lower()]
+    if not matches:
+        raise RuntimeError(f"No cutflow stage found matching '{keyword}' in cutDesc: {dict(sig_histo['cutDesc'])}")
+    if len(matches) > 1:
+        raise RuntimeError(f"Multiple cutflow stages matched '{keyword}': {matches}")
+    return matches[0]
 
 # Data
 def get_data_cutflow_dict(data_histo, branch):
@@ -236,6 +266,34 @@ def get_bkg_cutflow_df(bkg_histos, branch, process = 'all', isLegacy = False):
     cutflow.columns = cut_name
     
     return cutflow
+
+def get_bkg_slim_cut_overrides(bkg_histos, branch='cutflow_cts_slim'):
+    '''
+    Aggregate the independent slim-tree cut1/cut2 measurements (see
+    Analyzer._processSlim -- MET filters and MET trigger applied directly to the
+    true, unskimmed all-events tree) into the same {process/'Total' -> value}
+    shape, per cut, as get_bkg_cutflow_df -- keyed by cut description so the
+    result lines up with that function's columns and can be used to overwrite
+    them (e.g. bkg_df_cts[col] = overrides[col]).
+    '''
+    cut_idx = list(bkg_histos['cutDesc_slim'].keys())
+    cut_name = [ptools.getCut(bkg_histos['cutDesc_slim'][c]) for c in cut_idx]
+
+    bkgCat = bkg_categories(bkg_histos['cutflow'])[0]
+
+    total_after_cut = {}
+    for process, subprocesses in bkgCat.items():
+        total_after_cut[process] = {cut: 0 for cut in cut_idx}
+        for subprocess in subprocesses:
+            for cut in cut_idx:
+                total_after_cut[process][cut] += bkg_histos[branch].get(subprocess, {}).get(cut, 0)
+
+    total_after_cut['Total'] = {cut: sum(total_after_cut[p][cut] for p in bkgCat) for cut in cut_idx}
+
+    df = pd.DataFrame.from_dict(total_after_cut, orient='index')
+    df.columns = cut_name
+
+    return df
 
 def get_s_over_sqrtB_cutflow_dict(sig_histo, bkg_histo):
     sig_df = get_signal_cutflow_dict(sig_histo, branch='cutflow_cts')
