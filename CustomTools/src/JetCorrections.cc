@@ -40,7 +40,7 @@ bool JetCorrections::passJetID(const reco::PFJet &jet, int idx) {
             passID = (neutHadFrac > 0.2) && (neutEmFrac < 0.9) && (neutMult > 10);
         }
     }
-    else if ((year == 2017) || (year == 2018) || (year == 2022) || (year == 2023) ){
+    else if ((year == 2017) || (year == 2018) || (year == 2022) || (year == 2023) || (year == 2024)){
         if (abs(eta) <= 2.6) {
             passID = (neutHadFrac < 0.9) && (neutEmFrac < 0.9) && (nConstit > 1) && (muonFrac < 0.8) && (chargedHadFrac > 0.01) && (chargedMult > 0)  && (chEmFrac < 0.80);
         }
@@ -57,6 +57,12 @@ bool JetCorrections::passJetID(const reco::PFJet &jet, int idx) {
 
     return passID;
 }
+
+    // Apply additional cuts to leading jet (see monojet analysis: https://arxiv.org/pdf/1703.01651.pdf)
+    // Run3 - not currently in AN, so skipping
+    //if (idx == 0) {
+    //    passID = passID && (chargedHadFrac > 0.1) && (neutHadFrac < 0.8);
+    //}
 
 void JetCorrections::Correct(JME::JetResolution &resolution, JME::JetResolutionScaleFactor &resolution_sf, JetCorrectionUncertainty &jecUnc, edm::Handle<double> &rhoHandle, edm::Handle<vector<reco::GenJet> > &genJetHandle, reco::PFMET &PFMET) {
     // Apply Jet ID recommendations for UL anaylses (https://twiki.cern.ch/twiki/bin/view/CMS/JetID13TeVUL)
