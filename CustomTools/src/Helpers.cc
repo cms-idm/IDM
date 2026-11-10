@@ -2,12 +2,16 @@
 
 #include "DataFormats/SiPixelDetId/interface/PixelSubdetector.h"
 #include "DataFormats/SiStripDetId/interface/StripSubdetector.h"
+#include <cmath>
+#include <string>
 
 Helper::Helper() {}
 Helper::~Helper() {}
 
 bool Helper::JetID(const pat::Jet &jet, std::string year) {
     auto eta = jet.eta();
+    auto absEta = std::abs(eta);
+
     auto neutEmFrac = jet.neutralEmEnergyFraction();
     auto neutHadFrac = jet.neutralHadronEnergyFraction();
     auto nConstit = jet.nConstituents();
@@ -19,20 +23,50 @@ bool Helper::JetID(const pat::Jet &jet, std::string year) {
 
     bool passID = false;
 
-    if ((year == "2022") || (year == "2023") || (year == "2024")) {
-       // Run3 XYZ need to update!
-       if (abs(eta) <= 2.6) {
-            passID = (neutHadFrac < 0.9) && (neutEmFrac < 0.9) && (nConstit > 1) && (muonFrac < 0.8) && (chargedHadFrac > 0) && (chargedMult > 0) && (chEmFrac < 0.80);
+    /*  Accept Run 3 year labels such as:
+        2022
+        2022EE
+        2022preEE / 2022PreEE
+        2023
+        2023BPix
+        2024  */
+    const bool isRun3 =
+        (year.rfind("2022", 0) == 0) ||
+        (year.rfind("2023", 0) == 0) ||
+        (year.rfind("2024", 0) == 0);
 
+    if (isRun3) {
+        // Run 3 jet ID placeholder based on the existing Run 3-style cuts.
+        // TODO: update with the final official Run 3 recommendation if needed.
+        if (absEta <= 2.6) {
+            passID =
+                (neutHadFrac < 0.9) &&
+                (neutEmFrac < 0.9) &&
+                (nConstit > 1) &&
+                (muonFrac < 0.8) &&
+                (chargedHadFrac > 0) &&
+                (chargedMult > 0) &&
+                (chEmFrac < 0.80);
         }
-        else if ((abs(eta) > 2.6) && (abs(eta) <= 2.7)) {
-            passID = (neutHadFrac < 0.9) && (neutEmFrac < 0.99) && (muonFrac < 0.8) && (chargedMult > 0) && (chEmFrac < 0.8);
+        else if ((absEta > 2.6) && (absEta <= 2.7)) {
+            passID =
+                (neutHadFrac < 0.9) &&
+                (neutEmFrac < 0.99) &&
+                (muonFrac < 0.8) &&
+                (chargedMult > 0) &&
+                (chEmFrac < 0.8);
         }
-        else if ((abs(eta) > 2.7) && (abs(eta) <= 3.0)) {
-            passID = (neutEmFrac < 0.99) && (neutEmFrac > 0.01) && (neutMult > 1);
+        else if ((absEta > 2.7) && (absEta <= 3.0)) {
+            passID =
+                (neutEmFrac < 0.99) &&
+                (neutEmFrac > 0.01) &&
+                (neutMult > 1);
         }
-        else if ((abs(eta) >= 3.0) && (abs(eta) < 5.0)) {
-            passID = (neutHadFrac > 0.2) && (neutEmFrac < 0.9) && (neutMult > 10);
+        else if ((absEta >= 3.0) && (absEta < 5.0)) {
+            passID =
+                (neutHadFrac > 0.2) &&
+                (neutEmFrac < 0.9) &&
+                (neutMult > 10);
         }
     }
 
@@ -67,7 +101,9 @@ HitBasedSVProxy Helper::EstimateSVProxyFromInnermostHit(const reco::Track &track
     // state at the innermost hit itself when available to avoid that bias.
     float theta = track.theta();
     float phi = track.phi();
-    if (track.innerOk()) {
+    // innerOk() reads the TrackExtra, which some MINIAOD inputs (e.g. the iDMmu 2022EE
+    // production) do not store; without it, keep the PCA direction above.
+    if (track.extra().isNonnull() && track.extra().isAvailable() && track.innerOk()) {
         theta = track.innerMomentum().theta();
         phi = track.innerMomentum().phi();
     }
