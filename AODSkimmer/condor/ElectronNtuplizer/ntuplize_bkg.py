@@ -75,4 +75,6 @@ def main():
             os.system(f'bash -c "{cmd}"')
 
 if __name__ == "__main__":
+
     main()
+

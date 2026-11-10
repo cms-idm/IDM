@@ -19,6 +19,9 @@ from XRootD import client
 NanoAODSchema.warn_missing_crossrefs = False
 import xgboost as xgb
 import correctionlib
+import sys
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../trainBDT"))
+from feature_sets import FEATURE_SETS
 
 # Helper functions
 def deltaPhi(v1,v2):
@@ -135,7 +138,7 @@ def electronID(events,info):
     """
     eles = events.Electron
     lpt_eles = events.LptElectron
-    
+
     # define branches with the same name to store relevant MVA ID score for electrons/low-pT electrons
     events['Electron','IDscore'] = ak.zeros_like(eles.pt) # 'loose' mva score for regular electrons (just a dummy value)
     events['LptElectron','IDscore'] = lpt_eles.ID # use the actual MVA score for low-pT electrons
@@ -146,20 +149,19 @@ def electronID(events,info):
     events["LptElectron","passID"] = lpt_ele_kinematic_cut & lpt_ele_id_cut & (lpt_eles.mindRj > 0.4)
     events["LptElectron","passIDBasic"] = lpt_ele_kinematic_cut & lpt_ele_id_cut
 
-     # AllLptElectron ID (same definition as LptElectron) -- needed for lptvtx good-vertex selection,
+
     # since lptvtx.e1/e2 are always drawn from AllLptElectron rather than LptElectron.
     # Not present in every ntuple era (e.g. 2018) -- skip rather than crash.
     if 'AllLptElectron' in events.fields:
         all_lpt_eles = events.AllLptElectron
         events['AllLptElectron','mindRj'] = ak.fill_none(ak.min(all_lpt_eles.dRJets,axis=-1),999)
-        
+
         alpt_ele_kinematic_cut = (all_lpt_eles.pt > 1) & (np.abs(all_lpt_eles.eta) < 2.4)
-        
         alpt_ele_id_cut = all_lpt_eles.pt > 0 # dummy always True
         events["AllLptElectron","passID"] = alpt_ele_kinematic_cut & alpt_ele_id_cut & (events.AllLptElectron.mindRj > 0.4)
         events["AllLptElectron","passIDBasic"] = alpt_ele_kinematic_cut & alpt_ele_id_cut
 
-    
+
     # regular ID
     """if info['type'] == 'signal':
         ele_kinematic_cut = (eles.pt > 1) & (np.abs(eles.eta) < 2.4)
@@ -187,6 +189,482 @@ def electronID(events,info):
     events["Electron","passIDBasic"] = ele_kinematic_cut & ele_id_cut
     
 
+def checkMergedElectronGenMatch(events,cand):
+    """
+    Given `cand`, the per-event merged-electron candidate produced by
+    selectBestMergedCandidate (one entry per event, or None), check
+    whether it is a genuine merged electron under the same definition used
+    in configs/histo_configs/mergedeles.py (mirrors mergedcats.py's
+    _cat_merged): quality-matched (dR<0.1, correct charge, pt within 20%) to
+    one gen electron while also being within dR<0.1 of the other gen, with
+    neither gen having a photon/track/conversion alternative reconstruction.
+
+    Unlike mergedeles.py's event-level _cat_merged, this doesn't additionally
+    require that no other AllLptElectron in the event separately matches the
+    other gen (_cat_sep there) -- that's an event-topology concept, not a
+    property of the one already-selected candidate electron.
+
+    Returns a 1d array with one entry per event: True/False for whether
+    `cand` is a genuine merged electron, or None if the event had no
+    candidate (`cand` is None).
+    """
+    def _pt_rel(obj_pt,gen_pt):
+        return np.abs(obj_pt-gen_pt)/gen_pt < 1.0
+
+    gen_sum_pt = events.GenEle.pt + events.GenPos.pt
+
+    # Photon / OOT-photon / track / conversion matching to gen (needed to
+    # determine whether either gen has a non-electron alternative, which
+    # excludes the event from the merged-electron category).
+    _pho_dr_ge  = deltaR(events.Photon.eta,     events.Photon.phi,     events.GenEle.eta, events.GenEle.phi)
+    _pho_dr_gp  = deltaR(events.Photon.eta,     events.Photon.phi,     events.GenPos.eta, events.GenPos.phi)
+    _oot_dr_ge  = deltaR(events.ootPhoton.eta,  events.ootPhoton.phi,  events.GenEle.eta, events.GenEle.phi)
+    _oot_dr_gp  = deltaR(events.ootPhoton.eta,  events.ootPhoton.phi,  events.GenPos.eta, events.GenPos.phi)
+    _trk_dr_ge  = deltaR(events.IsoTrack.eta,   events.IsoTrack.phi,   events.GenEle.eta, events.GenEle.phi)
+    _trk_dr_gp  = deltaR(events.IsoTrack.eta,   events.IsoTrack.phi,   events.GenPos.eta, events.GenPos.phi)
+    _conv_dr_ge = deltaR(events.Conversion.eta, events.Conversion.phi, events.GenEle.eta, events.GenEle.phi)
+    _conv_dr_gp = deltaR(events.Conversion.eta, events.Conversion.phi, events.GenPos.eta, events.GenPos.phi)
+
+    _pho_pt_ge  = _pt_rel(events.Photon.pt,     events.GenEle.pt)
+    _pho_pt_gp  = _pt_rel(events.Photon.pt,     events.GenPos.pt)
+    _oot_pt_ge  = _pt_rel(events.ootPhoton.pt,  events.GenEle.pt)
+    _oot_pt_gp  = _pt_rel(events.ootPhoton.pt,  events.GenPos.pt)
+    _trk_pt_ge  = _pt_rel(events.IsoTrack.pt,   events.GenEle.pt)
+    _trk_pt_gp  = _pt_rel(events.IsoTrack.pt,   events.GenPos.pt)
+    _conv_pt_ge = _pt_rel(events.Conversion.pt, events.GenEle.pt)
+    _conv_pt_gp = _pt_rel(events.Conversion.pt, events.GenPos.pt)
+
+    _ge_any = (
+        ak.any((_pho_dr_ge  < 0.1) & _pho_pt_ge,                                  axis=1) |
+        ak.any((_oot_dr_ge  < 0.1) & _oot_pt_ge,                                  axis=1) |
+        ak.any((_trk_dr_ge  < 0.1) & (events.IsoTrack.charge == -1) & _trk_pt_ge, axis=1) |
+        ak.any((_conv_dr_ge < 0.1) & _conv_pt_ge,                                 axis=1)
+    )
+    _gp_any = (
+        ak.any((_pho_dr_gp  < 0.1) & _pho_pt_gp,                                  axis=1) |
+        ak.any((_oot_dr_gp  < 0.1) & _oot_pt_gp,                                  axis=1) |
+        ak.any((_trk_dr_gp  < 0.1) & (events.IsoTrack.charge == +1) & _trk_pt_gp, axis=1) |
+        ak.any((_conv_dr_gp < 0.1) & _conv_pt_gp,                                 axis=1)
+    )
+
+    # ── Candidate gen-matching (option-typed: None wherever cand is None) ────
+    dr_to_ge = deltaR(cand.eta,cand.phi,events.GenEle.eta,events.GenEle.phi)
+    dr_to_gp = deltaR(cand.eta,cand.phi,events.GenPos.eta,events.GenPos.phi)
+
+    pt_me = _pt_rel(cand.pt,events.GenEle.pt)
+    pt_mp = _pt_rel(cand.pt,events.GenPos.pt)
+    pt_ms = _pt_rel(cand.pt,gen_sum_pt)
+
+    dr_match_ge = (dr_to_ge < 0.1) & (cand.charge == -1) & pt_me
+    dr_match_gp = (dr_to_gp < 0.1) & (cand.charge == +1) & pt_mp
+
+    pt_ok_ge = pt_me | pt_ms
+    pt_ok_gp = pt_mp | pt_ms
+
+    merged = (dr_to_ge < 0.1) & (dr_to_gp < 0.1) & (
+        ((cand.charge == -1) & pt_ok_ge & ~dr_match_gp & ~_gp_any) |
+        ((cand.charge == +1) & pt_ok_gp & ~dr_match_ge & ~_ge_any)
+    )
+
+    return merged & ~_ge_any & ~_gp_any
+
+# Must match configs/histo_configs/mergedcats.py's _LXY_CUT_CM.
+_MERGEDCAT_LXY_CUT_CM = 100.0
+
+def computeMergedCatVars(events):
+    """
+    Hoists the per-event merged-electron/merged-photon/resolved categorization
+    that configs/histo_configs/mergedcats.py's fillHistos used to (re)compute
+    from scratch on every savePlots=True cut stage (an_selection.py currently
+    has 6) into a single pass, run once per chunk before the cut loop via the
+    histoConfig's `subroutines` hook.
+
+    Every quantity below is a pure per-event/per-object function of
+    GenEle/GenPos/Photon/ootPhoton/IsoTrack/Conversion/AllLptElectron/PFJet/vtx
+    -- none of it depends on which cut stage produced the current `events` --
+    so computing it once here and letting `events[cut]` slicing carry the
+    resulting fields through the cut loop gives identical results to
+    recomputing from scratch at each stage, for a fraction of the cost.
+    Only meaningful for signal MC (uses GenEle/GenPos/GenPart), matching
+    mergedcats.fillHistos's own assumption -- a no-op (leaves events
+    untouched) if GenEle isn't present, so configs shared between signal and
+    background (e.g. appearingtrack.py) can register this subroutine
+    unconditionally.
+    """
+    if 'GenEle' not in events.fields:
+        return
+
+    def _pt_rel(obj_pt, gen_pt):
+        return np.abs(obj_pt - gen_pt) / gen_pt < 1.0
+
+    # ── Gen kinematics ────────────────────────────────────────────────────────
+    # gen_lxy is measured from the chi2 production vertex (the true, unsmeared
+    # primary vertex) rather than the reconstructed PV, which carries ~10-15um
+    # of resolution/bias that would otherwise leak into a "truth" quantity.
+    chi2       = ak.firsts(events.GenPart[np.abs(events.GenPart.ID) == 1000023])
+    gen_lxy    = np.sqrt((events.GenEle.vx - chi2.vx)**2 + (events.GenEle.vy - chi2.vy)**2)
+    gen_sum_pt = events.GenEle.pt + events.GenPos.pt
+    events['gen_lxy'] = gen_lxy
+    events['lxy_hi']  = gen_lxy > _MERGEDCAT_LXY_CUT_CM
+
+    # ── Vertexed category ─────────────────────────────────────────────────────
+    # An event is "vertexed" if it has a good ee vertex (AN definition,
+    # version='v15acr') whose selected (lowest-chi2) instance is truth-matched
+    # (sel_lptvtx.isMatched, a raw ntuple branch). This supersedes the
+    # merged-electron/merged-photon/resolved/zero categories below -- an event
+    # can only land in one of those if it is *not* vertexed.
+    #
+    # Uses the lptvtx collection (the all-low-pT-only vertex pool, built from
+    # every AllLptElectron pair regardless of cross-cleaning -- see
+    # defineGoodLptVertices/lptvtxElectronConnection) rather than the mixed
+    # vtx collection. A "resolved" gen electron is by definition an
+    # AllLptElectron match, so using vtx here could undercount cat_vertexed:
+    # vtx's low-pT leg pool excludes any AllLptElectron that got cross-cleaned
+    # against a regular electron, so a resolved gen electron's own reco match
+    # could be entirely absent from vtx's candidates. lptvtx has no such gap.
+    #
+    # Nothing else in the pipeline reads lptvtx.isGood/good_lptvtx/
+    # nGoodLptVtx/sel_lptvtx (unlike the vtx-based fields this replaced,
+    # which iDMeProcessor also populates with its own default version), so
+    # there's no pre-existing state here that needs saving/restoring.
+    #
+    # Derived vertex-level fields, mirroring the vtx-only computations in
+    # computeExtraVariables/projectLxy/projectLxyFromPV/projectGenLxy -- so
+    # sel_lptvtx (aliased below as vertexed_vtx) supports the same
+    # _VTX_HISTS fields configs/histo_configs/resolvedcats.py reads off vtx.
+    # Must run before defineGoodLptVertices/selectBestLptVertex so the new
+    # fields survive the good_lptvtx/sel_lptvtx subsetting below.
+    #
+    # lptvtx.e1/e2 were already set by lptvtxElectronConnection, called
+    # earlier in computeExtraVariables (which also sets AllLptElectron's
+    # mindRj/mindPhiJ/dRj0/dPhij0) -- but that snapshot predates the
+    # 'IDscore' alias below, so re-run the connection to pick it up.
+    # AllLptElectron never gets an 'IDscore' field the way Electron/LptElectron
+    # do (electronID, above) -- vtx.e1/e2 (drawn from Electron/LptElectron)
+    # read that field name via _VTXELE_HISTS, so lptvtx.e1/e2 (drawn from
+    # AllLptElectron) need it too, aliased to the same raw MVA score as 'ID'.
+    events['AllLptElectron', 'IDscore']  = events.AllLptElectron.ID
+    lptvtxElectronConnection(events)
+
+    lv = events.lptvtx
+    events['lptvtx','mindRj']   = ak.fill_none(ak.min(lv.dRJets, axis=-1), 999)
+    events['lptvtx','mindPhiJ'] = ak.fill_none(ak.min(np.abs(lv.dPhiJets), axis=-1), 999)
+    events['lptvtx','eleDphi']  = np.abs(deltaPhi(lv.e1.phi, lv.e2.phi))
+    events['lptvtx','bothElePassID']      = lv.e1.passID & lv.e2.passID
+    events['lptvtx','bothElePassIDBasic'] = lv.e1.passIDBasic & lv.e2.passIDBasic
+    events['lptvtx','vxy_fromPV'] = ((lv.vx-events.PV.x)**2+(lv.vy-events.PV.y)**2)
+
+    # cos_collinear / projectedLxy (mirrors projectLxy)
+    lv_dotprod  = lv.vx*lv.px + lv.vy*lv.py
+    lv_vxy_mag  = np.sqrt(lv.vx*lv.vx + lv.vy*lv.vy)
+    lv_pxy_mag  = np.sqrt(lv.px*lv.px + lv.py*lv.py)
+    lv_cos      = lv_dotprod / (lv_vxy_mag * lv_pxy_mag)
+    events['lptvtx','cos_collinear'] = lv_cos
+    events['lptvtx','projectedLxy']  = lv.vxy * lv_cos
+
+    # cos_collinear_fromPV / cos_collinear_fromPV_refit (mirrors projectLxyFromPV)
+    lv_vx_fromPV = lv.vx - events.PV.x
+    lv_vy_fromPV = lv.vy - events.PV.y
+    lv_vxy_mag_fromPV = np.sqrt(lv_vx_fromPV*lv_vx_fromPV + lv_vy_fromPV*lv_vy_fromPV)
+
+    lv_px_refit = lv.refit_pt * np.cos(lv.refit_phi)
+    lv_py_refit = lv.refit_pt * np.sin(lv.refit_phi)
+    lv_dotprod_fromPV_refit = lv_vx_fromPV*lv_px_refit + lv_vy_fromPV*lv_py_refit
+    lv_pxy_mag_refit = np.sqrt(lv_px_refit*lv_px_refit + lv_py_refit*lv_py_refit)
+    events['lptvtx','cos_collinear_fromPV_refit'] = lv_dotprod_fromPV_refit / (lv_vxy_mag_fromPV * lv_pxy_mag_refit)
+
+    lv_dotprod_fromPV = lv_vx_fromPV*lv.px + lv_vy_fromPV*lv.py
+    events['lptvtx','cos_collinear_fromPV'] = lv_dotprod_fromPV / (lv_vxy_mag_fromPV * lv_pxy_mag)
+
+    # gen_cos_collinear_fromPV (mirrors projectGenLxy -- pure gen-level, reuses
+    # the chi2 production vertex already computed above). Unlike
+    # projectGenLxy's own version, chi2 here comes from ak.firsts (not a bare
+    # boolean-mask selection), so it's already flat per-event -- no
+    # ak.flatten needed before assigning (broadcasts into lptvtx's jagged
+    # per-event list same as projectGenLxy's flattened result does for vtx).
+    ee_vx_fromPV = events.GenEle.vx - chi2.vx
+    ee_vy_fromPV = events.GenEle.vy - chi2.vy
+    ee_px = events.GenEle.px + events.GenPos.px
+    ee_py = events.GenEle.py + events.GenPos.py
+    ee_dotprod = ee_vx_fromPV*ee_px + ee_vy_fromPV*ee_py
+    ee_vxy_fromPV = np.sqrt(ee_vx_fromPV*ee_vx_fromPV + ee_vy_fromPV*ee_vy_fromPV)
+    ee_pxy = np.sqrt(ee_px*ee_px + ee_py*ee_py)
+    events['lptvtx','gen_cos_collinear_fromPV'] = ee_dotprod / (ee_vxy_fromPV*ee_pxy)
+
+    defineGoodLptVertices(events, version='v15acr')
+    selectBestLptVertex(events)
+    _cat_vertexed = (events.nGoodLptVtx > 0) & ak.fill_none(events.sel_lptvtx.isMatched, False)
+    # Persisted so histo_configs can read the actual vertex used for this
+    # categorization decision, e.g. configs/histo_configs/mergedcats.py's
+    # vtx_* reco hists for cat_vertexed-selected events.
+    events['vertexed_vtx'] = events.sel_lptvtx
+
+    events['cat_vertexed'] = _cat_vertexed
+
+    # ── Derived per-object fields ────────────────────────────────────────────
+    # Photon has no precomputed dRJets/dPhiJets branch (unlike AllLptElectron),
+    # so compute min dR/dPhi to the nearest PFJet directly.
+    _pho_dphi_j = np.abs(deltaPhi(events.Photon.phi[:, :, None], events.PFJet.phi[:, None, :]))
+    _pho_dr_j   = deltaR(events.Photon.eta[:, :, None], events.Photon.phi[:, :, None],
+                          events.PFJet.eta[:, None, :], events.PFJet.phi[:, None, :])
+    events['Photon', 'mindRj']   = ak.fill_none(ak.min(_pho_dr_j,   axis=-1), 999)
+    events['Photon', 'mindPhiJ'] = ak.fill_none(ak.min(_pho_dphi_j, axis=-1), 999)
+
+    # dR to nearest other AllLptElectron in the same event (self excluded).
+    idx_e = ak.local_index(events.AllLptElectron, axis=1)
+    dr_ee = deltaR(events.AllLptElectron.eta[:, :, None], events.AllLptElectron.phi[:, :, None],
+                    events.AllLptElectron.eta[:, None, :], events.AllLptElectron.phi[:, None, :])
+    dr_ee = ak.where(idx_e[:, :, None] == idx_e[:, None, :], np.inf, dr_ee)
+    events['AllLptElectron', 'drNearestEle'] = ak.fill_none(ak.min(dr_ee, axis=-1), 999)
+
+    # ── Photon / OOT-photon / track / conversion matching to gen ─────────────
+    # (Needed to determine whether gens have non-electron alternatives and for
+    # the exclusivity condition that defines the merged-photon category.)
+    # Not all ntuple eras have a Conversion branch -- treat it as empty there,
+    # so the conversion veto never fires.
+    if 'Conversion' in events.fields:
+        convs = events.Conversion
+    else:
+        _empty = ak.unflatten(np.zeros(0), np.zeros(len(events), dtype=np.int64))
+        convs = ak.zip({'eta': _empty, 'phi': _empty, 'pt': _empty})
+    # Likewise IsoTrack_charge -- fall back to charge 0 so the charged-track
+    # veto in _ge_any/_gp_any never fires (tracks still enter _photrk_excl).
+    if 'charge' in events.IsoTrack.fields:
+        _trk_charge = events.IsoTrack.charge
+    else:
+        _trk_charge = ak.zeros_like(events.IsoTrack.pt, dtype=np.int64)
+    _pho_dr_ge  = deltaR(events.Photon.eta,     events.Photon.phi,     events.GenEle.eta, events.GenEle.phi)
+    _pho_dr_gp  = deltaR(events.Photon.eta,     events.Photon.phi,     events.GenPos.eta, events.GenPos.phi)
+    _oot_dr_ge  = deltaR(events.ootPhoton.eta,  events.ootPhoton.phi,  events.GenEle.eta, events.GenEle.phi)
+    _oot_dr_gp  = deltaR(events.ootPhoton.eta,  events.ootPhoton.phi,  events.GenPos.eta, events.GenPos.phi)
+    _trk_dr_ge  = deltaR(events.IsoTrack.eta,   events.IsoTrack.phi,   events.GenEle.eta, events.GenEle.phi)
+    _trk_dr_gp  = deltaR(events.IsoTrack.eta,   events.IsoTrack.phi,   events.GenPos.eta, events.GenPos.phi)
+    _conv_dr_ge = deltaR(convs.eta,             convs.phi,             events.GenEle.eta, events.GenEle.phi)
+    _conv_dr_gp = deltaR(convs.eta,             convs.phi,             events.GenPos.eta, events.GenPos.phi)
+
+    _pho_pt_ge   = _pt_rel(events.Photon.pt,     events.GenEle.pt)
+    _pho_pt_gp   = _pt_rel(events.Photon.pt,     events.GenPos.pt)
+    _pho_pt_sum  = _pt_rel(events.Photon.pt,     gen_sum_pt)
+    _oot_pt_ge   = _pt_rel(events.ootPhoton.pt,  events.GenEle.pt)
+    _oot_pt_gp   = _pt_rel(events.ootPhoton.pt,  events.GenPos.pt)
+    _oot_pt_sum  = _pt_rel(events.ootPhoton.pt,  gen_sum_pt)
+    _trk_pt_ge   = _pt_rel(events.IsoTrack.pt,   events.GenEle.pt)
+    _trk_pt_gp   = _pt_rel(events.IsoTrack.pt,   events.GenPos.pt)
+    _trk_pt_sum  = _pt_rel(events.IsoTrack.pt,   gen_sum_pt)
+    _conv_pt_ge  = _pt_rel(convs.pt,             events.GenEle.pt)
+    _conv_pt_gp  = _pt_rel(convs.pt,             events.GenPos.pt)
+    _conv_pt_sum = _pt_rel(convs.pt,             gen_sum_pt)
+
+    _ge_any = (
+        ak.any((_pho_dr_ge  < 0.1) & _pho_pt_ge,                                  axis=1) |
+        ak.any((_oot_dr_ge  < 0.1) & _oot_pt_ge,                                  axis=1) |
+        ak.any((_trk_dr_ge  < 0.1) & (_trk_charge == -1)          & _trk_pt_ge, axis=1) |
+        ak.any((_conv_dr_ge < 0.1) & _conv_pt_ge,                                 axis=1)
+    )
+    _gp_any = (
+        ak.any((_pho_dr_gp  < 0.1) & _pho_pt_gp,                                  axis=1) |
+        ak.any((_oot_dr_gp  < 0.1) & _oot_pt_gp,                                  axis=1) |
+        ak.any((_trk_dr_gp  < 0.1) & (_trk_charge == +1)          & _trk_pt_gp, axis=1) |
+        ak.any((_conv_dr_gp < 0.1) & _conv_pt_gp,                                 axis=1)
+    )
+
+    # Merged-photon detection: a single photon within dR < 0.1 of both gens,
+    # pt-matching either gen or the system sum, with exclusivity (no other
+    # photon/track closer to just one gen).
+    _pho_both  = (_pho_dr_ge  < 0.1) & (_pho_dr_gp  < 0.1) & (_pho_pt_ge  | _pho_pt_gp  | _pho_pt_sum)
+    _oot_both  = (_oot_dr_ge  < 0.1) & (_oot_dr_gp  < 0.1) & (_oot_pt_ge  | _oot_pt_gp  | _oot_pt_sum)
+    _trk_both  = (_trk_dr_ge  < 0.1) & (_trk_dr_gp  < 0.1) & (_trk_pt_ge  | _trk_pt_gp  | _trk_pt_sum)
+    _conv_both = (_conv_dr_ge < 0.1) & (_conv_dr_gp < 0.1) & (_conv_pt_ge | _conv_pt_gp | _conv_pt_sum)
+
+    _pho_both_any = ak.any(_pho_both, axis=1)
+
+    _photrk_excl = (
+        (ak.sum((_pho_dr_ge  < 0.1) & (_pho_pt_ge  | _pho_pt_sum),  axis=1) == ak.sum(_pho_both,  axis=1)) &
+        (ak.sum((_pho_dr_gp  < 0.1) & (_pho_pt_gp  | _pho_pt_sum),  axis=1) == ak.sum(_pho_both,  axis=1)) &
+        (ak.sum((_oot_dr_ge  < 0.1) & (_oot_pt_ge  | _oot_pt_sum),  axis=1) == ak.sum(_oot_both,  axis=1)) &
+        (ak.sum((_oot_dr_gp  < 0.1) & (_oot_pt_gp  | _oot_pt_sum),  axis=1) == ak.sum(_oot_both,  axis=1)) &
+        (ak.sum((_trk_dr_ge  < 0.1) & (_trk_pt_ge  | _trk_pt_sum),  axis=1) == ak.sum(_trk_both,  axis=1)) &
+        (ak.sum((_trk_dr_gp  < 0.1) & (_trk_pt_gp  | _trk_pt_sum),  axis=1) == ak.sum(_trk_both,  axis=1)) &
+        (ak.sum((_conv_dr_ge < 0.1) & (_conv_pt_ge | _conv_pt_sum), axis=1) == ak.sum(_conv_both, axis=1)) &
+        (ak.sum((_conv_dr_gp < 0.1) & (_conv_pt_gp | _conv_pt_sum), axis=1) == ak.sum(_conv_both, axis=1))
+    )
+
+    events['Photon', 'both_match'] = _pho_both
+
+    # ── AllLptElectron matching ──────────────────────────────────────────────
+    coll = events.AllLptElectron
+
+    dr_to_ge = deltaR(coll.eta, coll.phi, events.GenEle.eta, events.GenEle.phi)
+    dr_to_gp = deltaR(coll.eta, coll.phi, events.GenPos.eta, events.GenPos.phi)
+
+    pt_me = _pt_rel(coll.pt, events.GenEle.pt)
+    pt_mp = _pt_rel(coll.pt, events.GenPos.pt)
+    pt_ms = _pt_rel(coll.pt, gen_sum_pt)
+
+    dr_match_ge = (dr_to_ge < 0.1) & (coll.charge == -1) & pt_me
+    dr_match_gp = (dr_to_gp < 0.1) & (coll.charge == +1) & pt_mp
+
+    pt_ok_ge = pt_me | pt_ms
+    pt_ok_gp = pt_mp | pt_ms
+
+    merged_i = (dr_to_ge < 0.1) & (dr_to_gp < 0.1) & (
+        ((coll.charge == -1) & pt_ok_ge & ~dr_match_gp & ~_gp_any) |
+        ((coll.charge == +1) & pt_ok_gp & ~dr_match_ge & ~_ge_any)
+    )
+
+    only_ge_i = dr_match_ge & ~merged_i
+    only_gp_i = dr_match_gp & ~merged_i
+    matched_i = merged_i | dr_match_ge | dr_match_gp
+
+    has_merged = ak.any(merged_i,  axis=1)
+    n_matched  = ak.sum(matched_i, axis=1)
+
+    _A = ak.any(only_ge_i, axis=1)
+    _B = ak.any(only_gp_i, axis=1)
+
+    # ~_cat_vertexed is ANDed into each branch (rather than relying solely on
+    # _cat_sep's exclusion, which _cat_merged/_no_ele build on) since a
+    # vertexed event can independently satisfy has_merged/_A/_B -- vertexed
+    # must supersede all of resolved/merged/merged-photon/zero.
+    _cat_sep    = ((_A & _B & ~has_merged) | (has_merged & (n_matched > 1))) & ~_cat_vertexed
+    _cat_merged = ~_cat_sep & has_merged & ~_ge_any & ~_gp_any & ~_cat_vertexed
+    _no_ele     = ~_cat_sep & ~_A & ~_B & ~has_merged & ~_cat_vertexed
+
+    # merged_i alone only encodes exclusivity against a non-electron
+    # alternative (photon/track/conversion) for whichever gen it's *not*
+    # matched to (~_gp_any for the charge==-1/ge-matched branch, ~_ge_any for
+    # the charge==+1/gp-matched branch) -- ANDing in ~_ge_any & ~_gp_any here
+    # completes the exclusivity for the gen it *is* matched to as well,
+    # giving the full per-electron mergedcats.py definition. This is a no-op
+    # wherever is_merged is read back within a _cat_merged-selected event
+    # (mergedcats.fillHistos below), since _cat_merged already requires
+    # ~_ge_any & ~_gp_any event-wide; it matters for consumers (e.g.
+    # appearingtrack.py) that read is_merged without first slicing on
+    # _cat_merged.
+    events['AllLptElectron', 'is_merged']  = merged_i & ~_ge_any & ~_gp_any
+    events['AllLptElectron', 'is_matched'] = matched_i
+    events['AllLptElectron', 'dr_to_ge']   = dr_to_ge
+    events['AllLptElectron', 'dr_to_gp']   = dr_to_gp
+
+    events['cat_merged']        = _cat_merged
+    events['cat_merged_photon'] = _no_ele & _pho_both_any & _photrk_excl
+    events['cat_sep']           = _cat_sep
+    events['cat_zero']          = _no_ele & ~_ge_any & ~_gp_any
+
+def defineGoodMergedCandidates(events,version='v1_Oct2026'):
+    """
+    Tag "good" merged-electron candidates among AllLptElectron and store all
+    of them (every passing electron, with all of its fields) as
+    events.merged_candidates, with their per-event count as
+    events.nMergedCandidates. Use selectBestMergedCandidate to pick one per
+    event. The criteria depend on `version`:
+
+    none -- every AllLptElectron is good.
+
+    v0_iso -- isolation only (the former selectMergedElectronCandidates):
+      - dR >= 0.4 to the nearest other AllLptElectron (self excluded)
+      - dR >= 0.4 to the nearest PFJet with pt > 10, ignoring any jet that is
+        the electron itself (dR < 0.1 and pT(e)/pT(jet) > 0.3) -- a merged ee
+        pair is often clustered into a PFJet of its own, which would
+        otherwise veto the electron against itself. events.PFJet is left
+        untouched.
+
+    v1_Oct2026 -- an AllLptElectron is good iff:
+      - dR > 0.4 to the nearest other AllLptElectron (self excluded)
+      - dR > 0.4 to the nearest PFJet with pt > 10
+      - |dPhi| > 1 to the nearest PFJet with pt > 10
+      (both jet requirements ignore the electron's own jet, as in v0_iso)
+      - |dxy| > 0.001 cm
+      - log10(|dxy/dz|) > -2
+      - cos(dPhi(e, ptmiss)) > 0.4
+      - track chi2 < 15
+
+    Signal only (GenEle present): also sets merged_candidates.isGenMerged, True iff
+    the candidate is matched to both gen electrons (AllLptElectron.is_merged)
+    and the event is not resolved, i.e. it's in cat_merged (which excludes
+    cat_sep and cat_vertexed) -- see computeMergedCatVars, which is run here
+    if it hasn't been already.
+    """
+    eles = events.AllLptElectron
+
+    # dR to nearest other AllLptElectron in the same event (self excluded)
+    idx = ak.local_index(eles,axis=1)
+    dr_ee = deltaR(eles.eta[:,:,None],eles.phi[:,:,None],eles.eta[:,None,:],eles.phi[:,None,:])
+    dr_ee = ak.where(idx[:,:,None] == idx[:,None,:],np.inf,dr_ee)
+    min_dr_ee = ak.fill_none(ak.min(dr_ee,axis=-1),999)
+
+    # dR/dPhi to nearest PFJet with pt > 10, ignoring the jet that is the
+    # electron itself (dR < 0.1 and pT(e)/pT(jet) > 0.3)
+    jets = events.PFJet
+    jets = jets[jets.pt > 10]
+    dr_ej = deltaR(eles.eta[:,:,None],eles.phi[:,:,None],jets.eta[:,None,:],jets.phi[:,None,:])
+    dphi_ej = np.abs(deltaPhi(eles.phi[:,:,None],jets.phi[:,None,:]))
+    self_jet = (dr_ej < 0.1) & (eles.pt[:,:,None]/jets.pt[:,None,:] > 0.3)
+    dr_ej = ak.where(self_jet,np.inf,dr_ej)
+    dphi_ej = ak.where(self_jet,np.inf,dphi_ej)
+    min_dr_j = ak.fill_none(ak.min(dr_ej,axis=-1),999)
+    min_dphi_j = ak.fill_none(ak.min(dphi_ej,axis=-1),999)
+    abs_dxy = np.abs(eles.dxy)
+    log_dxy_dz = np.log10(abs_dxy/np.abs(eles.dz))
+    cos_dphi_met = np.cos(deltaPhi(eles.phi,events.PFMET.phi))
+
+    ele_iso = min_dr_ee > 0.4
+    jet_iso = min_dr_j > 0.4
+    jet_dphi = min_dphi_j > 1.0
+    dxy = abs_dxy > 0.001
+    logdxydz = log_dxy_dz > -2
+    met_dphi = cos_dphi_met > 0.4
+    chi2 = eles.trkChi2 < 15
+
+    if version == 'none':
+        events['AllLptElectron','isGoodMerged'] = ak.values_astype(ak.ones_like(eles.pt),bool)
+    elif version == 'v0_iso':
+        events['AllLptElectron','isGoodMerged'] = (min_dr_ee >= 0.4) & (min_dr_j >= 0.4)
+    elif version == 'v1_Oct2026':
+        events['AllLptElectron','isGoodMerged'] = ele_iso & jet_iso & jet_dphi & dxy & logdxydz & met_dphi & chi2
+    else:
+        raise ValueError(f"defineGoodMergedCandidates: unknown version '{version}'")
+
+    if 'GenEle' in events.fields:
+        if 'is_merged' not in events.AllLptElectron.fields or 'cat_merged' not in events.fields:
+            computeMergedCatVars(events)
+        events['AllLptElectron','isGenMerged'] = events.AllLptElectron.is_merged & events.cat_merged
+
+    events.__setitem__("merged_candidates",events.AllLptElectron[events.AllLptElectron.isGoodMerged])
+    events.__setitem__("nMergedCandidates",ak.count(events.merged_candidates.pt,axis=1))
+
+def selectBestMergedCandidate(events,version='v1_Oct2026'):
+    """
+    Pick one merged-electron candidate per event from events.merged_candidates
+    (see defineGoodMergedCandidates). Stored as events.best_merged, the
+    selected AllLptElectron record (all fields intact), or None if the event
+    has no candidates. `version` should match the one passed to
+    defineGoodMergedCandidates; the ranking depends on it:
+
+    none, v0_iso, v1_Oct2026 -- smallest |dPhi(e, ptmiss)|
+    """
+    cands = events.merged_candidates
+    if version in ('none','v0_iso','v1_Oct2026'):
+        score = np.abs(deltaPhi(cands.phi,events.PFMET.phi))
+    else:
+        raise ValueError(f"selectBestMergedCandidate: unknown version '{version}'")
+    best_merged = ak.firsts(cands[ak.argmin(score,axis=1,keepdims=True)])
+    events.__setitem__("best_merged",best_merged)
+
+def computeMergedVars(events,good_merged='v1_Oct2026'):
+    """
+    Run all merged-electron routines so their outputs are always present in
+    the event arrays: computeMergedCatVars (signal-only categorization),
+    defineGoodMergedCandidates (merged_candidates/nMergedCandidates, using
+    version good_merged), and selectBestMergedCandidate (best_merged, same
+    version). No-op if AllLptElectron isn't present (not in all ntuple eras).
+    """
+    if 'AllLptElectron' not in events.fields:
+        return
+    computeMergedCatVars(events)
+    defineGoodMergedCandidates(events,version=good_merged)
+    selectBestMergedCandidate(events,version=good_merged)
+
 def jetBtag(events,year):
     loose,med,tight = getBtagWPs(year)
     events["PFJet","passLooseID"] = events.PFJet.bTag > loose
@@ -195,18 +673,21 @@ def jetBtag(events,year):
 
 
 def getBtagWPs(year):
-    if year == 2022:
+
+    year = str(year)
+    if year == '2024':
+       loose,med,tight = 0.0485, 0.2480, 0.6708
+    if year == '2022':
        loose,med,tight = 0.0583, 0.3086, 0.7183
-    if year == 2024:
-       loose,med,tight = 0.0583, 0.3086, 0.7183
-    if year == 2018:
+    if year == '2018':
         loose,med,tight = 0.0490, 0.2783, 0.7100
     if year == 2017:
         loose,med,tight = 0.0532, 0.3040, 0.7476
     if year == 2016:
         loose,med,tight = 0.0480, 0.2489, 0.6377
     if year == "2016APV":
-         loose,med,tight = 0.0508, 0.2598, 0.6502
+
+        loose,med,tight = 0.0508, 0.2598, 0.6502
     return loose,med,tight
 
 def electronIsoConePtSum(events):
@@ -225,7 +706,10 @@ def vtxElectronConnection(events):
     vtx = events.vtx
 
     # shitty fix for weird bug when there's just 1 event with 1 vertex
-    if len(events) == 1 and len(vtx.pt) == 1:
+    # (guard len(vtx.pt[0])==1 too -- an event with 0 vertices makes vtx.e1_typ[0][0] an
+    # out-of-bounds index into an empty per-event array; the general branch below already
+    # handles that case fine via elementwise/jagged indexing)
+    if len(events) == 1 and len(vtx.pt) == 1 and len(vtx.pt[0]) == 1:
         events["vtx","e1"] = events.LptElectron[vtx.e1_idx] if vtx.e1_typ[0][0]=="L" else events.Electron[vtx.e1_idx]
         events["vtx","e2"] = events.LptElectron[vtx.e2_idx] if vtx.e2_typ[0][0]=="L" else events.Electron[vtx.e2_idx]
     else:
@@ -337,10 +821,35 @@ def defineGoodVertices(events,version='v9',ele_id='dR'):
         events["vtx","isGood"] = IDcut & chi2 & maxMiniIso & passConvVeto & mass_lo_refit & mindxy_refit
     if version == 'v11':
          events["vtx","isGood"] = IDcut & chi2 & maxMiniIso & passConvVeto & mass_lo_refit & mindxy_refit # remove OSSF
-    
-    
+
+
+    if version == 'v11_LL':
+        vtx_type = ((events.vtx.e1_typ == 'L') & (events.vtx.e2_typ == 'L'))
+        events["vtx","isGood"] = IDcut & chi2 & maxMiniIso & passConvVeto & mass_lo_refit & mindxy_refit & vtx_type # remove OSSF
+    if version == 'v11_RR':
+        vtx_type = ((events.vtx.e1_typ == 'R') & (events.vtx.e2_typ == 'R'))
+        events["vtx","isGood"] = IDcut & chi2 & maxMiniIso & passConvVeto & mass_lo_refit & mindxy_refit & vtx_type # remove OSSF
+    if version == 'v11_RL':
+        vtx_type = ((events.vtx.e1_typ == 'R') & (events.vtx.e2_typ == 'L'))|((events.vtx.e1_typ == 'L') & (events.vtx.e2_typ == 'R'))
+        events["vtx","isGood"] = IDcut & chi2 & maxMiniIso & passConvVeto & mass_lo_refit & mindxy_refit # remove OSSF
+        
+    if version == 'v12':
+         events["vtx","isGood"] = IDcut & chi2 & maxMiniIso & passConvVeto & mass_lo_refit & mindxy_refit_tight # tighten mindxy
+    if version == 'v13':
+         events["vtx","isGood"] = IDcut & chi2 & maxMiniIso & passConvVeto & mass_lo_refit & mindxy_refit_tight & logdxydz # add logdxydz
+    if version == 'v14':
+         events["vtx","isGood"] = IDcut & chi2 & maxMiniIso & passConvVeto & mass_lo_refit & mindxy_refit & logdxydz # loosen mindxy
+
+    if version == 'v15':
+         events["vtx","isGood"] = IDcut & chi2 & maxMiniIso & passConvVeto & mass_lo_refit & mindxy_refit & logdxydz_loose # loosen mindxy
     if version == 'v15acr':
         events["vtx","isGood"] = IDcut & maxMiniIso & chi2_loose & mindxy_refit & passConvVeto & mass_lo_refit & logdxydz_loose # up-to-date with AN
+
+    if version == 'v40': # For SF studies
+         vtx_type = ((events.vtx.e1_typ == 'L') & (events.vtx.e2_typ == 'L'))
+         #vtx_type = ((events.vtx.e1_typ == 'R') & (events.vtx.e2_typ == 'R'))
+         #vtx_type = ((events.vtx.e1_typ == 'R') & (events.vtx.e2_typ == 'L'))|((events.vtx.e1_typ == 'L') & (events.vtx.e2_typ == 'R'))
+         events['vtx','isGood'] =  IDcut & chi2 & maxMiniIso & mindxy_refit & vtx_type
 
    
     events.__setitem__("good_vtx",events.vtx[events.vtx.isGood])
@@ -454,11 +963,94 @@ def selectBestVertex(events):
     sel_vtx = ak.flatten(events.good_vtx[ak.argmin(events.good_vtx.reduced_chi2,axis=1,keepdims=True)])
     events.__setitem__("sel_vtx",sel_vtx)
 
+def hasGoodVertex(events, info, good_vtx='v15acr'):
+    defineGoodVertices(events,version=good_vtx) # define "good" vertices based on whether associated electrons pass ID cuts
+    events = events[events.nGoodVtx > 0]
+    events = defineVertexInfo(events, info)
+    return events
+
+def defineGoodLptVertices(events,version='v15acr',ele_id='dR'):
+    """
+    Same cut definitions as defineGoodVertices, but applied to the lptvtx
+    collection (the all-low-pT-only vertex pool, built from AllLptElectron
+    pairs regardless of cross-cleaning) instead of the mixed vtx collection.
+
+    Only 'v15acr' (the only version any current cut/histo config actually
+    invokes) and 'none' are implemented here -- add more branches only if
+    defineGoodVertices grows a new version that needs a like-for-like
+    comparison on lptvtx too.
+    """
+    if ele_id == 'basic':
+        IDcut = events.lptvtx.e1.passIDBasic & events.lptvtx.e2.passIDBasic
+    if ele_id == 'dR':
+        IDcut = events.lptvtx.e1.passID & events.lptvtx.e2.passID
+    chi2_loose = events.lptvtx.reduced_chi2 < 15
+    mindxy_refit = np.minimum(np.abs(events.lptvtx.e1.refit_dxy), np.abs(events.lptvtx.e2.refit_dxy)) > 0.001
+    maxMiniIso = np.maximum(events.lptvtx.e1.miniRelIsoEleCorr,events.lptvtx.e2.miniRelIsoEleCorr) < 0.9
+    passConvVeto = events.lptvtx.e1.conversionVeto & events.lptvtx.e2.conversionVeto
+    mass_lo_refit = events.lptvtx.refit_m > 0.1
+    logdxydz_loose = np.minimum(np.log10(np.abs(events.lptvtx.e1.dxy/events.lptvtx.e1.dz)), np.log10(np.abs(events.lptvtx.e2.dxy/events.lptvtx.e2.dz))) > -2
+
+    if version == 'none':
+        events['lptvtx','isGood'] = ak.values_astype(ak.ones_like(events.lptvtx.m),bool)
+    if version == 'v15acr':
+        events["lptvtx","isGood"] = IDcut & maxMiniIso & chi2_loose & mindxy_refit & passConvVeto & mass_lo_refit & logdxydz_loose # up-to-date with AN
+
+    events.__setitem__("good_lptvtx",events.lptvtx[events.lptvtx.isGood])
+    events.__setitem__("nGoodLptVtx",ak.count(events.good_lptvtx.vxy,axis=1))
+
+def selectBestLptVertex(events):
+    sel_lptvtx = ak.flatten(events.good_lptvtx[ak.argmin(events.good_lptvtx.reduced_chi2,axis=1,keepdims=True)])
+    events.__setitem__("sel_lptvtx",sel_lptvtx)
+
+def hasGoodLptVertex(events, info, good_vtx='v15acr'):
+    defineGoodLptVertices(events,version=good_vtx) # lptvtx analog of hasGoodVertex, for comparing v15acr on the all-low-pT-only pool
+    events = events[events.nGoodLptVtx > 0]
+    selectBestLptVertex(events)
+    return events
+
+def defineVertexInfo(events, info):
+
+    # define "selected" vertex based on selection criteria in the routine (nominally: lowest chi2)
+    selectBestVertex(events)
+    #if info['type'] == "signal":
+    #    events = selectTrueVertex(events,events.good_vtx)
+    #    #routines.selectBestVertex(events)
+    #else:
+    #    selectBestVertex(events)
+    prepareBDT(events, None) # prepare BDT inference if the cuts include BDT-based cut
+
+    # Vtx SF related stuff (shitty hack, disabled for now....)
+    if False and info['apply_vtx_SF'] == True:
+        #print('apply_vtx_SF', events["eventWgt"], events.sel_vtx.sf)
+        events["eventWgt"] = events["eventWgt"] * events.sel_vtx.sf
+
+    # For signal, (1) check if the vertex ee are gen-matched (2) check if the event has ee that are gen-matched
+    #if info['type'] == "signal":
+    #
+    #    projectGenLxy(events)
+    #    vtx_matched_events = events[events.sel_vtx.isMatched]
+    #    cutflow_vtx_matched['hasVtx'] += ak.sum(vtx_matched_events.genWgt)/ak.sum(events.genWgt)
+
+    return events
+    
+
+
 def computeExtraVariables(events,info):
     events['Electron','mindRj'] = ak.fill_none(ak.min(events.Electron.dRJets,axis=-1),999)
     events['Electron','mindPhiJ'] = ak.fill_none(ak.min(np.abs(events.Electron.dPhiJets),axis=-1),999)
     events['LptElectron','mindRj'] = ak.fill_none(ak.min(events.LptElectron.dRJets,axis=-1),999)
     events['LptElectron','mindPhiJ'] = ak.fill_none(ak.min(np.abs(events.LptElectron.dPhiJets),axis=-1),999)
+    # dR/dPhi to the leading jet -- sort PFJets by pT explicitly rather than relying on the ntuple's jet order
+    sorted_jets = events.PFJet[ak.argsort(events.PFJet.pt,axis=1,ascending=False)]
+    # keep the leading jet as a 0/1-length list and broadcast ele x jet, so jetless events give per-electron None -> 999
+    # (an event-level None from ak.firsts would instead wipe out the event's whole electron list)
+    lead_jet = sorted_jets[:,:1]
+    lj_eta, lj_phi = lead_jet.eta[:,None,:], lead_jet.phi[:,None,:]
+    events['Electron','dRj0'] = ak.fill_none(ak.firsts(deltaR(events.Electron.eta[:,:,None],events.Electron.phi[:,:,None],lj_eta,lj_phi),axis=-1),999)
+    events['Electron','dPhij0'] = ak.fill_none(ak.firsts(np.abs(deltaPhi(events.Electron.phi[:,:,None],lj_phi)),axis=-1),999)
+    events['LptElectron','dRj0'] = ak.fill_none(ak.firsts(deltaR(events.LptElectron.eta[:,:,None],events.LptElectron.phi[:,:,None],lj_eta,lj_phi),axis=-1),999)
+    events['LptElectron','dPhij0'] = ak.fill_none(ak.firsts(np.abs(deltaPhi(events.LptElectron.phi[:,:,None],lj_phi)),axis=-1),999)
     events['vtx','mindRj'] = ak.fill_none(ak.min(events.vtx.dRJets,axis=-1),999)
     events['vtx','mindPhiJ'] = ak.fill_none(ak.min(np.abs(events.vtx.dPhiJets),axis=-1),999)
     events['vtx','corrMinDxy'] = ak.fill_none(np.minimum(np.abs(events.vtx.e1_refit_dxy),np.abs(events.vtx.e2_refit_dxy)),999)
@@ -475,8 +1067,17 @@ def computeExtraVariables(events,info):
         genMatchRecoQuantities(events)
     # associate electrons to vertices after all electron-related stuff has been computed
     vtxElectronConnection(events) # associate electrons to vertices
-    if (        "AllLptElectron" in events.fields        and "lptvtx" in events.fields    ):
-        lptvtxElectronConnection(events)
+# <<<<<<< HEAD
+#     if (        "AllLptElectron" in events.fields        and "lptvtx" in events.fields    ):
+#         lptvtxElectronConnection(events)
+# =======
+    if 'AllLptElectron' in events.fields:
+        events['AllLptElectron','mindRj'] = ak.fill_none(ak.min(events.AllLptElectron.dRJets,axis=-1),999)
+        events['AllLptElectron','mindPhiJ'] = ak.fill_none(ak.min(np.abs(events.AllLptElectron.dPhiJets),axis=-1),999)
+        events['AllLptElectron','dRj0'] = ak.fill_none(ak.firsts(deltaR(events.AllLptElectron.eta[:,:,None],events.AllLptElectron.phi[:,:,None],lj_eta,lj_phi),axis=-1),999)
+        events['AllLptElectron','dPhij0'] = ak.fill_none(ak.firsts(np.abs(deltaPhi(events.AllLptElectron.phi[:,:,None],lj_phi)),axis=-1),999)
+        lptvtxElectronConnection(events) # same, for the all-low-pT-only lptvtx pool (not present in all ntuple eras)
+# >>>>>>> origin/Main_Run3
     events['vtx','min_dxy'] = np.minimum(np.abs(events.vtx.e1.dxy),np.abs(events.vtx.e2.dxy))
     events['vtx','eleDphi'] = np.abs(deltaPhi(events.vtx.e1.phi,events.vtx.e2.phi))
     events['vtx','vxy_fromPV'] = ((events.vtx.vx-events.PV.x)**2+(events.vtx.vy-events.PV.y)**2)
@@ -749,14 +1350,14 @@ def genElectronKinematicBins(events):
     vxy_map = ak.Array(["0to1","1to5","5to10","10to15","15toInf"])
     pt_map = ak.Array(["0to5","5to10","10to20","20toInf"])
 
-    events["GenEle","dRbin"] = dR_map[runJitOutput(ele_dRcategory,events.GenEle.dr)]
-    events["GenEle","vxyBin"] = vxy_map[runJitOutput(ele_vxyCategory,events.GenEle.vxy)]
-    events["GenEle","ptBin"] = pt_map[runJitOutput(ele_ptCategory,events.GenEle.pt)]
+    events["GenEle","dRbin"] = dR_map[runJitOutput(ele_dRcategory,ak.materialize(events.GenEle.dr))]
+    events["GenEle","vxyBin"] = vxy_map[runJitOutput(ele_vxyCategory,ak.materialize(events.GenEle.vxy))]
+    events["GenEle","ptBin"] = pt_map[runJitOutput(ele_ptCategory,ak.materialize(events.GenEle.pt))]
 
-    events["GenPos","dRbin"] = dR_map[runJitOutput(ele_dRcategory,events.GenPos.dr)]
-    events["GenPos","vxyBin"] = vxy_map[runJitOutput(ele_vxyCategory,events.GenPos.vxy)]
-    events["GenPos","ptBin"] = pt_map[runJitOutput(ele_ptCategory,events.GenPos.pt)]
-
+    events["GenPos","dRbin"] = dR_map[runJitOutput(ele_dRcategory,ak.materialize(events.GenPos.dr))]
+    events["GenPos","vxyBin"] = vxy_map[runJitOutput(ele_vxyCategory,ak.materialize(events.GenPos.vxy))]
+    events["GenPos","ptBin"] = pt_map[runJitOutput(ele_ptCategory,ak.materialize(events.GenPos.pt))]
+    
 @nb.njit
 def regEle_lptMatchID(b,ele_lptMatchIdx,lpt_ele_id):
     nEvents = len(ele_lptMatchIdx)
@@ -948,40 +1549,95 @@ def makeBDTv2Inputs(events): # Legacy BDT; not used anymore
 
     return input
 
-def makeBDTinputs(events): # Current BDT for SR vtx cut
+def _log10_floor(x, floor=1e-4):
+    # same log-scaling as configs/histo_configs/corrmatrix.py: values at/below the floor are clamped to it
+    return np.log10(np.maximum(x, floor))
+
+def _clip_ratio(x, hi=10):
+    # same as skimmerTools._clip_ratio: inf (x/0) clipped to hi, nan (0/0) kept as XGBoost's missing value
+    return np.clip(x, 0, hi)
+
+def _mele_METdPhi(events):
+    return np.abs(deltaPhi(events.best_merged.phi, events.PFMET.phi))
+
+# Definitions of the BDT input variables, keyed by the names used in trainBDT/feature_sets.py.
+# These must match the columns written to the training h5 by skimmerTools (Skimmer.process).
+# A name always means one definition: if a definition changes, add it under a new name (e.g. vxy -> vxy_corr)
+# so that existing trained models keep their meaning.
+BDT_VARIABLES = {
+    'sel_vtx_chi2':          lambda events: events.sel_vtx.reduced_chi2.to_numpy(),
+    'sel_vtx_METdPhi':       lambda events: np.abs(events.sel_vtx.METdPhi).to_numpy(),
+    'sel_vtx_refit_m':       lambda events: events.sel_vtx.refit_m.to_numpy(),
+    'sel_vtx_refit_dR':      lambda events: events.sel_vtx.refit_dR.to_numpy(),
+    'sel_vtx_corrMinDxy':    lambda events: events.sel_vtx.corrMinDxy.to_numpy(),
+    'sel_vtx_minDxy_refit':  lambda events: np.minimum(np.abs(events.sel_vtx.e1.refit_dxy), np.abs(events.sel_vtx.e2.refit_dxy)).to_numpy(),
+    'vxy':                   lambda events: events.sel_vtx.vxy.to_numpy(),
+    'vxy_corr':              lambda events: np.sqrt((events.sel_vtx.vx-events.PV.x)**2+(events.sel_vtx.vy-events.PV.y)**2).to_numpy(),
+    'vxy_signif':            lambda events: (events.sel_vtx.vxy/events.sel_vtx.sigmavxy).to_numpy(),
+    'sel_vtx_cos_collinear': lambda events: events.sel_vtx.cos_collinear.to_numpy(),
+    'sel_vtx_prod_eta':      lambda events: (events.sel_vtx.e1.eta*events.sel_vtx.e2.eta).to_numpy(),
+    'met_leadPt_ratio':      lambda events: (events.PFMET.pt/events.PFJet.pt[:,0]).to_numpy(),
+    'jetMETdPhi':            lambda events: np.abs(events.PFJet.METdPhi[:,0]).to_numpy(),
+    'minJetMETdPhi':         lambda events: ak.min(np.abs(events.PFJet.METdPhi),axis=1).to_numpy(),
+    'met_pt':                lambda events: events.PFMET.pt.to_numpy(),
+    'HT':                    lambda events: ak.sum(events.PFJet.pt,axis=1).to_numpy(),
+    'nJets':                 lambda events: ak.num(events.PFJet.pt,axis=1).to_numpy(),
+    # merged-electron candidate (events.best_merged, see computeMergedVars), as in skimmerTools.makeMergedBDTInputs
+    'mele_pt':               lambda events: events.best_merged.pt.to_numpy(),
+    'mele_eta':              lambda events: events.best_merged.eta.to_numpy(),
+    'mele_log10_dxy':        lambda events: _log10_floor(np.abs(events.best_merged.dxy)).to_numpy(),
+    'mele_log10_dxy_signif': lambda events: _log10_floor(np.abs(events.best_merged.dxy)/events.best_merged.dxyErr).to_numpy(),
+    'mele_log10_dz':         lambda events: _log10_floor(np.abs(events.best_merged.dz)).to_numpy(),
+    'mele_log10_dz_signif':  lambda events: _log10_floor(np.abs(events.best_merged.dz)/events.best_merged.dzErr).to_numpy(),
+    'mele_logDxyDz':         lambda events: np.log10(np.abs(events.best_merged.dxy/events.best_merged.dz)).to_numpy(),
+    'mele_METdPhi':          lambda events: _mele_METdPhi(events).to_numpy(),
+    'mele_cosMETdPhi':       lambda events: np.cos(_mele_METdPhi(events)).to_numpy(),
+    # Lxy estimate |dxy|/sin(dPhi(e, ptmiss))
+    'mele_log10_lxyEst':     lambda events: _log10_floor(np.abs(events.best_merged.dxy)/np.sin(_mele_METdPhi(events))).to_numpy(),
+    'mele_mindRj':           lambda events: events.best_merged.mindRj.to_numpy(),
+    'mele_mindPhiJ':         lambda events: events.best_merged.mindPhiJ.to_numpy(),
+    'mele_dRj0':             lambda events: events.best_merged.dRj0.to_numpy(),
+    'mele_log10_trkChi2':    lambda events: _log10_floor(events.best_merged.trkChi2).to_numpy(),
+    'mele_trkProb':          lambda events: events.best_merged.trkProb.to_numpy(),
+    'mele_numTrackerHits':   lambda events: events.best_merged.numTrackerHits.to_numpy(),
+    'mele_numPixHits':       lambda events: events.best_merged.numPixHits.to_numpy(),
+    'mele_ID':               lambda events: events.best_merged.ID.to_numpy(),
+    'mele_log10_PFRelIso':   lambda events: _log10_floor(events.best_merged.PFRelIso).to_numpy(),
+    'mele_log10_miniRelIso': lambda events: _log10_floor(events.best_merged.miniRelIso).to_numpy(),
+    'mele_log10_trkRelIso':  lambda events: _log10_floor(events.best_merged.trkRelIso).to_numpy(),
+    'mele_HoverE':           lambda events: events.best_merged.HoverE.to_numpy(),
+    'mele_EoverPInv':        lambda events: events.best_merged.abs1overEm1overP.to_numpy(),
+    'mele_dEtaSeed':         lambda events: events.best_merged.absdEtaSeed.to_numpy(),
+    'mele_dPhiIn':           lambda events: events.best_merged.absdPhiIn.to_numpy(),
+    'mele_sigmaIetaIeta':    lambda events: events.best_merged.full55sigmaIetaIeta.to_numpy(),
+    'mele_scEtaWidth':       lambda events: events.best_merged.scEtaWidth.to_numpy(),
+    'mele_scPhiWidth':       lambda events: events.best_merged.scPhiWidth.to_numpy(),
+    'mele_r9':               lambda events: np.minimum(events.best_merged.full55r9, 2).to_numpy(),
+    'mele_sigmaIphiIphi':    lambda events: np.minimum(events.best_merged.full55sigmaIphiIphi, 0.1).to_numpy(),
+    'mele_e1x5Frac':         lambda events: _clip_ratio(events.best_merged.full55e1x5/events.best_merged.full55e5x5).to_numpy(),
+    'mele_e2x5Frac':         lambda events: _clip_ratio(events.best_merged.full55e2x5Max/events.best_merged.full55e5x5).to_numpy(),
+    'mele_scNClus':          lambda events: events.best_merged.scClustersSize.to_numpy(),
+    'mele_scEoverP':         lambda events: _clip_ratio(events.best_merged.scEnergy/(events.best_merged.pt*np.cosh(events.best_merged.eta))).to_numpy(),
+    'mele_scRawFrac':        lambda events: _clip_ratio(events.best_merged.scRawE/events.best_merged.scEnergy).to_numpy(),
+    'mele_log10_dEtaSCTrk':  lambda events: _log10_floor(np.abs(events.best_merged.scEta - events.best_merged.eta)).to_numpy(),
+    'mele_missingInnerHits': lambda events: events.best_merged.expMissingInnerHits.to_numpy(),
+    'mele_conversionVeto':   lambda events: ak.values_astype(events.best_merged.conversionVeto,int).to_numpy(),
+    'mele_svProxyVxy':       lambda events: events.best_merged.svProxyVxy.to_numpy(),
+}
+
+def makeBDTinputs(events, features="comb11"):
     '''
-    # BDT_10vars_comb11 (ROC-AUC, PR-AUC) = (0.9958, 0.9959)
-    variables = ['sel_vtx_chi2','sel_vtx_METdPhi','sel_vtx_refit_m','sel_vtx_refit_dR','sel_vtx_corrMinDxy','vxy','vxy_signif',\
-                 'sel_vtx_cos_collinear', 'sel_vtx_prod_eta', 'met_leadPt_ratio'
-]
+    Build the BDT input array, columns in the order of the feature set.
+    features: a key of FEATURE_SETS in trainBDT/feature_sets.py (e.g. "AN"), or a list of variable names
+              (e.g. the "variables" entry of a trained model's models/variables_*.json)
+    Default "comb11" is the 12-variable set used by the legacy BDT_BJetMedium*/BDT_NJetL* models.
     '''
+    variables = FEATURE_SETS[features] if isinstance(features, str) else list(features)
+    missing = [v for v in variables if v not in BDT_VARIABLES]
+    if len(missing) > 0:
+        raise KeyError(f'BDT variables with no definition in analysisSubroutines.BDT_VARIABLES: {missing}')
 
-    mindxy = np.minimum(np.abs(events.sel_vtx.e1.dxy),np.abs(events.sel_vtx.e2.dxy))
-    maxdxy = np.maximum(np.abs(events.sel_vtx.e1.dxy),np.abs(events.sel_vtx.e2.dxy))
-
-    deltadxy = np.abs(np.abs(events.sel_vtx.e1.dxy) - np.abs(events.sel_vtx.e2.dxy))
-
-    sel_vtx_chi2_arr = events.sel_vtx.reduced_chi2.to_numpy()
-    sel_vtx_METdPhi_arr = np.abs(events.sel_vtx.METdPhi).to_numpy()
-    sel_vtx_m_arr = events.sel_vtx.m.to_numpy()
-    sel_vtx_refit_m_arr = events.sel_vtx.refit_m.to_numpy()
-    sel_vtx_dR_arr = events.sel_vtx.dR.to_numpy()
-    sel_vtx_refit_dR_arr = events.sel_vtx.refit_dR.to_numpy()
-    sel_vtx_minDxy_arr = mindxy.to_numpy()
-    sel_vtx_corrMinDxy_arr = events.sel_vtx.corrMinDxy.to_numpy()
-    sel_vtx_vxy_arr = events.sel_vtx.vxy.to_numpy()
-    vxy_signif_arr = (events.sel_vtx.vxy/events.sel_vtx.sigmavxy).to_numpy()
-    cos_collinear_arr = events.sel_vtx.cos_collinear.to_numpy()
-    sel_vtx_prod_eta_arr = (events.sel_vtx.e1.eta * events.sel_vtx.e2.eta).to_numpy()
-    met_leadPt_ratio_arr = (events.PFMET.pt/events.PFJet.pt[:,0]).to_numpy()
-    jetMETdPhi = np.abs(events.PFJet.METdPhi[:,0]).to_numpy()
-    minJetMETdPhi = ak.min(np.abs(events.PFJet.METdPhi),axis=1).to_numpy()
-
-    input_arrs = (sel_vtx_chi2_arr, sel_vtx_METdPhi_arr, sel_vtx_refit_m_arr, sel_vtx_refit_dR_arr, \
-                  sel_vtx_corrMinDxy_arr, sel_vtx_vxy_arr, vxy_signif_arr, \
-                  cos_collinear_arr, sel_vtx_prod_eta_arr, met_leadPt_ratio_arr, jetMETdPhi, minJetMETdPhi)
-
-    input = np.stack(input_arrs, axis=1)
+    input = np.stack([BDT_VARIABLES[v](events) for v in variables], axis=1)
 
     return input
 
@@ -1036,6 +1692,39 @@ def getBDTscore(arr, model):
 
     # get BDT score
     score = trained_model.predict(arr)
+
+    return score
+
+def getBDTscore_kfold(events, vars_json):
+    '''
+    BDT score from a k-fold cross-trained model (trainBDT/BDTutils_kfold.train_bdt).
+    vars_json: the model's models/variables_<name>.json, giving the variables, k and the fold model paths
+               (relative paths are taken relative to the trainBDT directory, i.e. the parent of models/)
+    Each event is scored by models[eventNum % k], the fold model that did not train on it. The same rule is
+    applied to data and MC.
+    '''
+    with open(vars_json) as fin:
+        vars_dict = json.load(fin)
+    if vars_dict.get('fold_rule') != 'eventNum % k':
+        raise ValueError(f"{vars_json}: unsupported fold_rule {vars_dict.get('fold_rule')}")
+    k = vars_dict['k']
+    if len(vars_dict['models']) != k:
+        raise ValueError(f"{vars_json}: k = {k} but {len(vars_dict['models'])} fold models are listed")
+
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(vars_json)))
+    model_paths = [m if os.path.isabs(m) else os.path.join(base_dir, m) for m in vars_dict['models']]
+
+    arr = makeBDTinputs(events, vars_dict['variables'])
+    folds = (events.eventNum.to_numpy().astype(np.uint64) % np.uint64(k)).astype(int)
+
+    score = np.full(len(arr), -1.0)
+    for i, path in enumerate(model_paths):
+        in_fold = folds == i
+        if np.sum(in_fold) == 0:
+            continue
+        trained_model = xgb.XGBClassifier()
+        trained_model.load_model(path)
+        score[in_fold] = trained_model.predict_proba(arr[in_fold])[:,1]
 
     return score
 

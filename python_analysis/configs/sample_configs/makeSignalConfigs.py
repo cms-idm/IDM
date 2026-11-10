@@ -24,6 +24,7 @@ args = parser.parse_args()
 mode = args.mode
 year = args.year
 alpha = args.aEM
+# <<<<<<< HEAD
 prefix = args.prefix.rstrip("/")
 name = args.name
 skimmed = args.skimmed
@@ -69,6 +70,25 @@ def xrd_root_files(xrdClient, path):
     return [entry for entry in entries if entry.endswith(".root")]
     
 
+# =======
+# prefix = args.prefix
+# versname = args.name
+# skimmed = args.skimmed
+# ref_file = args.ref_file
+
+# def stringfy_friendly(num):
+#     if isinstance(num, int):
+#         return str(num)
+#     elif isinstance(num, float):
+#         if int(num*1000) > 0:
+#             num = round(num, 3)
+#             return str(num).replace('.', 'p') if '.' in str(num) else str(num)
+#         else:
+#             num = '%.3e' % num
+#             return num.replace('.', 'p')
+#     else:
+#         raise ValueError("{0} is not a number!".format(num))
+# >>>>>>> origin/Main_Run3
 
 if skimmed:
     ref_info = {}
@@ -131,6 +151,7 @@ if mode == "sig":
                     output.append(entry)
 
         else:
+# <<<<<<< HEAD
             # Expected p:
             # Mchi-10p5_dMchi-1p0
             #
@@ -159,6 +180,21 @@ if mode == "sig":
             print ("point_dir=",point_dir)
             lifetimes = xrd_dir_names(xrdClient, point_dir)
 
+# =======
+#             # acrobert 
+#             M1s = p.split('_')[0].split("M1-")[1]
+#             dMs = p.split('_')[1].split("dM-")[1]
+#             mzds = p.split('_')[2].split("mZD-")[1]
+#             M1 = float(M1s.replace("p","."))
+#             dM = float(dMs.replace("p","."))
+#             mzd = float(mzds.replace("p","."))
+#             mchi = round((M1 + M1*(1+dM))/2., 5)
+#             dmchi = round(M1*dM, 5)
+
+#             status, lifetimes = xrdClient.dirlist(f"{prefix}/{year}/{p}")
+#             lifetimes = [l.name for l in lifetimes]
+            
+# >>>>>>> origin/Main_Run3
             for l in lifetimes:
                 # Expected l:
                 # ctau-1
@@ -181,6 +217,7 @@ if mode == "sig":
                 info["Mchi"] = mchi
                 info["dMchi"] = dmchi
                 info["ctau"] = ct
+# <<<<<<< HEAD
 
                 if mzd != "":
                     info["name"] = "sig_Mchi-{0}_dMchi-{1}_ct-{2}_{3}".format(
@@ -196,6 +233,13 @@ if mode == "sig":
                         info["ctau"],
                     )
 
+# =======
+#                 info["M1"] = M1
+#                 info["dM"] = dM
+#                 info["mZD"] = mzd
+#                 info["name"] = "sig_Mchi-{0}_dMchi-{1}_ct-{2}_{3}_{4}".format(info["Mchi"],info["dMchi"],info["ctau"],mzd,versname)
+#                 info["designation"] = f'signal_ntuples_{versname}_M1-{M1s}_dM-{dMs}_mZD-{mzds}_ctau-{ct}'
+# >>>>>>> origin/Main_Run3
                 info["sum_wgt"] = 0.0
                 info["type"] = "signal"
                 info["year"] = year_value(year)
@@ -208,6 +252,7 @@ if mode == "sig":
                 output.append(info)
 
     if skimmed:
+# <<<<<<< HEAD
         out_json = "skimmed_signal_{0}_{1}.json".format(year, name)
     else:
         out_json = "signal_{0}_{1}_{2}.json".format(year, name, alpha)
@@ -216,6 +261,14 @@ if mode == "sig":
         json.dump(output, outfile, indent=4)
 
 
+# =======
+#         out_json = "skimmed_signal_{0}_{1}.json".format(year,versname)
+#     else:
+#         out_json = "signal_{0}_{1}_{2}.json".format(year,versname,alpha)
+#     with open(out_json,"w") as outfile:
+#         json.dump(output,outfile,indent=4)
+#     print(f' > json: {outfile}')
+# >>>>>>> origin/Main_Run3
 elif mode == "bkg":
     
 
@@ -287,6 +340,7 @@ elif mode == "bkg":
             output.append(info)
 
     if skimmed:
+# <<<<<<< HEAD
         out_json = "skimmed_bkg_{0}_{1}.json".format(year, name)
     else:
         out_json = "bkg_{0}_{1}.json".format(year, name)
@@ -295,6 +349,13 @@ elif mode == "bkg":
         json.dump(output, outfile, indent=4)
 
 
+# =======
+#         out_json = "skimmed_bkg_{0}_{1}.json".format(year,versname)
+#     else:
+#         out_json = "bkg_{0}_{1}.json".format(year,versname)
+#     with open(out_json,"w") as outfile:
+#         json.dump(output,outfile,indent=4)
+# >>>>>>> origin/Main_Run3
 elif mode == "data":
 
     if skimmed:
@@ -360,6 +421,7 @@ elif mode == "data":
             output.append(info)
 
     if skimmed:
+# <<<<<<< HEAD
         out_json = "skimmed_data_{0}_{1}.json".format(year, name)
     else:
         out_json = "data_{0}_{1}.json".format(year, name)
@@ -367,3 +429,10 @@ elif mode == "data":
     with open(out_json, "w") as outfile:
         json.dump(output, outfile, indent=4)
 
+# =======
+#         out_json = "skimmed_data_{0}_{1}.json".format(year,versname)
+#     else:
+#         out_json = "data_{0}_{1}.json".format(year,versname)
+#     with open(out_json,"w") as outfile:
+#         json.dump(output,outfile,indent=4)
+# >>>>>>> origin/Main_Run3

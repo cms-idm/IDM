@@ -3,7 +3,10 @@
 Check output ntuples on EOS for a failed/missing tree and resubmit those jobs.
 
 Usage:
-    python3 resubmit_failed.py [--dry-run]
+    python3 resubmit_failed.py <key> [--dry-run]
+
+    <key> is the top-level background key to check, e.g. Multiboson
+    (EOS_BASE/<key>/<subsample>/*.root).
 
 Must be run from the ElectronNtuplizer condor directory (where ElectronNtuplizer_config.jdl lives).
 """
@@ -18,18 +21,19 @@ try:
 except ImportError:
     sys.exit("uproot not found — run inside a CMSSW environment or pip install uproot")
 
-VERS     = 'May2026'
+VERS     = 'Aug2026noIDSep'
 YEAR     = '2024'
 NTHREADS = 4
 IS_DATA  = 'False'
-IS_SIG   = 'True'
+IS_SIG   = 'False'
 CMSSW    = 'CMSSW_14_0_21'
 ENV_TAR  = 'ntuplizer_CMSSW_14_0_21_acrobert.tar.gz'
 
 XRD      = 'root://cmseos.fnal.gov/'
-EOS_BASE = f'/store/group/lpcmetx/iDMe/Samples/Ntuples/signal_{VERS}/{YEAR}'
+EOS_BASE      = f'/store/group/lpcmetx/iDMe/Samples/Ntuples/background_{VERS}/{YEAR}'
+EOS_BASE_SLIM = f'/store/group/lpcmetx/iDMe/Samples/Ntuples/background_{VERS}_slim/{YEAR}'
 TREE          = 'ntuples/outT'
-REQUIRED_BRANCH = 'GenEle_matchedAllLowPt'
+REQUIRED_BRANCH = 'PFJet_pt'
 SPLIT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'split_fileLists')
 
 def xrdfs_ls(path):
@@ -45,23 +49,26 @@ def tree_ok(xrd_url):
         with uproot.open(xrd_url) as f:
             if TREE not in f:
                 return False
-            return REQUIRED_BRANCH in f[TREE].keys()
+            t = f[TREE]
+            if t.num_entries == 0:
+                return False
+            return REQUIRED_BRANCH in t.keys()
     except Exception:
         return False
 
 
-def collect_output_files():
-    """Return list of full EOS paths for every .root file under EOS_BASE."""
+def collect_output_files(key):
+    """Return list of full EOS paths for every .root file under EOS_BASE/<key>."""
     files = []
-    for mass_dir in xrdfs_ls(EOS_BASE):
-        for ctau_dir in xrdfs_ls(mass_dir):
-            for fpath in xrdfs_ls(ctau_dir):
-                if fpath.endswith('.root'):
-                    files.append(fpath)
+    key_dir = f'{EOS_BASE}/{key}'
+    for subsample_dir in xrdfs_ls(key_dir):
+        for fpath in xrdfs_ls(subsample_dir):
+            if fpath.endswith('.root'):
+                files.append(fpath)
     return files
 
 
-def resubmit(sublist_name, out_path, dry_run):
+def resubmit(sublist_name, out_path, out_path_slim, dry_run):
     split_file = os.path.join(SPLIT_DIR, sublist_name + '.txt')
     if not os.path.exists(split_file):
         print(f"  [SKIP] split file list not found: {split_file}")
@@ -70,7 +77,7 @@ def resubmit(sublist_name, out_path, dry_run):
     split_full = os.path.realpath(split_file)
     cmd = (
         f'condor_submit ElectronNtuplizer_config.jdl '
-        f'-append "Arguments = {sublist_name} {YEAR} {NTHREADS} {IS_DATA} {IS_SIG} {out_path} {CMSSW} {ENV_TAR}" '
+        f'-append "Arguments = {sublist_name} {YEAR} {NTHREADS} {IS_DATA} {IS_SIG} {out_path} {CMSSW} {ENV_TAR} {out_path_slim}" '
         f'-append "transfer_input_files = {split_full}" '
         f'-append "request_cpus = {NTHREADS}"'
     )
@@ -83,6 +90,7 @@ def resubmit(sublist_name, out_path, dry_run):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('key', help='Top-level background key to check, e.g. Multiboson')
     parser.add_argument('--dry-run', action='store_true',
                         help='Print what would be submitted without actually submitting')
     args = parser.parse_args()
@@ -91,8 +99,8 @@ def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     os.chdir(script_dir)
 
-    print(f"Scanning {EOS_BASE} ...")
-    all_files = collect_output_files()
+    print(f"Scanning {EOS_BASE}/{args.key} ...")
+    all_files = collect_output_files(args.key)
     print(f"Found {len(all_files)} output files\n")
 
     failed = []
@@ -114,8 +122,11 @@ def main():
     for fpath in failed:
         fname = os.path.basename(fpath)                   # ntuples_..._flist_NN.root
         sublist_name = fname.removeprefix('ntuples_').removesuffix('.root')  # ..._flist_NN
-        out_path = os.path.dirname(fpath) + '/'           # /store/.../M1-.../ctau-N/
-        resubmit(sublist_name, out_path, args.dry_run)
+        out_dir = os.path.dirname(fpath)                  # /store/.../<group>/<subsample>
+        out_path = out_dir + '/'
+        rel_dir = os.path.relpath(out_dir, EOS_BASE)       # <group>/<subsample>
+        out_path_slim = f'{EOS_BASE_SLIM}/{rel_dir}/'
+        resubmit(sublist_name, out_path, out_path_slim, args.dry_run)
 
 
 if __name__ == '__main__':

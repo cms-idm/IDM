@@ -1,12 +1,29 @@
 from __future__ import with_statement
 import coffea
 from coffea.nanoevents import NanoEventsFactory, NanoAODSchema, BaseSchema
-from mySchema import MySchema
+
+try:
+    from mySchema_newCoffea import MySchema
+    import analysisSubroutines as routines
+    import corrections
+except ModuleNotFoundError:
+    from analysisTools.mySchema_newCoffea import MySchema
+    import analysisTools.analysisSubroutines as routines
+    import analysisTools.corrections
+
 from coffea import processor
+
+
+from coffea.dataset_tools import (
+    apply_to_fileset,
+    max_chunks,
+    preprocess,
+)
+import dask
 
 import uproot
 import awkward as ak
-#import vector
+import vector
 #vector.register_awkward()
 import numpy as np
 import matplotlib.pyplot as plt
@@ -18,21 +35,23 @@ import pandas as pd
 from XRootD import client
 import re
 NanoAODSchema.warn_missing_crossrefs = False
-import analysisSubroutines as routines
 import sys
 from collections import defaultdict
 from hist import Hist
 from hist.axis import StrCategory, Regular, Integer, IntCategory
 import hist
-import corrections
 
 match_names = {"Default":"match0","lowpt":"match1"}
 vxy_range = {1:[0,20],10:[0,50],100:[0,50],1000:[0,50]}
 vxy_rebin = {1:5,10:20,100:20,1000:20}
 
 class Analyzer:
-     def __init__(self,fileList,histoList,cuts,model_json=None,systematics=None,max_samples=-1,max_files_per_samp=-1,newCoffea=False,nJet_isNominal=None,isSFstudies=False,good_vtx='none'):
+# <<<<<<< HEAD
+#      def __init__(self,fileList,histoList,cuts,model_json=None,systematics=None,max_samples=-1,max_files_per_samp=-1,newCoffea=False,nJet_isNominal=None,isSFstudies=False,good_vtx='none'):
     
+# =======
+    def __init__(self,fileList,histoList,cuts,model_json=None,systematics=None,max_samples=-1,max_files_per_samp=-1,newCoffea=False,nJet_isNominal=None,isSFstudies=False,good_vtx='v11',good_merged='v1_Oct2026',slimFileList=None,processSlim=True):
+# >>>>>>> origin/Main_Run3
         # flag to see if we're using new coffea
         self.newCoffea = newCoffea
 
@@ -42,6 +61,27 @@ class Analyzer:
                 self.fileList = json.load(f)
         else:
             self.fileList = fileList
+
+        # load in companion "slim" config (bkg only): all-events, high-level-info-only
+        # ntuples paired with the full (HLT-passed-only) ones above. loadFiles() matches
+        # entries by sample name/year and registers a second "{name}__slim" dataset for
+        # each match, and replaces the full config's sum_wgt/num_events (which only cover
+        # the HLT-passed subset once a pairing exists) with the slim, whole-sample values
+        # -- stashing the originals as full_sum_wgt/full_num_events.
+        if slimFileList is not None and type(slimFileList) == str and ".json" in slimFileList:
+            with open(slimFileList) as f:
+                self.slimFileList = json.load(f)
+        else:
+            self.slimFileList = slimFileList
+
+        # if False, still pair up bkg samples with their slim counterpart's sum_wgt/
+        # num_events metadata (needed for correct normalization), but never add the
+        # "{name}__slim" dataset to sample_locs/sample_names -- so the slim ntuples
+        # themselves are never opened/processed. Only the cutflow_slim histos (and the
+        # 'passHLT' pre-selection cutflow entry) rely on actually reading those files,
+        # so this is safe to skip when only the main histograms are needed.
+        self.processSlim = processSlim
+        self.slimPairedNames = set() # bkg sample names with a slim counterpart, regardless of processSlim
 
         # systematics
         if systematics != None:
@@ -80,14 +120,71 @@ class Analyzer:
 
         self.nJet_isNom = nJet_isNominal # nomial njet range of NJet > 0 and NJet < 3
         self.good_vtx = good_vtx
+# <<<<<<< HEAD
 
-        # self.model = model_json # BDT model for inference (if used in selections)
-        # self.nJet_isNom = nJet_isNominal # nomial njet range of NJet > 0 and NJet < 3
-        # self.good_vtx = good_vtx
+#         # self.model = model_json # BDT model for inference (if used in selections)
+#         # self.nJet_isNom = nJet_isNominal # nomial njet range of NJet > 0 and NJet < 3
+#         # self.good_vtx = good_vtx
         
+#         self.loadFiles()
+    
+#      def loadFiles(self):
+# =======
+        self.good_merged = good_merged
+
         self.loadFiles()
     
-     def loadFiles(self):
+    def _resolveSampleFiles(self,sample):
+        # Resolves a sample dict's 'location'/'fileset' into an actual file collection,
+        # in whatever shape self.newCoffea expects. Shared between the main fileList and
+        # the companion slim fileList so both are resolved identically.
+        blacklist = sample.get('blacklist',[])
+        loc = sample['location']
+        if '.root' in loc:
+            # if the location is just a single file, load it in
+            if self.newCoffea:
+                return {'files':{sample['location']:'ntuples/outT'}}
+            else:
+                return [sample['location']]
+        elif 'fileset' in sample.keys():
+            if self.newCoffea:
+                files = {'files':{f:'ntuples/outT' for f in sample['fileset'] if f.split("/")[-1] not in blacklist}}
+                if self.max_files_per_samp > 0 and len(files['files']) > self.max_files_per_samp:
+                    files['files'] = {k:files['files'][k] for k in list(files['files'].keys())[:self.max_files_per_samp]}
+                return files
+            else:
+                flist = [f for f in sample['fileset'] if f.split("/")[-1] not in blacklist]
+                if self.max_files_per_samp > 0 and len(flist) > self.max_files_per_samp:
+                    flist = flist[:self.max_files_per_samp]
+                return flist
+        else:
+            # if the location is a directory, use the xrootd client to get a list of files
+            xrdClient = client.FileSystem("root://cmseos.fnal.gov")
+            if type(loc) != list:
+                status, flist = xrdClient.dirlist(loc)
+                fullList = ["root://cmseos.fnal.gov/"+loc+"/"+item.name for item in flist if (('.root' in item.name) and (item.name not in blacklist))]
+            else:
+                fullList = []
+                for l in loc:
+                    status, flist = xrdClient.dirlist(l)
+                    fullList.extend(["root://cmseos.fnal.gov/"+l+"/"+item.name for item in flist if (('.root' in item.name) and (item.name not in blacklist))])
+            if self.max_files_per_samp > 0 and len(fullList) > self.max_files_per_samp:
+                fullList = fullList[:self.max_files_per_samp]
+            if self.newCoffea:
+                return {'files':{f:'ntuples/outT' for f in fullList}}
+            else:
+                return fullList
+
+    def loadFiles(self):
+        # index the companion slim config (bkg only) by the same name/year key used below,
+        # so each bkg sample can be paired up with its slim counterpart
+        slimByName = {}
+        if self.slimFileList is not None:
+            for slimSample in self.slimFileList:
+                slimName = "bkg_{0}_{1}".format(slimSample['year'],slimSample['name'])
+                slimByName[slimName] = slimSample
+
+# >>>>>>> origin/Main_Run3
         loaded = 0
         for sample in self.fileList:
             if self.max_samples > 0 and loaded == self.max_samples:
@@ -102,7 +199,7 @@ class Analyzer:
                 name = "bkg_{0}_{1}".format(sample['year'],sample['name'])
             elif mode == 'data':
                 name = "data_{0}_{1}".format(sample['year'],sample['name'])
-            
+
             if self.mode is None:
                 self.mode = mode
             else:
@@ -110,52 +207,85 @@ class Analyzer:
                     print("Error! You're mixing samples of differing types (e.g. signal and bkg, signal and data, etc)")
                     print("Please split up different kinds of samples into different configs")
                     exit()
+# <<<<<<< HEAD
             
-            loc = sample['location']
-            if '.root' in loc:
-                # if the location is just a single file, load it in
-                if self.newCoffea:
-                    self.sample_locs[name] = {'files':{sample['location']:'ntuples/outT'}}
-                else:
-                    self.sample_locs[name] = [sample['location']]
-            elif 'fileset' in sample.keys():
-                if self.newCoffea:
-                    self.sample_locs[name] = {'files':{f:'ntuples/outT' for f in sample['fileset'] if f.split("/")[-1] not in sample['blacklist']}}
-                    if self.max_files_per_samp > 0 and len(self.sample_locs[name]['files']) > self.max_files_per_samp:
-                        self.sample_locs[name]['files'] = {k:self.sample_locs[name]['files'][k] for k in list(self.sample_locs[name]['files'].keys())[:self.max_files_per_samp]}
-                else:
-                    self.sample_locs[name] = [f for f in sample['fileset'] if f.split("/")[-1] not in sample['blacklist']]
-                    if self.max_files_per_samp > 0 and len(self.sample_locs[name]) > self.max_files_per_samp:
-                        self.sample_locs[name] = self.sample_locs[name][:self.max_files_per_samp]
-            else:
-                # if the location is a directory, use the xrootd client to get a list of files
-                xrdClient = client.FileSystem("root://cmseos.fnal.gov")
-                if type(loc) != list:
-                    status, flist = xrdClient.dirlist(loc)
-                    fullList = ["root://cmseos.fnal.gov/"+loc+"/"+item.name for item in flist if (('.root' in item.name) and (item.name not in sample['blacklist']))]
-                else:
-                    fullList = []
-                    for l in loc:
-                        status, flist = xrdClient.dirlist(l)
-                        fullList.extend(["root://cmseos.fnal.gov/"+l+"/"+item.name for item in flist if (('.root' in item.name) and (item.name not in sample['blacklist']))])
-                if self.max_files_per_samp > 0 and len(fullList) > self.max_files_per_samp:
-                    fullList = fullList[:self.max_files_per_samp]
-                if self.newCoffea:
-                    self.sample_locs[name] = {'files':{f:'ntuples/outT' for f in fullList}}
-                else:
-                    self.sample_locs[name] = fullList
+#             loc = sample['location']
+#             if '.root' in loc:
+#                 # if the location is just a single file, load it in
+#                 if self.newCoffea:
+#                     self.sample_locs[name] = {'files':{sample['location']:'ntuples/outT'}}
+#                 else:
+#                     self.sample_locs[name] = [sample['location']]
+#             elif 'fileset' in sample.keys():
+#                 if self.newCoffea:
+#                     self.sample_locs[name] = {'files':{f:'ntuples/outT' for f in sample['fileset'] if f.split("/")[-1] not in sample['blacklist']}}
+#                     if self.max_files_per_samp > 0 and len(self.sample_locs[name]['files']) > self.max_files_per_samp:
+#                         self.sample_locs[name]['files'] = {k:self.sample_locs[name]['files'][k] for k in list(self.sample_locs[name]['files'].keys())[:self.max_files_per_samp]}
+#                 else:
+#                     self.sample_locs[name] = [f for f in sample['fileset'] if f.split("/")[-1] not in sample['blacklist']]
+#                     if self.max_files_per_samp > 0 and len(self.sample_locs[name]) > self.max_files_per_samp:
+#                         self.sample_locs[name] = self.sample_locs[name][:self.max_files_per_samp]
+#             else:
+#                 # if the location is a directory, use the xrootd client to get a list of files
+#                 xrdClient = client.FileSystem("root://cmseos.fnal.gov")
+#                 if type(loc) != list:
+#                     status, flist = xrdClient.dirlist(loc)
+#                     fullList = ["root://cmseos.fnal.gov/"+loc+"/"+item.name for item in flist if (('.root' in item.name) and (item.name not in sample['blacklist']))]
+#                 else:
+#                     fullList = []
+#                     for l in loc:
+#                         status, flist = xrdClient.dirlist(l)
+#                         fullList.extend(["root://cmseos.fnal.gov/"+l+"/"+item.name for item in flist if (('.root' in item.name) and (item.name not in sample['blacklist']))])
+#                 if self.max_files_per_samp > 0 and len(fullList) > self.max_files_per_samp:
+#                     fullList = fullList[:self.max_files_per_samp]
+#                 if self.newCoffea:
+#                     self.sample_locs[name] = {'files':{f:'ntuples/outT' for f in fullList}}
+#                 else:
+#                     self.sample_locs[name] = fullList
             
+#             self.sample_info[name] = sample
+#             self.sample_names.append(name)
+#             loaded += 1
+#      def process(self,treename='ntuples/outT',execr="iterative",workers=4,merging=False,dask_client=None,procType='default',**kwargs):
+#         fileset = self.sample_locs
+#         if procType == 'default':
+#             proc = iDMeProcessor(self.sample_names,self.sample_info,self.sample_locs,self.histoFile,self.cuts,mode=self.mode,nJet_isNom=self.nJet_isNom,isSFstudies=self.isSFstudies,good_vtx=self.good_vtx,systematics=self.systematics,**kwargs)
+#     # def process(self,treename='ntuples/outT',execr="iterative",workers=4,merging=False,dask_client=None,procType='default',**kwargs):
+#     #     fileset = self.sample_locs
+#     #     if procType == 'default':
+#     #         proc = iDMeProcessor(self.sample_names,self.sample_info,self.sample_locs,self.histoFile,self.cuts,mode=self.mode,model_json=self.model,nJet_isNom=self.nJet_isNom,isSFstudies=self.isSFstudies,good_vtx=self.good_vtx,systematics=self.systematics,**kwargs)
+# =======
+
+            self.sample_locs[name] = self._resolveSampleFiles(sample)
             self.sample_info[name] = sample
             self.sample_names.append(name)
             loaded += 1
-     def process(self,treename='ntuples/outT',execr="iterative",workers=4,merging=False,dask_client=None,procType='default',**kwargs):
+
+            # pair up with the companion slim (all-events) sample, if one was provided
+            if mode == 'bkg' and name in slimByName:
+                slimSample = slimByName[name]
+                self.slimPairedNames.add(name)
+                if self.processSlim:
+                    slimName = f"{name}__slim"
+                    self.sample_locs[slimName] = self._resolveSampleFiles(slimSample)
+                    self.sample_info[slimName] = slimSample
+                    self.sample_names.append(slimName)
+
+                # the full config's sum_wgt/num_events only cover the HLT-passed subset
+                # once ntuples are split this way -- stash them, and normalize against the
+                # true, whole-sample values from the slim config instead
+                sample['full_sum_wgt'] = sample.get('sum_wgt',0.0)
+                sample['full_num_events'] = sample.get('num_events',0)
+                sample['sum_wgt'] = slimSample['sum_wgt']
+                sample['num_events'] = slimSample['num_events']
+            elif mode == 'bkg' and self.slimFileList is not None:
+                print(f"Warning: no slim counterpart found for bkg sample {name}; sum_wgt/num_events are unmodified (HLT-passed subset only if this sample was ntuplized with the slim split)")
+
+    def process(self,treename='ntuples/outT',execr="iterative",workers=4,merging=False,dask_client=None,procType='default',**kwargs):
         fileset = self.sample_locs
         if procType == 'default':
-            proc = iDMeProcessor(self.sample_names,self.sample_info,self.sample_locs,self.histoFile,self.cuts,mode=self.mode,nJet_isNom=self.nJet_isNom,isSFstudies=self.isSFstudies,good_vtx=self.good_vtx,systematics=self.systematics,**kwargs)
-    # def process(self,treename='ntuples/outT',execr="iterative",workers=4,merging=False,dask_client=None,procType='default',**kwargs):
-    #     fileset = self.sample_locs
-    #     if procType == 'default':
-    #         proc = iDMeProcessor(self.sample_names,self.sample_info,self.sample_locs,self.histoFile,self.cuts,mode=self.mode,model_json=self.model,nJet_isNom=self.nJet_isNom,isSFstudies=self.isSFstudies,good_vtx=self.good_vtx,systematics=self.systematics,**kwargs)
+            proc = iDMeProcessor(self.sample_names,self.sample_info,self.sample_locs,self.histoFile,self.cuts,mode=self.mode,model_json=self.model,nJet_isNom=self.nJet_isNom,isSFstudies=self.isSFstudies,good_vtx=self.good_vtx,good_merged=self.good_merged,systematics=self.systematics,slimPairedNames=self.slimPairedNames,**kwargs)
+# >>>>>>> origin/Main_Run3
         elif procType == 'gen':
             proc = genProcessor(self.sample_names,self.sample_info,self.sample_locs,self.histoFile,self.cuts,mode=self.mode,**kwargs)
         elif procType == 'trig':
@@ -177,30 +307,56 @@ class Analyzer:
             else:
                 print("Invalid executor type specification!")
                 return
-            runner = processor.Runner(executor=executor,schema=MySchema,savemetrics=True)
+            runner = processor.Runner(executor=executor,schema=MySchema,savemetrics=True,xrootdtimeout=180,skipbadfiles=True)
             accumulator = runner(fileset,
                                 treename=treename,
                                 processor_instance=proc)
         else:
-            print("Preprocessing")
-            dataset_runnable, dataset_updated = preprocess(fileset,step_size=100_000,files_per_batch=1)
-            print("Done Preprocessing")
-            to_compute = apply_to_fileset(proc,dataset_runnable,schemaclass=MySchema)
-            (accumulator,) = dask.compute(to_compute)
+            if execr == "iterative":
+                executor = processor.IterativeExecutor()
+            elif execr == "futures":
+                executor = processor.FuturesExecutor(workers=workers, merging=merging)
+            elif execr == "dask":
+                if dask_client is None:
+                    print("Need to supply a dask client!")
+                    return
+                else:
+                    executor = processor.DaskExecutor(client=dask_client)
+            else:
+                print("Invalid executor type specification!")
+                return
+
+            runner = processor.Runner(executor=executor,schema=MySchema,savemetrics=True,xrootdtimeout=180,skipbadfiles=True)
+            accumulator = runner(fileset,
+                                 #treename=treename,
+                                 processor_instance=proc)
+            #print("Preprocessing")
+            #dataset_runnable, dataset_updated = preprocess(fileset,step_size=100_000,files_per_batch=1)
+            #print("Done Preprocessing")
+            #to_compute = apply_to_fileset(proc,dataset_runnable,schemaclass=MySchema)
+            #(accumulator,) = dask.compute(to_compute)
         
         return accumulator
 class iDMeProcessor(processor.ProcessorABC):
+# <<<<<<< HEAD
 
-    def __init__(self,samples,sampleInfo,fileSet,histoFile,cutFile,mode='signal',model_json=None,nJet_isNom=None,isSFstudies=False,good_vtx='none',systematics=None,**kwargs):
-# class iDMeProcessor(processor.ProcessorABC):
-#     def __init__(self,samples,sampleInfo,fileSet,histoFile,cutFile,mode='signal',model_json=None,nJet_isNom=None,isSFstudies=False,good_vtx='v11',systematics=None,**kwargs):
+#     def __init__(self,samples,sampleInfo,fileSet,histoFile,cutFile,mode='signal',model_json=None,nJet_isNom=None,isSFstudies=False,good_vtx='none',systematics=None,**kwargs):
+# # class iDMeProcessor(processor.ProcessorABC):
+# #     def __init__(self,samples,sampleInfo,fileSet,histoFile,cutFile,mode='signal',model_json=None,nJet_isNom=None,isSFstudies=False,good_vtx='v11',systematics=None,**kwargs):
+# =======
+    def __init__(self,samples,sampleInfo,fileSet,histoFile,cutFile,mode='signal',model_json=None,nJet_isNom=None,isSFstudies=False,good_vtx='v11',good_merged='v1_Oct2026',systematics=None,slimPairedNames=None,**kwargs):
+# >>>>>>> origin/Main_Run3
         self.samples = samples
         self.sampleInfo = sampleInfo
+        # bkg sample names with a slim counterpart, whether or not the slim ntuples
+        # themselves were actually registered for processing (see Analyzer.processSlim)
+        self.slimPairedNames = slimPairedNames if slimPairedNames is not None else set()
         self.sampleLocs = fileSet
         self.mode = mode
         self.model = model_json
         self.nJet_isNom = nJet_isNom
         self.good_vtx = good_vtx
+        self.good_merged = good_merged
         self.systematics = systematics
         print('Running with systematics: ', self.systematics)
         self.isSFstudies = isSFstudies
@@ -219,12 +375,14 @@ class iDMeProcessor(processor.ProcessorABC):
             cutList = [c for c in dir(self.cutLib) if "cut" in c]
             cutList = sorted(cutList,key=lambda x: int(x[3:])) # make sure cuts are ordered as they are in the file
             self.cuts = [getattr(self.cutLib,c) for c in cutList]
+            self.cutNames = cutList
         else: # cut file is in the same directory (e.g. running on condor)
             cutFileName = self.cutFile.split(".")[0]
             self.cutLib = importlib.import_module(cutFileName)
             cutList = [c for c in dir(self.cutLib) if "cut" in c]
             cutList = sorted(cutList,key=lambda x: int(x[3:])) # make sure cuts are ordered as they are in the file
             self.cuts = [getattr(self.cutLib,c) for c in cutList]
+            self.cutNames = cutList
 
         self.extraStuff = {}
         for k,v in kwargs.items():
@@ -234,21 +392,35 @@ class iDMeProcessor(processor.ProcessorABC):
     def process(self,events):
         samp = events.metadata["dataset"]
         info = self.sampleInfo[samp]
+
+        # "{name}__slim" datasets carry the companion all-events, high-level-info-only
+        # ntuple for bkg samples (see Analyzer.loadFiles()) -- events here never passed
+        # through the background HLT/metThreshold preselection, so they don't have
+        # Electron/PFJet/vtx/etc branches at all. All we do with them is (1) fill
+        # cutflow['all'] as the true pre-selection denominator, keyed under the un-suffixed
+        # sample name so it merges into the same cutflow entry as the full-tree dataset,
+        # and (2) call an optional fillSlimHistos hook if the histoConfig defines one.
+        if samp.endswith("__slim"):
+            return self._processSlim(events,samp,info)
+
         isMC = info["type"] == "signal" or info["type"] == "bkg"
         info['defineGoodVertices'] = routines.defineGoodVertices
         info['selectBestVertex'] = routines.selectBestVertex
         for k,v in self.extraStuff.items():
             info[f"extras_{k}"] = v
-        
-        #histos = self.histoMod.make_histograms()
+
+        histObj = self.histoMod.make_histograms()
         #histos['cutDesc'] = defaultdict(str)
+# <<<<<<< HEAD
         # histObj = self.histoMod.make_histograms(info)
         histObj = self.histoMod.make_histograms()
+
         cutDesc = defaultdict(str)
 
         cutflow = defaultdict(float)               # efficiency
         cutflow_counts = defaultdict(float)        # xsec-weighted event counts
         cutflow_nevts = defaultdict(int)           # raw event counts
+        cutflow_wgts2 = defaultdict(float)         # sum of squared normalized weights (for exact stat errors)
         cutflow_vtx_matched = defaultdict(float)   # (for signal MC) fraction that the selected vertex is truth-matched
         # (for signal MC) also check the above, but only counting the events where both gen ee are reconstructed: dR(reco,gen) < 0.1
 
@@ -272,42 +444,34 @@ class iDMeProcessor(processor.ProcessorABC):
         else:
             sum_wgt = info["num_events"]
 
-        # Initial number of events
+        # Initial number of events. For bkg samples with a paired "{name}__slim" dataset,
+        # this dataset only contains events that already passed the background HLT/MET
+        # preselection -- the true, unselected 'all' bin comes from _processSlim() instead,
+        # so this bin is named 'passHLT' to avoid claiming it's the full population.
+        has_slim_pair = samp in self.slimPairedNames
+        firstBin = 'passHLT' if has_slim_pair else 'all'
         if isMC:
+# <<<<<<< HEAD
            
-            cutflow['all'] += ak.sum(events.genWgt)/sum_wgt
+#             cutflow['all'] += ak.sum(events.genWgt)/sum_wgt
 
+# =======
+            cutflow[firstBin] += ak.sum(events.genWgt)/sum_wgt
+            cutflow_wgts2[firstBin] += ak.sum(events.genWgt**2)/sum_wgt**2
+# >>>>>>> origin/Main_Run3
         else:
-            cutflow['all'] += len(events)/sum_wgt
-        cutflow_nevts['all'] += len(events)
+            cutflow[firstBin] += len(events)/sum_wgt
+        cutflow_nevts[firstBin] += len(events)
 
         if info['type'] == "signal":
-            cutflow_vtx_matched['all'] += 1 # dummy value before selecting a vertex
-            
-        cutDesc['all'] = 'No cuts@'
+            cutflow_vtx_matched[firstBin] += 1 # dummy value before selecting a vertex
 
-        ######################################################################################
-        ## Add HEM flags to Event (before applying any quality cuts to jet, electrons ##
-        ######################################################################################
-
-        if str(info['year']) == '2018':
-            routines.checkHEMjet(events)
-            routines.checkHEMelectron(events)
+        cutDesc[firstBin] = ('Pass background HLT/MET preselection@' if has_slim_pair else 'No cuts@')
 
         #################################
         ## Calculating Additional Vars ##
         #################################
         events = routines.computeExtraVariables(events,info)
-
-        #################################
-        ## HEM Veto for 2018 ##
-        #################################
- 
-        # Veto HEM jets and electrons for 2018 data and MC
-        if str(info['year']) == '2018':
-            events = events[events.hasHEMjet == 0]
-            events = events[events.hasHEMelecPF == 0]
-            events = events[events.hasHEMelecLpt == 0]
 
         #################################
         ## Applying systematics and SF ##
@@ -355,7 +519,8 @@ class iDMeProcessor(processor.ProcessorABC):
         nJets = ak.count(events.PFJet.pt,axis=1)
         #events = events[(nJets>0) & (nJets<3)] # Nominal NJet requirement for SR
         events["nJets"] = nJets
-        events = events[nJets>0]
+        # XYZ no njet cut ACR
+        #events = events[nJets>0]
 
 
         if self.nJet_isNom != None: # If applying Njet cut (legacy: deprecated after fixing the nJet bug in pythia)
@@ -371,6 +536,7 @@ class iDMeProcessor(processor.ProcessorABC):
             # Initial number of events
             if isMC:
                 cutflow['njet'] += ak.sum(events.genWgt)/sum_wgt
+                cutflow_wgts2['njet'] += ak.sum(events.genWgt**2)/sum_wgt**2
             else:
                 cutflow['njet'] += len(events)/sum_wgt
             cutflow_nevts['njet'] += len(events)
@@ -382,70 +548,105 @@ class iDMeProcessor(processor.ProcessorABC):
             cutDesc['njet'] = cutName
 
         # needs a good vertex
-        # routines.defineGoodVertices(events,version=self.good_vtx) # define "good" vertices based on whether associated electrons pass ID cuts
+# <<<<<<< HEAD
+#         # routines.defineGoodVertices(events,version=self.good_vtx) # define "good" vertices based on whether associated electrons pass ID cuts
 
         
-        # events = events[events.nGoodVtx > 0]
+#         # events = events[events.nGoodVtx > 0]
         
 
         
 
-        # define "selected" vertex based on selection criteria in the routine (nominally: lowest chi2)
-        #routines.selectBestVertex(events)
-        if info['type'] == "signal":
-            print ("Signal!")
+#         # define "selected" vertex based on selection criteria in the routine (nominally: lowest chi2)
+#         #routines.selectBestVertex(events)
+#         if info['type'] == "signal":
+#             print ("Signal!")
             
-            #  # events = routines.selectTrueVertex(events,events.good_vtx)
-            # routines.selectBestVertex(events)
+#             #  # events = routines.selectTrueVertex(events,events.good_vtx)
+#             # routines.selectBestVertex(events)
             
             
-             #routines.selectBestVertex(events)
-        else:
-            print ("Bkg!")
-        # routines.prepareBDT(events, self.model) # prepare BDT inference if the cuts include BDT-based cut
-        # routines.prepareBDT(events, self.model) # prepare BDT inference if the cuts include BDT-based cut
+#              #routines.selectBestVertex(events)
+#         else:
+#             print ("Bkg!")
+#         # routines.prepareBDT(events, self.model) # prepare BDT inference if the cuts include BDT-based cut
+#         # routines.prepareBDT(events, self.model) # prepare BDT inference if the cuts include BDT-based cut
 
 
         
-        # events = events[events.nGoodVtx > 0]
-        # # define "selected" vertex based on selection criteria in the routine (nominally: lowest chi2)
-        # #routines.selectBestVertex(events)
-        # if info['type'] == "signal":
-        #      events = routines.selectTrueVertex(events,events.good_vtx)
-        #      #routines.selectBestVertex(events)
-        # else:
-        #      routines.selectBestVertex(events)
-        # routines.prepareBDT(events, self.model) # prepare BDT inference if the cuts include BDT-based cut
+#         # events = events[events.nGoodVtx > 0]
+#         # # define "selected" vertex based on selection criteria in the routine (nominally: lowest chi2)
+#         # #routines.selectBestVertex(events)
+#         # if info['type'] == "signal":
+#         #      events = routines.selectTrueVertex(events,events.good_vtx)
+#         #      #routines.selectBestVertex(events)
+#         # else:
+#         #      routines.selectBestVertex(events)
+#         # routines.prepareBDT(events, self.model) # prepare BDT inference if the cuts include BDT-based cut
 
-        # Vtx SF related stuff (shitty hack)
-        if apply_vtx_SF == True:
-             events["eventWgt"] = events["eventWgt"] * events.sel_vtx.sf
+#         # Vtx SF related stuff (shitty hack)
+#         if apply_vtx_SF == True:
+#              events["eventWgt"] = events["eventWgt"] * events.sel_vtx.sf
 
-        # Fill cutflow after baseline selection
-        if isMC:
+#         # Fill cutflow after baseline selection
+#         if isMC:
          
             
-            cutflow['hasVtx'] += ak.sum(events.genWgt)/sum_wgt
+#             cutflow['hasVtx'] += ak.sum(events.genWgt)/sum_wgt
            
 
 
 
             
-        else:
-            cutflow['hasVtx'] += len(events)/sum_wgt
-        cutflow_nevts['hasVtx'] += len(events)
-        cutDesc['hasVtx'] = 'Baseline Selection@'
+#         else:
+#             cutflow['hasVtx'] += len(events)/sum_wgt
+#         cutflow_nevts['hasVtx'] += len(events)
+#         cutDesc['hasVtx'] = 'Baseline Selection@'
 
-        # For signal, (1) check if the vertex ee are gen-matched (2) check if the event has ee that are gen-matched
-        if info['type'] == "signal":
-            routines.projectGenLxy(events)
-            # vtx_matched_events = events[events.sel_vtx.isMatched]
-            # cutflow_vtx_matched['hasVtx'] += ak.sum(vtx_matched_events.genWgt)/ak.sum(events.genWgt)
+#         # For signal, (1) check if the vertex ee are gen-matched (2) check if the event has ee that are gen-matched
+#         if info['type'] == "signal":
+#             routines.projectGenLxy(events)
+#             # vtx_matched_events = events[events.sel_vtx.isMatched]
+#             # cutflow_vtx_matched['hasVtx'] += ak.sum(vtx_matched_events.genWgt)/ak.sum(events.genWgt)
+# =======
+        routines.defineGoodVertices(events,version=self.good_vtx) # define "good" vertices based on whether associated electrons pass ID cuts
+        events = routines.defineVertexInfo(events, info)
+        #events = events[events.nGoodVtx > 0]
+        ## define "selected" vertex based on selection criteria in the routine (nominally: lowest chi2)
+        ##routines.selectBestVertex(events)
+        #if info['type'] == "signal":
+        #     events = routines.selectTrueVertex(events,events.good_vtx)
+        #     #routines.selectBestVertex(events)
+        #else:
+        #     routines.selectBestVertex(events)
+        #routines.prepareBDT(events, self.model) # prepare BDT inference if the cuts include BDT-based cut
+        #
+        ## Vtx SF related stuff (shitty hack)
+        #if apply_vtx_SF == True:
+        #     events["eventWgt"] = events["eventWgt"] * events.sel_vtx.sf
+        #
+        ## Fill cutflow after baseline selection
+        #if isMC:
+        #    cutflow['hasVtx'] += ak.sum(events.genWgt)/sum_wgt
+        #else:
+        #    cutflow['hasVtx'] += len(events)/sum_wgt
+        #cutflow_nevts['hasVtx'] += len(events)
+        #cutDesc['hasVtx'] = 'Baseline Selection@'
+        #
+        ## For signal, (1) check if the vertex ee are gen-matched (2) check if the event has ee that are gen-matched
+        #if info['type'] == "signal":
+        #    routines.projectGenLxy(events)
+        #    vtx_matched_events = events[events.sel_vtx.isMatched]
+        #    cutflow_vtx_matched['hasVtx'] += ak.sum(vtx_matched_events.genWgt)/ak.sum(events.genWgt)
+
+        # merged-electron categories/candidates (cat_merged, merged_candidates, best_merged, ...)
+        routines.computeMergedVars(events,good_merged=self.good_merged)
+# >>>>>>> origin/Main_Run3
 
         # computing any extra quantities specified in the histogram config file
         for subroutine in self.subroutines:
             getattr(routines,subroutine)(events)
-
+        
         
         # SF studies
         if self.isSFstudies:
@@ -465,17 +666,29 @@ class iDMeProcessor(processor.ProcessorABC):
             events, cutName, cutDescription, savePlots = cut(events,info)
             if isMC:
                 cutflow[cutName] += ak.sum(events.genWgt)/sum_wgt
+                cutflow_wgts2[cutName] += ak.sum(events.genWgt**2)/sum_wgt**2
             else:
                 cutflow[cutName] += len(events)/sum_wgt
-            cutflow_nevts[cutName] += len(events)            
-                # vtx_matched_events = events[events.sel_vtx.isMatched]
-                # cutflow_vtx_matched[cutName] += ak.sum(vtx_matched_events.genWgt)/ak.sum(events.genWgt)
+# <<<<<<< HEAD
+#             cutflow_nevts[cutName] += len(events)            
+#                 # vtx_matched_events = events[events.sel_vtx.isMatched]
+#                 # cutflow_vtx_matched[cutName] += ak.sum(vtx_matched_events.genWgt)/ak.sum(events.genWgt)
+# =======
+            cutflow_nevts[cutName] += len(events)
+            if info['type'] == "signal":
+                if 'sel_vtx' in events.fields:
+                    vtx_matched_events = events[events.sel_vtx.isMatched]
+                    cutflow_vtx_matched[cutName] += ak.sum(vtx_matched_events.genWgt)/ak.sum(events.genWgt)
+                else:
+                    cutflow_vtx_matched[cutName] = 0.
+# >>>>>>> origin/Main_Run3
             cutDesc[cutName] += cutDescription + "@"
 
 
 
 
             # Fill histograms
+            #print(savePlots, len(events))
             if savePlots and len(events) > 0: # fixes some bugginess trying to fill histograms with empty arrays
                 self.histoFill(events,histObj,samp,cutName,info,sum_wgt=sum_wgt)
         
@@ -485,12 +698,95 @@ class iDMeProcessor(processor.ProcessorABC):
             else:
                 cutflow_counts[k] = sum_wgt*cutflow[k]
         
-        histos = histObj.histograms
+        histos = histObj
+        #histos = histObj.histograms
         histos['cutDesc'] = cutDesc
         histos['cutflow'] = {samp:cutflow}
         histos['cutflow_cts'] = {samp:cutflow_counts}
         histos['cutflow_nevts'] = {samp:cutflow_nevts}
+        histos['cutflow_wgts2'] = {samp:cutflow_wgts2}
         histos['cutflow_vtx_matched'] = {samp:cutflow_vtx_matched}
+
+        return histos
+
+    def _processSlim(self,events,samp,info):
+        # base_samp strips "__slim" so this merges into the same cutflow/cutDesc entry
+        # as the paired full-tree dataset (see process())
+        base_samp = samp[:-len("__slim")]
+
+        histObj = self.histoMod.make_histograms()
+        cutDesc = defaultdict(str)
+        cutflow = defaultdict(float)
+        cutflow_wgts2 = defaultdict(float)
+        cutflow_nevts = defaultdict(int)
+
+        sum_wgt = info["sum_wgt"]
+        lumi, unc = getLumi(info['year'])
+        xsec = info['xsec']
+        if 'DY' in info['name']:
+            if self.isSFstudies == False:
+                xsec = xsec * 1.23
+        elif 'WJet' in info['name']:
+            xsec = xsec * 1.21
+        elif 'ZJet' in info['name']:
+            xsec = xsec * 1.23
+        # register event weight branch
+        events.__setitem__("eventWgt",xsec*lumi*events.genWgt)
+
+        # true pre-selection denominator: every event, regardless of the background
+        # HLT/metThreshold preselection applied upstream in the ntuplizer
+        cutflow['all'] += ak.sum(events.genWgt)/sum_wgt
+        cutflow_wgts2['all'] += ak.sum(events.genWgt**2)/sum_wgt**2
+        cutflow_nevts['all'] += len(events)
+        cutDesc['all'] = 'No cuts@'
+
+        # let histoConfig modules opt into filling inclusive/pre-selection histograms
+        # (MET, HT, jet/electron counts, HLT turn-on curves, etc.) from the true,
+        # unselected population; configs that don't define this just get no slim histos
+        if hasattr(self.histoMod,"fillSlimHistos"):
+            self.histoMod.fillSlimHistos(events,histObj,base_samp,info,sum_wgt=sum_wgt)
+
+        cutflow_counts = defaultdict(float)
+        for k,v in cutflow.items():
+            cutflow_counts[k] = xsec*lumi*v
+
+        # Independent measurement of the first two cuts (MET filters, MET trigger) on
+        # the slim, all-events tree -- i.e. applied to the true pre-skim population
+        # rather than the full-tree dataset, which already sits downstream of the
+        # background HLT/MET preselection. These should numerically agree with the
+        # full-tree dataset's own recorded cut1/cut2 by the time the trigger cut is
+        # reached; stored under separate '..._slim' branches (not 'cut1'/'cut2') so
+        # they don't collide with the full-tree's cutflow entries when merged.
+        cutDesc_slim = defaultdict(str)
+        cutflow_slim = defaultdict(float)
+        cutflow_wgts2_slim = defaultdict(float)
+        cutflow_nevts_slim = defaultdict(int)
+
+        slim_events = events
+        for cut, cutName in zip(self.cuts[:2], self.cutNames[:2]):
+            slim_events, cName, cutDescription, _ = cut(slim_events,info)
+            cutflow_slim[cName] += ak.sum(slim_events.genWgt)/sum_wgt
+            cutflow_wgts2_slim[cName] += ak.sum(slim_events.genWgt**2)/sum_wgt**2
+            cutflow_nevts_slim[cName] += len(slim_events)
+            cutDesc_slim[cName] += cutDescription + "@"
+
+        cutflow_counts_slim = defaultdict(float)
+        for k,v in cutflow_slim.items():
+            cutflow_counts_slim[k] = xsec*lumi*v
+
+        histos = histObj
+        histos['cutDesc'] = cutDesc
+        histos['cutflow'] = {base_samp:cutflow}
+        histos['cutflow_cts'] = {base_samp:cutflow_counts}
+        histos['cutflow_nevts'] = {base_samp:cutflow_nevts}
+        histos['cutflow_wgts2'] = {base_samp:cutflow_wgts2}
+        histos['cutflow_vtx_matched'] = {base_samp:defaultdict(float)}
+
+        histos['cutDesc_slim'] = cutDesc_slim
+        histos['cutflow_slim'] = {base_samp:cutflow_slim}
+        histos['cutflow_cts_slim'] = {base_samp:cutflow_counts_slim}
+        histos['cutflow_nevts_slim'] = {base_samp:cutflow_nevts_slim}
+        histos['cutflow_wgts2_slim'] = {base_samp:cutflow_wgts2_slim}
 
         return histos
 
@@ -498,14 +794,22 @@ class iDMeProcessor(processor.ProcessorABC):
         # only need one description per cut name -- adds many during parallel execution
         for cutName in list(accumulator['cutDesc'].keys()):
             accumulator['cutDesc'][cutName] = accumulator['cutDesc'][cutName].split("@")[0]
+        if 'cutDesc_slim' in accumulator:
+            for cutName in list(accumulator['cutDesc_slim'].keys()):
+                accumulator['cutDesc_slim'][cutName] = accumulator['cutDesc_slim'][cutName].split("@")[0]
         return accumulator
 
 # processor for extracting gen/truth-matched signal plots - no selection
 class genProcessor(iDMeProcessor):
     def process(self,events):
         samp = events.metadata["dataset"]
+        # this processor assumes full-tree branches (PFJet, vtx, etc.) that don't exist
+        # in the companion "{name}__slim" bkg dataset (see Analyzer.loadFiles()) -- it isn't
+        # meant to run over slim datasets, so just skip them rather than crash
+        if samp.endswith("__slim"):
+            return {}
         info = self.sampleInfo[samp]
-        
+
         #histos = self.histoMod.make_histograms()
         #histos['cutDesc'] = defaultdict(str)
         histObj = self.histoMod.make_histograms(info)
@@ -514,7 +818,8 @@ class genProcessor(iDMeProcessor):
         cutflow = defaultdict(float)               # efficiency
         cutflow_counts = defaultdict(float)        # xsec-weighted event counts
         cutflow_nevts = defaultdict(int)           # raw event counts
-        
+        cutflow_wgts2 = defaultdict(float)         # sum of squared normalized weights (for exact stat errors)
+
         sum_wgt = info["sum_wgt"]
         lumi, unc = getLumi(info['year'])
         xsec = info['xsec']
@@ -526,6 +831,7 @@ class genProcessor(iDMeProcessor):
 
         # Initial number of events
         cutflow['all'] += ak.sum(events.genWgt)/sum_wgt
+        cutflow_wgts2['all'] += ak.sum(events.genWgt**2)/sum_wgt**2
         cutflow_nevts['all'] += len(events)
         cutDesc['all'] = 'No cuts'
 
@@ -560,10 +866,13 @@ class genProcessor(iDMeProcessor):
         routines.selectBestVertex(events)
 
         # Fill cutflow after baseline selection
-        cutflow['hasVtx'] += ak.sum(events.genWgt)/sum_wgt
-        cutflow_nevts['hasVtx'] += len(events)
-        cutDesc['hasVtx'] = 'Baseline Selection'
-        
+        #cutflow['hasVtx'] += ak.sum(events.genWgt)/sum_wgt
+        #cutflow_nevts['hasVtx'] += len(events)
+        #cutDesc['hasVtx'] = 'Baseline Selection'
+
+        # merged-electron categories/candidates (cat_merged, merged_candidates, best_merged, ...)
+        routines.computeMergedVars(events,good_merged=self.good_merged)
+
         # computing any extra quantities specified in the histogram config file
         for subroutine in self.subroutines:
             getattr(routines,subroutine)(events)
@@ -574,7 +883,8 @@ class genProcessor(iDMeProcessor):
         for cut in self.cuts:
             events, cutName, cutDescription, savePlots = cut(events,info)
             cutflow[cutName] += ak.sum(events.genWgt)/sum_wgt
-            cutflow_nevts[cutName] += len(events)            
+            cutflow_wgts2[cutName] += ak.sum(events.genWgt**2)/sum_wgt**2
+            cutflow_nevts[cutName] += len(events)
             cutDesc[cutName] += cutDescription + "@"
             # Fill histograms
             if savePlots and len(events) > 0: # fixes some bugginess trying to fill histograms with empty arrays
@@ -589,13 +899,18 @@ class genProcessor(iDMeProcessor):
         histos['cutflow'] = {samp:cutflow}
         histos['cutflow_cts'] = {samp:cutflow_counts}
         histos['cutflow_nevts'] = {samp:cutflow_nevts}
-        
+        histos['cutflow_wgts2'] = {samp:cutflow_wgts2}
+
         return histos
 
 # processor for doing nothing but filling histos
 class bareProcessor(iDMeProcessor):
     def process(self,events):
         samp = events.metadata["dataset"]
+        # not meant to run over the companion "{name}__slim" bkg dataset (see
+        # Analyzer.loadFiles()) -- it assumes full-tree branches that don't exist there
+        if samp.endswith("__slim"):
+            return {}
         info = self.sampleInfo[samp]
         isMC = info["type"] == "signal" or info["type"] == "bkg"
         info['defineGoodVertices'] = routines.defineGoodVertices
@@ -651,6 +966,13 @@ class bareProcessor(iDMeProcessor):
 class trigProcessor(iDMeProcessor):
     def process(self,events):
         samp = events.metadata["dataset"]
+        # this processor still assumes full-tree, per-object branches (Electron.pt,
+        # PFJet.pt, etc.) that don't exist in the companion "{name}__slim" bkg dataset
+        # (see Analyzer.loadFiles()) -- trigger turn-on studies over the slim, all-events
+        # population should go through a histoConfig's fillSlimHistos hook instead (see
+        # iDMeProcessor._processSlim()); skip slim datasets here rather than crash
+        if samp.endswith("__slim"):
+            return {}
 
         info = self.sampleInfo[samp]
         isMC = info["type"] == "signal" or info["type"] == "bkg"
@@ -794,12 +1116,14 @@ class fileSkimmer:
             cutList = [c for c in dir(self.cutLib) if "cut" in c]
             cutList = sorted(cutList,key=lambda x: int(x[3:])) # make sure cuts are ordered as they are in the file
             self.cuts = [getattr(self.cutLib,c) for c in cutList]
+            self.cutNames = cutList
         else: # cut file is in the same directory (e.g. running on condor)
             cutFileName = self.cutFile.split(".")[0]
             self.cutLib = importlib.import_module(cutFileName)
             cutList = [c for c in dir(self.cutLib) if "cut" in c]
             cutList = sorted(cutList,key=lambda x: int(x[3:])) # make sure cuts are ordered as they are in the file
             self.cuts = [getattr(self.cutLib,c) for c in cutList]
+            self.cutNames = cutList
     
     def skim(self):
         with uproot.open(self.sampFile) as input_file:
@@ -893,12 +1217,22 @@ def getLumi(year):
     year = str(year)
 
     lumi, unc = 0, 0
+# <<<<<<< HEAD
+#     if year == '2022':
+#         lumi = 38.01
+#         unc =  0.014*lumi #1.4 percent
+#     if year == 2016:
+#         lumi = 36.31
+# #Check this part sometime
+# =======
+    if year == '2024':
+        lumi = 124.0 # https://cds.cern.ch/record/2952191/files/DP2026_003.pdf
+        unc =  0.016*lumi # 1.6 percent
     if year == '2022':
         lumi = 38.01
         unc =  0.014*lumi #1.4 percent
-    if year == 2016:
-        lumi = 36.31
-#Check this part sometime
+
+# >>>>>>> origin/Main_Run3
     if year == '2016':
         lumi = 16.8
         unc = 0.012*lumi # 1.2 percent

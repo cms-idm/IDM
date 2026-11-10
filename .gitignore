@@ -20,3 +20,4 @@ CMSSW*
 *.csv
 *.txt
 *.json
+*.h5

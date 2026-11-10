@@ -5,7 +5,7 @@ import numpy as np
 #['Electron_genMatched', 'Electron_hasLptMatch', 'Electron_lptMatchIdx', 'Electron_hasAllLptMatch', 'Electron_AllLptMatchIdx', 'LptElectron_genMatched', 'LptElectron_gedIsMatched', 'AllLptElectron_genMatched', 'AllLptElectron_gedIsMatched', 'vtx_isMatched', 'vtx_e1_isMatched', 'vtx_e2_isMatched']
 
 # Open a ROOT file
-with uproot.open("test.root") as f:
+with uproot.open("htctest.root") as f:
 
     # List available keys (trees, histograms, etc.)
     print("Keys:", f.keys())
@@ -25,18 +25,6 @@ with uproot.open("test.root") as f:
     print("AllLpt:", arrays["AllLptElectron_pt"][:10])
     print("Lpt:", arrays["LptElectron_pt"][:10])
     print("GED:", arrays["Electron_pt"][:10])
-    print("PFJet:", arrays["PFJet_pt"][:10])
-    print("nPFJet:", arrays["nPFJet"][:10])
-    print("nPFJetAll:", arrays["nPFJetAll"][:10])
-
-    print("AllLptGenM:", arrays["AllLptElectron_genMatched"][:10])
-    print("AllLptGEDM:", arrays["AllLptElectron_gedIsMatched"][:10])
-    print("GEDhasAllLptM:", arrays["Electron_hasAllLptMatch"][:10])
-    print("GEDAllLptMidx:", arrays["Electron_AllLptMatchIdx"][:10])
-
-    print("AllLptXC:", arrays["AllLptElectron_xCleaned"][:10])
-    print("AllLptGEDidx:", arrays["AllLptElectron_gedIdx"][:10])
-
     print("PFJet:", arrays["PFJet_pt"][:10])
     print("nPFJet:", arrays["nPFJet"][:10])
     print("nPFJetAll:", arrays["nPFJetAll"][:10])
