@@ -13,3 +13,5 @@ request_memory = 4000
 +ProjectName = "DarkMatterSimulation"
 +DesiredOS = ifThenElse(regexp("^el8_", "$ENV(SCRAM_ARCH)"), "EL8", "EL9")
 Queue 1
+
+

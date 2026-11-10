@@ -1615,7 +1615,8 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       nt.recoElectronPhoIso_.push_back(pfIso.sumPhotonEt);
       nt.recoElectronRhoEA_.push_back(rho*eA);
       // Filling track info
-      nt.recoElectronDxy_.push_back(abs(track->dxy(pv.position())));
+      nt.recoElectronDxy_.push_back((track->dxy(pv.position())));
+      
       nt.recoElectronDxyError_.push_back(track->dxyError());
       nt.recoElectronDz_.push_back(track->dz(pv.position()));
       nt.recoElectronDzError_.push_back(track->dzError());
@@ -1662,11 +1663,13 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    int ilpt = 0; // track index (in output tree) of lpt electrons for x-cleaning purposes
    vector<int> iSaved_lpt;
    int ilpt_all = 0;
-   for (auto & ele : *lowPtNanoElectronHandle_) {
+   for (auto & ele : *lowPtNanoElectronHandle_) 
+   {
       // basic cut (should be applied by default in miniAOD stage, but repeating here)
       // Run3 syntax updated - below cuts are legacy sanity check from Run2, likely will change later
-      //if (ele.pt() < 1 || ele.electronID("ID") < -0.25) {
-      if (ele.pt() < 1) {
+      if (ele.pt() < 1 || ele.electronID("ID") < -0.25) 
+      {
+
          ilpt_all++;
          continue;
       }
@@ -1676,16 +1679,19 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       reco::GsfTrackRef track = ele.gsfTrack();
       float PFmatch_threshold = 0.05; // dR threshold for throwing away low-pT electron in favor of PF electron
       int iMatch_reg;
-      for (size_t ireg = 0; ireg < reg_good_eles.size(); ireg++) {
+      for (size_t ireg = 0; ireg < reg_good_eles.size(); ireg++) 
+      {
          float dR = reco::deltaR(ele.p4(), reg_good_eles[ireg]->p4());
-         if (dR < mindR) {
+         if (dR < mindR) 
+         {
             mindR = dR;
             iMatch_reg = ireg;
          }
       }
       bool isXCleaned = (mindR < PFmatch_threshold);
 
-      if (isXCleaned) {
+      if (isXCleaned) 
+      {
          nt.recoElectronHasAllLptMatch_[iMatch_reg] = true;
          nt.recoElectronAllLptMatchIdx_[iMatch_reg] = nt.nElectronAllLowPt_;
       }
@@ -1747,7 +1753,8 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          nt.recoAllLowPtElectronRhoEA_.push_back(rho*eA);
       }
       // Filling tracks
-      nt.recoAllLowPtElectronDxy_.push_back(abs(track->dxy(pv.position())));
+      nt.recoAllLowPtElectronDxy_.push_back((track->dxy(pv.position())));
+      // cout<<"AllLpt track->dxy(pv.position()="<<track->dxy(pv.position())<<endl;
       nt.recoAllLowPtElectronDxyError_.push_back(track->dxyError());
       nt.recoAllLowPtElectronDz_.push_back(track->dz(pv.position()));
       nt.recoAllLowPtElectronDzError_.push_back(track->dzError());
@@ -1759,7 +1766,8 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       // Calculating distance to jets
       {
          vector<float> dRtoJets; vector<float> dPhitoJets;
-         for (int ij = 0; ij < nt.PFNJet_; ij++) {
+         for (int ij = 0; ij < nt.PFNJet_; ij++) 
+         {
             dRtoJets.push_back(sqrt(pow(ele.eta() - nt.PFJetEta_[ij],2) + pow(reco::deltaPhi(ele.phi(),nt.PFJetPhi_[ij]),2)));
             dPhitoJets.push_back(reco::deltaPhi(ele.phi(),nt.PFJetPhi_[ij]));
          }
@@ -1804,7 +1812,8 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       nt.recoAllLowPtElectronFull5x5HcalDepth1OverEcal_.push_back(ele.full5x5_showerShape().hcalDepth1OverEcal);
       nt.recoAllLowPtElectronFull5x5HcalDepth2OverEcal_.push_back(ele.full5x5_showerShape().hcalDepth2OverEcal);
 
-      if (!isXCleaned) {
+      if (!isXCleaned) 
+      {
          // passes cross cleaning — fill surviving LowPt branches
          nt.recoLowPtElectronIsXCleaned_.push_back(false);
          nt.recoLowPtElectronGEDidx_.push_back(-999);
@@ -1863,7 +1872,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          nt.recoLowPtElectronPhoIso_.push_back(pfIso.sumPhotonEt);
          nt.recoLowPtElectronRhoEA_.push_back(rho*eA);
          // Filling tracks
-         nt.recoLowPtElectronDxy_.push_back(abs(track->dxy(pv.position())));
+         nt.recoLowPtElectronDxy_.push_back((track->dxy(pv.position())));
          nt.recoLowPtElectronDxyError_.push_back(track->dxyError());
          nt.recoLowPtElectronDz_.push_back(track->dz(pv.position()));
          nt.recoLowPtElectronDzError_.push_back(track->dzError());
@@ -1874,7 +1883,8 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          nt.recoLowPtElectronTrkNumStripHits_.push_back(track->hitPattern().numberOfValidStripHits());
          // Calculating distance to jets
          vector<float> dRtoJets; vector<float> dPhitoJets;
-         for (int ij = 0; ij < nt.PFNJet_; ij++) {
+         for (int ij = 0; ij < nt.PFNJet_; ij++) 
+         {
             dRtoJets.push_back(sqrt(pow(ele.eta() - nt.PFJetEta_[ij],2) + pow(reco::deltaPhi(ele.phi(),nt.PFJetPhi_[ij]),2)));
             dPhitoJets.push_back(reco::deltaPhi(ele.phi(),nt.PFJetPhi_[ij]));
          }
@@ -2451,6 +2461,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    }
    }
 
+
    // Handling isolated tracks (signal samples only)
    if (isSignal && isoTrackHandle_.isValid()) {
       for (const auto & trk : *isoTrackHandle_) {
@@ -2564,6 +2575,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       nt.conversion_Trk2dzPV_.push_back(t2.dz(pv.position()));
    }*/
    }
+// >>>>>>> pr8-source
 
    // Define vertex reco function.
    // fillLpt=false fills vtx_* branches (mixed GED+LowPt pool).
@@ -3143,9 +3155,11 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          }
 
          if (isSignal) {
-            if ((std::abs(genParticle.pdgId()) == 11) && (motherID == 1000023)) {
+	   if ((std::abs(genParticle.pdgId()) == 11) && (motherID == 1000023)) {
+
                // Recording basic info
-               if (genParticle.pdgId() == 11) {
+               if (genParticle.pdgId() == 11) 
+               {
                   gen_ele_p4 = genParticle.p4();
                   nt.genEleCharge_ = genParticle.charge();
                   nt.genEleMotherID_ = motherID;
@@ -3432,6 +3446,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       }
 
       if (isSignal) {
+
          // Gen-matching electrons to reco objects for iDM signal
          // Strategy: merge "good" electrons + low-pT electrons (i.e. the ones saved to ntuples & used in vertexing)
          vector<math::XYZTLorentzVector> all_eles(reg_ele_p4s);
@@ -3483,25 +3498,31 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
             }
          }
          // check if full signal reconstructed
-         if (iMatch_e != -1 && iMatch_p != -1) {
+         if (iMatch_e != -1 && iMatch_p != -1) 
+         {
             nt.signalReconstructed_ = true;
          }
 
          // assign match flags to electrons & vertices
          int iTarg_e = -1; int iTarg_p = -1;
          std::string mType_e = "None"; std::string mType_p = "None";
-         if (iMatch_e != -1) {
+         if (iMatch_e != -1) 
+         {
             nt.genEleMatched_ = true;
-            if (iMatch_e < n_reg_eles) {
+            if (iMatch_e < n_reg_eles) 
+            {
                nt.recoElectronGenMatched_[iMatch_e] = true;
                nt.recoElectronMatchType_[iMatch_e] = -1;
-	       iTarg_e = iMatch_e;
+    	       iTarg_e = iMatch_e;
                mType_e = "R";
-	       if (nt.recoElectronHasLptMatch_[iMatch_e]) {
+    	    if (nt.recoElectronHasLptMatch_[iMatch_e]) 
+            {
                   nt.recoLowPtElectronGEDisMatched_[nt.recoElectronLptMatchIdx_[iMatch_e]] = true;
-               }
-               for (size_t k = 0; k < nt.recoAllLowPtElectronGEDidx_.size(); k++) {
-                  if (nt.recoAllLowPtElectronGEDidx_[k] == iMatch_e) {
+            }
+               for (size_t k = 0; k < nt.recoAllLowPtElectronGEDidx_.size(); k++) 
+               {
+                  if (nt.recoAllLowPtElectronGEDidx_[k] == iMatch_e) 
+                  {
                      nt.recoAllLowPtElectronGEDisMatched_[k] = true;
                   }
                }
@@ -3543,7 +3564,8 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
             nt.genPosMatchIdxLocal_ = iTarg_p;
          }
 
-         for (int iv = 0; iv < nt.nvtx_; iv++) {
+         for (int iv = 0; iv < nt.nvtx_; iv++) 
+         {
             if (nt.vtx_e1_type_[iv] == mType_e && nt.vtx_e1_idx_[iv] == iTarg_e) {
                nt.vtx_e1_isMatched_[iv] = true;
                nt.vtx_e1_matchType_[iv] = -1;

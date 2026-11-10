@@ -25,6 +25,7 @@ def main():
     parser = argparse.ArgumentParser(description="Query background MC datasets from DAS and submit ElectronNtuplizer condor jobs")
     parser.add_argument("key", help="Top-level key in the background JSON to process, e.g. QCD")
     parser.add_argument("--json", default="../../fileLists/background/MINIAOD/bkg_2024.json", help="Path to the background sample config JSON: {top_key: {subsample: DAS dataset}}")
+
     parser.add_argument("--year", default=None, help="MC year (default: parsed from the JSON filename, e.g. bkg_2024.json -> 2024)")
     parser.add_argument("--vers", default="Jul2026noID", help="Version tag used in the output EOS directory (background_<vers>) and split file list names")
     parser.add_argument("--nsplit", type=int, default=10, help="Number of input files per condor job")
@@ -41,6 +42,12 @@ def main():
         raise KeyError(f"'{args.key}' not found in {args.json}. Available keys: {list(samples.keys())}")
 
     subsamples = samples[args.key]
+
+    if args.subkey is not None:
+        if args.subkey not in subsamples:
+            raise KeyError(f"'{args.subkey}' not found under '{args.key}' in {args.json}. Available subkeys: {list(subsamples.keys())}")
+        subsamples = {args.subkey: subsamples[args.subkey]}
+
 
     flistdir = f"../../fileLists/background/MINIAOD/fileLists/{year}"
     os.makedirs(flistdir, exist_ok=True)
@@ -70,3 +77,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

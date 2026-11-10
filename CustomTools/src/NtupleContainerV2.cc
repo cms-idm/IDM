@@ -989,6 +989,11 @@ void NtupleContainerV2::CreateTreeBranches() {
             outT->Branch("GenEle_matchedAllLowPt",&genEleMatchedAllLowPt_);
             outT->Branch("GenEle_matchIdxAllLowPt",&genEleMatchIdxAllLowPt_);
 
+            outT->Branch("GenEle_GEDPtRes",&genEleGEDPtRes_);
+            outT->Branch("GenEle_GEDPtResRel",&genEleGEDPtResRel_);
+            outT->Branch("GenEle_LptPtRes",&genEleLptPtRes_);
+            outT->Branch("GenEle_LptPtResRel",&genEleLptPtResRel_);
+
             outT->Branch("GenPos_charge",&genPosCharge_);
             outT->Branch("GenPos_motherID",&genPosMotherID_);
             outT->Branch("GenPos_pt",&genPosPt_);
@@ -1009,7 +1014,14 @@ void NtupleContainerV2::CreateTreeBranches() {
             outT->Branch("GenPos_matchedAllLowPt",&genPosMatchedAllLowPt_);
             outT->Branch("GenPos_matchIdxAllLowPt",&genPosMatchIdxAllLowPt_);
 
+            outT->Branch("GenPos_GEDPtRes",&genPosGEDPtRes_);
+            outT->Branch("GenPos_GEDPtResRel",&genPosGEDPtResRel_);
+            outT->Branch("GenPos_LptPtRes",&genPosLptPtRes_);
+            outT->Branch("GenPos_LptPtResRel",&genPosLptPtResRel_);
+
+            // Signal reco info
             outT->Branch("signalReconstructed",&signalReconstructed_);
+            outT->Branch("signalVertexReconstructed",&signalVertexReconstructed_);
 
             outT->Branch("genEE_pt",&genEEPt_);
             outT->Branch("genEE_eta",&genEEEta_);
@@ -1544,7 +1556,18 @@ void NtupleContainerV2::ClearTreeBranches() {
     genPosMatchedAllLowPt_ = false;
     genPosMatchIdxAllLowPt_ = -999;
 
+    genEleGEDPtRes_ = -999;
+    genEleGEDPtResRel_ = -999;
+    genEleLptPtRes_ = -999;
+    genEleLptPtResRel_ = -999;
+    genPosGEDPtRes_ = -999;
+    genPosGEDPtResRel_ = -999;
+    genPosLptPtRes_ = -999;
+    genPosLptPtResRel_ = -999;
+
+    // Signal reconstruction info
     signalReconstructed_ = false;
+    signalVertexReconstructed_ = false;
 
     genEEPt_ = -999;
     genEEEta_ = -999;

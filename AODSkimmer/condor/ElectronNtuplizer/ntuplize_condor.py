@@ -13,6 +13,7 @@ def stringfy_friendly(num):
     else:
         raise ValueError("{0} is not a number!".format(num))
 
+
 vers = 'Jul2026noID'
 CMSSW = 'CMSSW_14_0_21'
 compiled_CMSSW_envs='ntuplizer_CMSSW_14_0_21_acrobert.tar.gz'
@@ -35,5 +36,4 @@ for m1 in m1l:
 
             procstring = f'M1-{stfm1}_dM-{stfdm}_mZD-{stfmed}_ctau-{ctau}'
             cmd = f'source submit_ElectronNtuplizer_condor.sh ../../fileLists/signal/2024/{procstring}_flist.txt 2024 4 False True {vers} 5 {CMSSW} {compiled_CMSSW_envs}'
-            #cmd = f'cmsRun scripts/ElectronNtuplizer_cfg.py year=2024 data=0 signal=1 flist="{flist}" outfile={outfile}'
             os.system(f'bash -c "{cmd}"')
