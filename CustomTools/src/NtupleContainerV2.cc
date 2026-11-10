@@ -1556,7 +1556,6 @@ void NtupleContainerV2::ClearTreeBranches() {
     genPosMatchedAllLowPt_ = false;
     genPosMatchIdxAllLowPt_ = -999;
 
-<<<<<<< HEAD
     genEleGEDPtRes_ = -999;
     genEleGEDPtResRel_ = -999;
     genEleLptPtRes_ = -999;
@@ -1567,8 +1566,6 @@ void NtupleContainerV2::ClearTreeBranches() {
     genPosLptPtResRel_ = -999;
 
     // Signal reconstruction info
-=======
->>>>>>> origin/Main_Run3
     signalReconstructed_ = false;
     signalVertexReconstructed_ = false;
 

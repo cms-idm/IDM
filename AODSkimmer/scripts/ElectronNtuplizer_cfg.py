@@ -164,7 +164,7 @@ elif options.year == "2023" and cmsswRelease == "CMSSW_14_0_21":
     from Configuration.Eras.Era_Run3_2023_cff import Run3_2023         #corresponds to Run3 2023
     globaltag = '130X_dataRun3_PromptAnalysis_v1' if options.data else '130X_mcRun3_2023_realistic_v14'
     era = Run3_2023
-    recoEgammaTools_era = '2018-UL' #XYZ FIX
+    recoEgammaTools_era = '2022-Prompt' #XYZ FIX
 
 elif options.year == "2024" and cmsswRelease == "CMSSW_14_0_21":
     from Configuration.Eras.Era_Run3_2024_cff import Run3_2024         # 2024
