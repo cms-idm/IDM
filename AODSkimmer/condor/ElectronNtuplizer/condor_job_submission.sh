@@ -1,5 +1,6 @@
 #!/bin/bash
 
+#Change the directory if you want to use this script
 dir="/uscms/home/reshmar/nobackup/IDMe_Run3_Collab/CMSSW_13_0_13/src/iDMe/AODSkimmer/condor/ElectronNtuplizer/TextFilesSignal"
 
 for file in "$dir"/* ;
