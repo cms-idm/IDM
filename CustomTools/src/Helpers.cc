@@ -23,19 +23,13 @@ bool Helper::JetID(const pat::Jet &jet, std::string year) {
 
     bool passID = false;
 
-    /*
-      Accept Run 3 year labels such as:
+    /*  Accept Run 3 year labels such as:
         2022
         2022EE
         2022preEE / 2022PreEE
         2023
         2023BPix
-        2024
-
-      The previous exact check only accepted "2022", "2023", "2024".
-      If the ntuplizer passed "2022EE", passID stayed false for every jet,
-      which caused nPFJetAll > 0 but nPFJet == 0.
-    */
+        2024  */
     const bool isRun3 =
         (year.rfind("2022", 0) == 0) ||
         (year.rfind("2023", 0) == 0) ||

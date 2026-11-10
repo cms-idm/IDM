@@ -80,6 +80,7 @@ def main():
     options = parseArguments()
     
     if 'CMSSW_BASE' not in os.environ.keys():
+
         print("Run cmsenv first!")
         return
     base_dir = os.environ['CMSSW_BASE']

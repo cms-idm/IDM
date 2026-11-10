@@ -10,6 +10,8 @@ from Configuration.Eras.Era_Run2_2016_HIPM_cff import Run2_2016_HIPM
 
 #Run3 imports
 from Configuration.Eras.Era_Run3_cff import Run3                   #corresponds to Run3 2022 (maybe)
+from Configuration.Eras.Era_Run3_2023_cff import Run3_2023         #corresponds to Run3 2023
+from Configuration.Eras.Era_Run3_2024_cff import Run3_2024         # 2024
 
 import sys
 import os
@@ -319,6 +321,8 @@ process.load("TrackPropagation.SteppingHelixPropagator.SteppingHelixPropagatorAn
 
 process.load('Configuration.StandardSequences.FrontierConditions_GlobalTag_cff')
 
+
+
 process.MessageLogger.cerr.FwkReport.reportEvery = 1000
 
 from Configuration.AlCa.GlobalTag import GlobalTag
@@ -334,6 +338,7 @@ process.maxEvents = cms.untracked.PSet(
 )
 process.source = cms.Source("PoolSource",
     fileNames = cms.untracked.vstring(options.inputFiles),
+
     #skipBadFiles = cms.untracked.bool(True),
     #cacheSize = cms.untracked.uint32(0)
     skipBadFiles = cms.untracked.bool(True)
@@ -412,7 +417,6 @@ process.ntuples = ElectronSkimmer.clone(
     ),
 )
 
-
 ##############################
 ###### EGamma post-reco ######
 ##############################
@@ -430,7 +434,6 @@ setupEgammaPostRecoSeq(process,
                                      'RecoEgamma.ElectronIdentification.Identification.mvaElectronID_RunIIIWinter22_noIso_V1_cff',
                                      'RecoEgamma.ElectronIdentification.Identification.cutBasedElectronID_Winter22_122X_V1_cff']
                        )
-
 
 ##################################
 ###### Low-pT electron chain #####
@@ -484,4 +487,3 @@ process.iDMNanoElectronSequence = cms.Sequence(process.lowPtNanoElectronSequence
 process.iDMNanoElectron = cms.Path(process.iDMNanoElectronSequence)
 
 process.schedule = cms.Schedule(process.iDMEgammaPostReco,process.iDMNanoElectron,process.ntuplePath)
-

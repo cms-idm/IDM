@@ -35,5 +35,4 @@ for m1 in m1l:
 
             procstring = f'M1-{stfm1}_dM-{stfdm}_mZD-{stfmed}_ctau-{ctau}'
             cmd = f'source submit_ElectronNtuplizer_condor.sh ../../fileLists/signal/2024/{procstring}_flist.txt 2024 4 False True {vers} 5 {CMSSW} {compiled_CMSSW_envs}'
-            #cmd = f'cmsRun scripts/ElectronNtuplizer_cfg.py year=2024 data=0 signal=1 flist="{flist}" outfile={outfile}'
             os.system(f'bash -c "{cmd}"')

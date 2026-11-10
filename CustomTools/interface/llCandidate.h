@@ -139,8 +139,7 @@ struct llCandidate
              trackDxy = (fabs(trA_dxy/trA_dxyError) < fabs(trB_dxy/trB_dxyError))? trA_dxy: trB_dxy;
              trackIxy = (fabs(trA_dxy/trA_dxyError) < fabs(trB_dxy/trB_dxyError))? fabs(trA_dxy/trA_dxyError): fabs(trB_dxy/trB_dxyError);
 
-             //trackDxy = (fabs(pckCand_A->dxy(pv.position())/it_A.dxyError()) < fabs(pckCand_B->dxy(pv.position()))/it_B.dxyError())? pckCand_A->dxy(pv.position()): pckCand_B->dxy(pv.position());
-             //trackIxy = (fabs(pckCand_A->dxy(pv.position())/it_A.dxyError()) < fabs(pckCand_B->dxy(pv.position()))/it_B.dxyError())? fabs(pckCand_A->dxy(pv.position()))/it_A.dxyError(): fabs(pckCand_B->dxy(pv.position()))/it_B.dxyError();
+            
 
              etaA = it_A.eta();
              etaB = it_B.eta();   
