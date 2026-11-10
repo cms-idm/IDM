@@ -12,6 +12,20 @@ compiled_CMSSW_envs=$9
 category=${10:-signal}
 outDirName=${11}
 
+# Match the submitted environment to the active release and architecture.
+if [ "$CMSSW" != "CMSSW_13_0_13" ] && [ "$CMSSW" != "CMSSW_14_0_21" ]; then
+    echo "Unsupported CMSSW release: $CMSSW" >&2
+    exit 1
+fi
+if [ "$CMSSW_VERSION" != "$CMSSW" ]; then
+    echo "Run cmsenv for $CMSSW before submitting." >&2
+    exit 1
+fi
+case "$SCRAM_ARCH" in
+    el8_*|el9_*) ;;
+    *) echo "Unsupported SCRAM_ARCH: $SCRAM_ARCH" >&2; exit 1 ;;
+esac
+
 flist_full=`realpath $flist`
 fname=`echo $flist_full | rev | cut -d "/" -f 1 | rev | cut -d "." -f 1`
 
@@ -21,10 +35,12 @@ if [ -z "$outDirName" ]; then
 	outDirName="${mass}/${ctau}"
 fi
 
+
 mkdir -p split_fileLists
 mkdir -p Logs
 xrdfs root://cmseos.fnal.gov/ mkdir -p /store/group/lpcmetx/iDMe//Samples/Ntuples/${category}_${suffix}/${year}/${outDirName}/
 outPath=/store/group/lpcmetx/iDMe//Samples/Ntuples/${category}_${suffix}/${year}/${outDirName}/
+
 
 # Background jobs also produce a slim, all-events tree alongside the full one (see
 # ElectronSkimmer.cc); it gets its own parallel EOS directory. Signal jobs never
@@ -37,12 +53,14 @@ fi
 
 sort -V ${flist_full} > ${fname}.txt
 split -d -l ${nsplit} --additional-suffix ".txt" ${fname}.txt ${fname}_
+
 rm ${fname}.txt
 
 itemdata=`realpath split_fileLists`/${fname}_items.txt
 > ${itemdata}
 for sublist in `ls ${fname}_*.txt`
 do
+    echo "$sublist"
 	mv $sublist split_fileLists/$sublist
 	sublist_name=`echo $sublist | cut -d "." -f 1`
 	sublist_full=`realpath split_fileLists/$sublist`

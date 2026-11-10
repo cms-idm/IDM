@@ -1,4 +1,5 @@
-# Inelastic Dark Matter with Electrons
+# Inelastic Dark Matter with Leptons (this README is out-of-date, needs to be modified for Run 3)
+
 This repository contains all the code I've developed for generating events, skimming AOD, and running analysis with [coffea](https://coffeateam.github.io/coffea/). Each subfolder has its own README (if it doesn't, it means I haven't gotten to it yet and you should bug me about it!).
 
 This is all designed to run in `CMSSW_14_0_21`, and ideally on the Fermilab LPC with the condor job queue. I've tried to avoid hard-coding any user-specific paths etc. into any of the code, but it's certainly not perfect. Please let me know if something is broken for you. Most things tha
@@ -29,6 +30,19 @@ git cms-addpkg RecoEgamma/EgammaTools
 git cms-addpkg RecoVertex/KalmanVertexFit
 git cms-addpkg RecoVertex/VertexTools
 ```
+and these lines to apply the patch:
+```bash
+git apply iDMe/patches/lowPtElectrons_miniAOD_IDRegression.patch
+```
+In CMSSW_13_0_13 the vertex-fitter tracker bounds moved into `SequentialVertexFitter.h`, so the
+`SequentialVertexFitter.cc` hunk above no longer applies. For Run 3 apply this instead (interim
+r < 740 cm, |z| < 960 cm, replacing the 112 / 273.5 cm defaults), then rebuild with `scram b`:
+```bash
+git apply iDMe/patches/trackerBounds_CMSSW_13_0_13.patch
+```
+
+Branch `Alaa_Run3` (Main_Run3 plus Alaa_Dev's muon work) is built and run in `CMSSW_13_0_13`, not
+`CMSSW_14_0_21`; there the EGamma post-reco tools are imported from `RecoEgamma.EgammaTools`.
 
 ## Installing EGamma PostRecoTools
 We need to run EGamma "PostRecoTools" according to [EGamma POG recommendations](https://twiki.cern.ch/twiki/bin/viewauth/CMS/MultivariateElectronIdentificationRun3). Run these commands (copied from the linked twiki) to set it up:

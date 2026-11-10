@@ -11,5 +11,7 @@ rank = Mips
 request_memory = 4000
 +AcctGroup = "analysis"
 +ProjectName = "DarkMatterSimulation"
-+DesiredOS = "EL9"
++DesiredOS = ifThenElse(regexp("^el8_", "$ENV(SCRAM_ARCH)"), "EL8", "EL9")
 Queue 1
+
+
