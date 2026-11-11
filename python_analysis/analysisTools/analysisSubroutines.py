@@ -506,13 +506,14 @@ def defineGoodMergedCandidates(events,version='v1_Oct2026'):
     of them (every passing electron, with all of its fields) as
     events.merged_candidates, with their per-event count as
     events.nMergedCandidates. Use selectBestMergedCandidate to pick one per
-    event. The criteria depend on `version`:
+    event. Every version requires AllLptElectron.passID (set by electronID,
+    which must run first); the additional criteria depend on `version`:
 
-    none -- every AllLptElectron is good.
+    none -- no additional requirement beyond passID.
 
     v0_iso -- isolation only (the former selectMergedElectronCandidates):
       - dR >= 0.4 to the nearest other AllLptElectron (self excluded)
-      - dR >= 0.4 to the nearest PFJet with pt > 10, ignoring any jet that is
+      - dR >= 0.4 to the nearest PFJet with pt > 30, ignoring any jet that is
         the electron itself (dR < 0.1 and pT(e)/pT(jet) > 0.3) -- a merged ee
         pair is often clustered into a PFJet of its own, which would
         otherwise veto the electron against itself. events.PFJet is left
@@ -520,13 +521,17 @@ def defineGoodMergedCandidates(events,version='v1_Oct2026'):
 
     v1_Oct2026 -- an AllLptElectron is good iff:
       - dR > 0.4 to the nearest other AllLptElectron (self excluded)
-      - dR > 0.4 to the nearest PFJet with pt > 10
-      - |dPhi| > 1 to the nearest PFJet with pt > 10
+      - dR > 0.4 to the nearest PFJet with pt > 30
+      - |dPhi| > 1 to the nearest PFJet with pt > 30
       (both jet requirements ignore the electron's own jet, as in v0_iso)
       - |dxy| > 0.001 cm
       - log10(|dxy/dz|) > -2
       - cos(dPhi(e, ptmiss)) > 0.4
       - track chi2 < 15
+
+    v2_Nov2026 -- an AllLptElectron is good iff:
+     - dR > 0.2 to the nearest other AllLptElectron (self excluded)
+     - |dPhi| < 
 
     Signal only (GenEle present): also sets merged_candidates.isGenMerged, True iff
     the candidate is matched to both gen electrons (AllLptElectron.is_merged)
@@ -542,10 +547,10 @@ def defineGoodMergedCandidates(events,version='v1_Oct2026'):
     dr_ee = ak.where(idx[:,:,None] == idx[:,None,:],np.inf,dr_ee)
     min_dr_ee = ak.fill_none(ak.min(dr_ee,axis=-1),999)
 
-    # dR/dPhi to nearest PFJet with pt > 10, ignoring the jet that is the
+    # dR/dPhi to nearest PFJet with pt > 30, ignoring the jet that is the
     # electron itself (dR < 0.1 and pT(e)/pT(jet) > 0.3)
     jets = events.PFJet
-    jets = jets[jets.pt > 10]
+    jets = jets[jets.pt > 30]
     dr_ej = deltaR(eles.eta[:,:,None],eles.phi[:,:,None],jets.eta[:,None,:],jets.phi[:,None,:])
     dphi_ej = np.abs(deltaPhi(eles.phi[:,:,None],jets.phi[:,None,:]))
     self_jet = (dr_ej < 0.1) & (eles.pt[:,:,None]/jets.pt[:,None,:] > 0.3)
@@ -573,6 +578,9 @@ def defineGoodMergedCandidates(events,version='v1_Oct2026'):
         events['AllLptElectron','isGoodMerged'] = ele_iso & jet_iso & jet_dphi & dxy & logdxydz & met_dphi & chi2
     else:
         raise ValueError(f"defineGoodMergedCandidates: unknown version '{version}'")
+
+    # all versions: candidates must also pass the electron ID defined in electronID
+    events['AllLptElectron','isGoodMerged'] = events.AllLptElectron.isGoodMerged & events.AllLptElectron.passID
 
     if 'GenEle' in events.fields:
         if 'is_merged' not in events.AllLptElectron.fields or 'cat_merged' not in events.fields:
