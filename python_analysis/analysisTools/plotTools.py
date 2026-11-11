@@ -22,11 +22,45 @@ except ModuleNotFoundError:
 
 import boost_histogram as bh
 
-from mplhep.styles.cms import cmap_petroff
+from cycler import cycler
+import warnings
 
-cmap = ["#3f90da", "#ffa90e", "#bd1f01", "#94a4a2", "#832db6", "#a96b59", "#e76300", "#b9ac70", "#717581", "#92dadd"] 
-# cms-recommended version of 10-color scheme
+# ── CMS colour palettes (Petroff) ─────────────────────────────────────────────
+# Use the 6-colour palette whenever a plot has <= 6 colour-coded series, and the
+# 10-colour palette only when it needs more. cms_colors(n) picks for you.
+CMS_COLORS_6  = ["#5790fc", "#f89c20", "#e42536", "#964a8b", "#9c9ca1", "#7a21dd"]
+CMS_COLORS_10 = ["#3f90da", "#ffa90e", "#bd1f01", "#94a4a2", "#832db6", "#a96b59",
+                 "#e76300", "#b9ac70", "#717581", "#92dadd"]
+cmap = CMS_COLORS_10   # legacy name, kept for old code that indexes ptools.cmap
 
+
+def cms_colors(n):
+    """CMS palette for a plot with n colour-coded series: the 6-colour palette
+    if n <= 6, else the 10-colour one. More than 10 series can't be told apart
+    by colour alone -- split the plot or add a second dimension (linestyle)."""
+    if n <= len(CMS_COLORS_6):
+        return list(CMS_COLORS_6)
+    if n <= len(CMS_COLORS_10):
+        return list(CMS_COLORS_10)
+    raise ValueError(f"{n} series is more than the 10 CMS colours; split the plot "
+                     "or encode a second dimension with linestyle")
+
+
+def series_color(i, n=None):
+    """Colour of series i (0-based) out of n on the same axes. Pass n whenever
+    it's known. Without n (old callers), series 0-5 get the 6-colour palette
+    and later ones fall back to the 10-colour palette with a warning, since the
+    two palettes mixed on one plot aren't guaranteed to be distinct."""
+    if n is not None:
+        return cms_colors(n)[i]
+    if i < len(CMS_COLORS_6):
+        return CMS_COLORS_6[i]
+    warnings.warn(f"series_color({i}) without n: falling back to the 10-colour palette; "
+                  "pass the total number of series so one palette is used for the whole plot")
+    return CMS_COLORS_10[i % len(CMS_COLORS_10)]
+
+
+# Fixed background-process colours (7 processes -> 10-colour palette).
 bkg_cmap = {
     "DY":"#3f90da",
     "Multiboson":"#ffa90e",
@@ -36,6 +70,10 @@ bkg_cmap = {
     "SingleT":"#717581",
     "Zto2Nu":"#a96b59",
 }
+
+# Signal colours for plots that overlay signals on the bkg_cmap backgrounds:
+# the 10-colour entries bkg_cmap doesn't use (red, dark orange, grey), then black.
+SIGNAL_COLORS_WITH_BKG = [c for c in CMS_COLORS_10 if c not in bkg_cmap.values()] + ['black']
 
 '''
 # When using bkg list with extra processes
@@ -52,6 +90,210 @@ bkg_cmap = {
     "TTX": cmap[9]
 }
 '''
+
+# ── House plotting style (used by the *_plots.py scripts) ─────────────────────
+# Call set_plot_style() once after importing this module, make every figure with
+# new_fig(year), and place upper legends with legend_headroom / place_legend.
+
+PLOT_RCPARAMS = {
+    'font.size':        24,
+    'axes.titlesize':   32,
+    # Lift the title clear of the CMS / lumi label hep.cms.label draws just
+    # above the axes.
+    'axes.titlepad':    44,
+    'axes.labelsize':   34,
+    'xtick.labelsize':  30,
+    'ytick.labelsize':  30,
+    'legend.fontsize':  24,
+    'figure.titlesize': 32,
+}
+CMS_LABEL_FS = 26
+FIGSIZE      = (16, 12)
+
+
+def set_plot_style(ncolors=6, **overrides):
+    """Apply PLOT_RCPARAMS (plus any rcParams overrides, e.g.
+    set_plot_style(**{'legend.fontsize': 28})) and make the CMS palette the
+    default colour cycle, so 'C0', 'C1', ... are CMS colours: the 6-colour
+    palette by default ('C6' wraps back to 'C0'), or the 10-colour one with
+    ncolors > 6."""
+    plt.rcParams.update({**PLOT_RCPARAMS,
+                         'axes.prop_cycle': cycler(color=cms_colors(ncolors)),
+                         **overrides})
+
+
+CMS_LABEL_KINDS = {
+    'sim':      'Private work (CMS simulation)',
+    'data/sim': 'Private work (CMS data/simulation)',
+    'data':     'Private work (CMS data)',
+}
+
+
+CMS_LABEL_PAD = 0.025   # inset of the in-frame label from the top-left corner (axes fraction)
+
+
+class _CMSLabelPlacer(mpl.artist.Artist):
+    """Invisible helper that picks where the CMS label goes each time the
+    figure is drawn, i.e. after the data, axis limits and legend are final:
+    inside the frame (top left, as CMS recommends) unless it would cover the
+    plotted data or the legend, otherwise above the frame. It has the lowest
+    zorder, so it runs before the two label copies are drawn."""
+
+    def __init__(self, ax, inside, outside):
+        super().__init__()
+        self._ax, self._inside, self._outside = ax, inside, outside
+        self.set_zorder(-1e9)
+        self.set_in_layout(False)
+
+    def draw(self, renderer):
+        # Text.get_window_extent() is an empty box while the text is hidden, so
+        # measure it visible. A few px of margin keep it off the data.
+        self._inside.set_visible(True)
+        bbox = self._inside.get_window_extent(renderer).padded(6)
+        leg = self._ax.get_legend()
+        blocked = bbox_covers_data(self._ax, bbox) or (
+            leg is not None and leg.get_visible()
+            and bbox.overlaps(leg.get_window_extent(renderer)))
+        self._inside.set_visible(not blocked)
+        self._outside.set_visible(blocked)
+        self.stale = False
+
+
+def add_cms_label(ax, year, lumi=None, kind='sim'):
+    """Italic 'Private work (CMS ...)' label, with year / sqrt(s) = 13.6 TeV
+    above the frame at the upper right, plus lumi only if given (currently
+    only the cutflow_plot_sig_bkg yield plots pass one).
+    The 'Private work' text goes inside the frame at the top left, or above
+    the frame if it would cover the data or the legend; this is decided when
+    the figure is drawn/saved, so nothing else needs to be called.
+    kind: 'sim' (default) -> '(CMS simulation)', 'data/sim' -> '(CMS data/simulation)',
+    'data' -> '(CMS data)'."""
+    if kind not in CMS_LABEL_KINDS:
+        raise ValueError(f"kind must be one of {list(CMS_LABEL_KINDS)}, got {kind!r}")
+    kwargs = {'lumi': lumi, 'year': year, 'com': '13.6'}
+    if lumi is None:
+        # mplhep (1.1.2) can render a year without lumi as ", 2024 (13.6 TeV)"
+        # with a stray leading comma, so build the right-hand text ourselves.
+        kwargs = {'rlabel': f'{year} (13.6 TeV)' if year is not None else '(13.6 TeV)'}
+    # exp='' drops the bold "CMS"; llabel is drawn in italics by default.
+    texts = hep.label.exp_label(exp='', llabel=CMS_LABEL_KINDS[kind], ax=ax,
+                                fontsize=CMS_LABEL_FS, **kwargs)
+    outside = texts[1]
+    inside = ax.text(CMS_LABEL_PAD, 1 - CMS_LABEL_PAD, CMS_LABEL_KINDS[kind],
+                     transform=ax.transAxes, ha='left', va='top',
+                     fontsize=CMS_LABEL_FS, fontstyle='italic', zorder=6,
+                     visible=False)
+    # Until the first draw, show the above-frame copy (the layout-safe choice).
+    outside.set_visible(True)
+    ax.add_artist(_CMSLabelPlacer(ax, inside, outside))
+
+
+def new_fig(year, cms_label=True, lumi=None, figsize=FIGSIZE, kind='sim'):
+    """New single-axes figure with the CMS label (see add_cms_label for kind).
+    Pass cms_label=False for plots that add a colorbar by hand, and call
+    add_cms_label(ax, year) after the colorbar so the label is laid out on the
+    final (narrowed) axes."""
+    fig, ax = plt.subplots(figsize=figsize)
+    if cms_label:
+        add_cms_label(ax, year, lumi=lumi, kind=kind)
+    return fig, ax
+
+
+def legend_headroom(ax, leg, pad=0.04):
+    """Raise the y-axis top so the data sits below the (upper-placed) legend
+    instead of underneath it: the old y-range is squeezed into the bottom
+    (1 - legend height - pad) of the axes, in log or linear space."""
+    fig = ax.figure
+    fig.canvas.draw()
+    frac = leg.get_window_extent().height / ax.get_window_extent().height + pad
+    frac = min(frac, 0.6)
+    lo, hi = ax.get_ylim()
+    if ax.get_yscale() == 'log':
+        llo, lhi = np.log10(lo), np.log10(hi)
+        ax.set_ylim(lo, 10 ** (llo + (lhi - llo) / (1 - frac)))
+    else:
+        ax.set_ylim(lo, lo + (hi - lo) / (1 - frac))
+
+
+def legend_covers_data(ax, leg):
+    """True if the legend box overlaps anything drawn in data coordinates
+    (histogram steps, error bars, bars). Guide lines drawn in axes
+    coordinates (axvline/axhline) don't count."""
+    ax.figure.canvas.draw()
+    return bbox_covers_data(ax, leg.get_window_extent())
+
+
+def _quadmesh_covers(art, tr, bbox):
+    """True if any filled cell of a 2D histogram (QuadMesh) overlaps bbox.
+    Empty cells (masked/NaN, or <= 0 on a log color scale) are blank on the
+    plot, so they don't count."""
+    c = art.get_coordinates()
+    vals = np.ma.masked_invalid(np.ma.asarray(art.get_array()))
+    vals = vals.reshape(c.shape[0] - 1, c.shape[1] - 1)
+    filled = ~np.ma.getmaskarray(vals)
+    if isinstance(art.norm, LogNorm):
+        filled &= vals.filled(0) > 0
+    d = tr.transform(c.reshape(-1, 2)).reshape(c.shape)
+    x0 = np.minimum(d[:-1, :-1, 0], d[1:, 1:, 0]); x1 = np.maximum(d[:-1, :-1, 0], d[1:, 1:, 0])
+    y0 = np.minimum(d[:-1, :-1, 1], d[1:, 1:, 1]); y1 = np.maximum(d[:-1, :-1, 1], d[1:, 1:, 1])
+    hit = (x1 > bbox.x0) & (x0 < bbox.x1) & (y1 > bbox.y0) & (y0 < bbox.y1)
+    return bool(np.any(hit & filled))
+
+
+def bbox_covers_data(ax, bbox):
+    """True if a display-coordinate bbox overlaps anything drawn in data
+    coordinates (histogram steps, error bars, bars, filled 2D-hist cells).
+    Doesn't draw the canvas, so it's safe to call while drawing."""
+    for art in list(ax.patches) + list(ax.lines) + list(ax.collections):
+        if not art.get_visible():
+            continue
+        tr = art.get_transform()
+        if not tr.contains_branch(ax.transData):
+            continue
+        if isinstance(art, mpl.collections.QuadMesh):
+            if _quadmesh_covers(art, tr, bbox):
+                return True
+            continue
+        paths = art.get_paths() if hasattr(art, 'get_paths') else [art.get_path()]
+        no_line = hasattr(art, 'get_linestyle') and art.get_linestyle() in ('None', 'none', '', ' ')
+        filled = hasattr(art, 'get_fill') and art.get_fill()
+        for path in paths:
+            dpath = tr.transform_path(path)
+            if no_line:
+                # marker-only line (e.g. error-bar caps): test the points themselves
+                v = dpath.vertices
+                v = v[np.all(np.isfinite(v), axis=1)]
+                if any(bbox.contains(x, y) for x, y in v):
+                    return True
+            elif dpath.intersects_bbox(bbox, filled=filled):
+                return True
+    return False
+
+
+def place_legend(ax, **kwargs):
+    """Legend pinned top-right; the y-range is only extended to clear it if
+    the legend would otherwise cover the plotted data."""
+    leg = ax.legend(loc='upper right', **kwargs)
+    plt.tight_layout()
+    if legend_covers_data(ax, leg):
+        legend_headroom(ax, leg)
+    return leg
+
+
+def samp_name(s_pts, m1, delta, ctau):
+    """Sample name for one (m1, delta, ctau) signal point in the
+    utils.get_signal_point_dict table, or None if it isn't present."""
+    row = s_pts[np.isclose(s_pts.m1, m1) & np.isclose(s_pts.delta, delta) & (s_pts.ctau == ctau)]
+    return row['name'].iloc[0] if not row.empty else None
+
+
+def fmt_delta(delta):
+    """Fractional mass splitting as a percent label: 0.1 -> '10%'.
+    A list/tuple gives '[10%, 20%]'. Use as rf'$\\delta$ = {fmt_delta(d)}'."""
+    if isinstance(delta, (list, tuple, np.ndarray)):
+        return '[' + ', '.join(fmt_delta(d) for d in delta) + ']'
+    return f'{round(100 * float(delta), 2):g}%'
+
 
 class histContainer:
     def __init__(self,path,noMeta=False,bkg=False):
@@ -274,8 +516,8 @@ def plot_signal_efficiency(sig_histo, df, plot_dict_sig_eff, df_wts=None, doLog=
     'doLog': True,
     
     'ylabel': 'Events', # None for default
-    'title': rf"Cutflow: $\Delta$ = {deltas[0]}, c$\tau$ = {ctaus[0]}mm", 
-    'title': rf"Cutflow: $\Delta$ = {deltas[0]}, c$\tau$ = {ctaus[0]}mm",
+    'title': rf"Cutflow: $\delta$ = {fmt_delta(deltas[0])}, c$\tau$ = {ctaus[0]}mm",
+    'title': rf"Cutflow: $\delta$ = {fmt_delta(deltas[0])}, c$\tau$ = {ctaus[0]}mm",
     'label': None,
 
     # Plot saving
@@ -298,36 +540,39 @@ def plot_signal_efficiency(sig_histo, df, plot_dict_sig_eff, df_wts=None, doLog=
     df = df.sort_values(by=['m1']) # sort by m1
     df.pop('m1')
 
-    size = (16, 12)
-    fig, ax = plt.subplots(figsize=size)
+    # House style: 16x12 figure with the CMS label (year from plot_dict_sig_eff['year'], if given).
+    fig, ax = new_fig(plot_dict_sig_eff.get('year'))
 
-    color_idx = 0
+    # select the points first so the palette can be chosen from how many there are
+    selected = []
     for point in df.index.values:
         sig_dict = signalPoint(point)
         m1 = round(sig_dict['m1'], 5)
         delta = round(sig_dict['delta'], 5)
-        dmchi = round(sig_dict['dmchi'], 5)
         ctau = int(sig_dict['ctau'])
 
         m1 = int(m1) if m1.is_integer() else m1
         delta = int(delta) if delta.is_integer() else delta
-        
+
         if (m1 in plot_dict_sig_eff['m1s']) and (delta in plot_dict_sig_eff['deltas']):
             if ctau in plot_dict_sig_eff['ctaus']:
-                if plot_dict_sig_eff['label'] == None:
-                    label = rf"($M_{1}$, $\Delta$) = ({round(m1, 5)}, {round(dmchi, 5)}) GeV, c$\tau$ = {ctau}mm"
-                else:
-                    label = plot_dict_sig_eff['label']
-                eff = df.loc[point].values
-                if df_wts is not None:
-                    W_0 = eff[0]  # cutflow['all'] = sum(genWgt)/sum_wgt ≈ 1
-                    sw2_all = df_wts.loc[point].iloc[0]  # sum of (genWgt_j/sum_wgt)^2 over all events
-                    yerr = np.sqrt(eff * (1 - eff) * sw2_all) / W_0
-                    ax.errorbar(cuts, eff, yerr=yerr, label=label, color=cmap[color_idx],
-                                fmt='-o', markersize=3, capsize=3)
-                else:
-                    ax.plot(cuts, eff, label=label, color=cmap[color_idx])
-                color_idx += 1
+                selected.append((point, m1, delta, ctau))
+    colors = cms_colors(len(selected))
+
+    for color_idx, (point, m1, delta, ctau) in enumerate(selected):
+        if plot_dict_sig_eff['label'] == None:
+            label = rf"$M_{1}$ = {round(m1, 5)} GeV, $\delta$ = {fmt_delta(delta)}, c$\tau$ = {ctau}mm"
+        else:
+            label = plot_dict_sig_eff['label']
+        eff = df.loc[point].values
+        if df_wts is not None:
+            W_0 = eff[0]  # cutflow['all'] = sum(genWgt)/sum_wgt ≈ 1
+            sw2_all = df_wts.loc[point].iloc[0]  # sum of (genWgt_j/sum_wgt)^2 over all events
+            yerr = np.sqrt(eff * (1 - eff) * sw2_all) / W_0
+            ax.errorbar(cuts, eff, yerr=yerr, label=label, color=colors[color_idx],
+                        fmt='-o', markersize=4, capsize=3, lw=2)
+        else:
+            ax.plot(cuts, eff, label=label, color=colors[color_idx], lw=2, marker='o', markersize=4)
 
     if plot_dict_sig_eff['doLog']:
         ax.set_yscale('log')
@@ -335,18 +580,27 @@ def plot_signal_efficiency(sig_histo, df, plot_dict_sig_eff, df_wts=None, doLog=
     if plot_dict_sig_eff['ylim'] != None:
         ax.set_ylim(plot_dict_sig_eff['ylim'][0], plot_dict_sig_eff['ylim'][1])
 
-    
+
     ax.grid()
 
-    ax.set_ylabel(plot_dict_sig_eff['ylabel'], fontsize=28)
-    ax.set_title(plot_dict_sig_eff['title'], fontsize=28)
+    ax.set_ylabel(plot_dict_sig_eff['ylabel'])
+    ax.set_title(plot_dict_sig_eff['title'])
 
+    # Cut-name labels on the x-axis stay small so the long descriptions fit.
     ax.set_xticks(ticks = np.arange(len(cuts)), labels = cuts, rotation = 45, ha = 'right')
     ax.tick_params(axis='x', labelsize=17)
-    ax.tick_params(axis='y', labelsize=28)
 
-    ax.legend(loc='upper right', fontsize=28)
-    
+    # Legend: upper right if that's clear of the curves, else the first clear
+    # corner; if every corner overlaps, upper right with y headroom (stretching
+    # an efficiency axis past 1 is the last resort).
+    plt.tight_layout()
+    for loc in ('upper right', 'lower left', 'upper left', 'lower right'):
+        leg = ax.legend(loc=loc)
+        if not legend_covers_data(ax, leg):
+            break
+    else:
+        place_legend(ax)
+
     if plot_dict_sig_eff['doSave']:
         os.makedirs(plot_dict_sig_eff['outDir'], exist_ok=True)
         plt.tight_layout()
@@ -355,6 +609,8 @@ def plot_signal_efficiency(sig_histo, df, plot_dict_sig_eff, df_wts=None, doLog=
 
     if show:
         plt.show()
+
+    plt.close(fig)
 
 
 def plot_bkg_efficiency(bkg_histos, df, plot_dict_bkg_eff):
@@ -433,11 +689,9 @@ def plot_bkg_efficiency_legacy(bkg_histos, df, doLog = True, ylabel = '', title 
     processes = df.index.values.tolist()
     cuts = utils.get_bkg_list_of_cuts(bkg_histos, isLegacy = isLegacy)
 
-    # Color map for each process
-    # cmap = mpl.colormaps['Set3'].colors
-    # cmap = ["#5790fc", "#f89c20", "#e42536", "#964a8b", "#9c9ca1", "#7a21dd"] # cms-recommended for 6-color scheme
-    cmap = ["#3f90da", "#ffa90e", "#bd1f01", "#94a4a2", "#832db6", "#a96b59", "#e76300", "#b9ac70", "#717581", "#92dadd"] # cms-recommended
-    
+    # Color map for each process (9 processes -> CMS 10-colour palette)
+    cmap = CMS_COLORS_10
+
     colors = { 'W+jets': cmap[0],
                'Z+jets': cmap[1],
                'QCD': cmap[2],
@@ -466,7 +720,9 @@ def plot_bkg_efficiency_legacy(bkg_histos, df, doLog = True, ylabel = '', title 
     plt.show()
 
 # Plot kinematics
-def plot_signal_1D(sig_histo, m1, delta, ctau, plot_dict, style_dict, cmap_idx=0):
+def plot_signal_1D(sig_histo, m1, delta, ctau, plot_dict, style_dict, cmap_idx=0, ncolors=None):
+    # cmap_idx: index of this series on the axes; ncolors: total number of series
+    # drawn on the axes, which picks the CMS 6- or 10-colour palette (see series_color).
     """
     Example:
 
@@ -485,7 +741,7 @@ def plot_signal_1D(sig_histo, m1, delta, ctau, plot_dict, style_dict, cmap_idx=0
         'doLogx': False,
         'doDensity': False,
         'doYerr': False,
-        'xlabel': r"$L_{xy}$ [cm]",   # if None, the default will show up; otherwise give as a string, i.e. 'Electron dxy'
+        'xlabel': r"$L_{xy}$ (cm)",   # if None, the default will show up; otherwise give as a string, i.e. 'Electron dxy'
         'ylabel': 'Events/0.1cm',   # if None, the default will show up; otherwise give as a string, i.e. 'Efficiency'
         'label': None,    # if None, the default will show up; otherwise give as a string, i.e. 'Highest ctau signal samples'
         'flow': None,     # overflow
@@ -500,7 +756,7 @@ def plot_signal_1D(sig_histo, m1, delta, ctau, plot_dict, style_dict, cmap_idx=0
     ax = style_dict['ax']
 
     if style_dict.get('doCMSLabel', True):
-        hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6')
+        add_cms_label(plt.gca(), plot_dict['year'], kind=plot_dict.get('cms_kind', 'sim'))
     
     # get signal point info
     si = utils.get_signal_point_dict(sig_histo)
@@ -517,7 +773,7 @@ def plot_signal_1D(sig_histo, m1, delta, ctau, plot_dict, style_dict, cmap_idx=0
     m1 = samp_df.m1.iloc[0]
     dmchi = samp_df.dmchi.iloc[0]
     ctau = samp_df.ctau.iloc[0]
-    label = rf"$(m_\chi, \Delta m_\chi) = ({round(m1, 5)}, {round(dmchi, 5)})$ GeV; $c\tau={ctau}$mm"
+    label = rf"$m_1$ = {round(m1, 5):g} GeV, $\delta$ = {fmt_delta(delta)}, $c\tau$ = {ctau:g} mm"
 
     if style_dict['label'] != None:
         label = style_dict['label']
@@ -569,9 +825,10 @@ def plot_signal_1D(sig_histo, m1, delta, ctau, plot_dict, style_dict, cmap_idx=0
     if style_dict['doLogy']:
         ax.set_yscale('log')
 
+    color = series_color(cmap_idx, ncolors)
     hep.histplot(histo, yerr=style_dict['doYerr'], density=style_dict['doDensity'], ax=ax,
                  histtype='step', flow=style_dict['flow'], label = label, ls=style_dict['ls'],
-                 color=cmap[cmap_idx])
+                 color=color)
     plt.legend()
     
     if style_dict['doSave']:
@@ -580,7 +837,7 @@ def plot_signal_1D(sig_histo, m1, delta, ctau, plot_dict, style_dict, cmap_idx=0
         plt.savefig(f"{style_dict['outDir']}/{style_dict['outName']}")
         print(f"Saved: {style_dict['outDir']}/{style_dict['outName']}")
 
-    return histo, cmap[cmap_idx]
+    return histo, color
         
 def plot_signal_2D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
     """
@@ -602,8 +859,8 @@ def plot_signal_2D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
         'doLogy': False, 
         'doLogx': False,
         'doLogz': True,
-        'xlabel': r"$v_{x}$ [cm]",   # if None, the default will show up; otherwise give as a string, i.e. 'Electron dxy'
-        'ylabel': r"$v_{y}$ [cm]",   # if None, the default will show up; otherwise give as a string, i.e. 'Efficiency'
+        'xlabel': r"$v_{x}$ (cm)",   # if None, the default will show up; otherwise give as a string, i.e. 'Electron dxy'
+        'ylabel': r"$v_{y}$ (cm)",   # if None, the default will show up; otherwise give as a string, i.e. 'Efficiency'
         'zlabel': 'Events',   
         'flow': None,     # overflow
         'doSave': True,
@@ -616,7 +873,7 @@ def plot_signal_2D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
     fig = style_dict['fig']
     ax = style_dict['ax']
     
-    hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6')
+    add_cms_label(plt.gca(), plot_dict['year'], kind=plot_dict.get('cms_kind', 'sim'))
     
     # get signal point info
     si = utils.get_signal_point_dict(sig_histo)
@@ -632,7 +889,7 @@ def plot_signal_2D(sig_histo, m1, delta, ctau, plot_dict, style_dict):
     m1 = samp_df.m1.iloc[0]
     dmchi = samp_df.dmchi.iloc[0]
     ctau = samp_df.ctau.iloc[0]
-    label = f'({m1}, {dmchi}) GeV, ctau = {int(ctau)}mm'
+    label = rf'$m_1$ = {round(m1, 5):g} GeV, $\delta$ = {fmt_delta(delta)}, $c\tau$ = {int(ctau)} mm'
     
     # get histogram from coffea output
     histo = sig_histo[plot_dict['variable']][{"samp":samp, "cut": plot_dict['cut']}]
@@ -703,8 +960,8 @@ def plot_signal_2D_match(sig_histo, m1, delta, ctau, plot_dict, style_dict,match
         'doLogy': False, 
         'doLogx': False,
         'doLogz': True,
-        'xlabel': r"$v_{x}$ [cm]",   # if None, the default will show up; otherwise give as a string, i.e. 'Electron dxy'
-        'ylabel': r"$v_{y}$ [cm]",   # if None, the default will show up; otherwise give as a string, i.e. 'Efficiency'
+        'xlabel': r"$v_{x}$ (cm)",   # if None, the default will show up; otherwise give as a string, i.e. 'Electron dxy'
+        'ylabel': r"$v_{y}$ (cm)",   # if None, the default will show up; otherwise give as a string, i.e. 'Efficiency'
         'zlabel': 'Events',   
         'flow': None,     # overflow
         'doSave': True,
@@ -717,7 +974,7 @@ def plot_signal_2D_match(sig_histo, m1, delta, ctau, plot_dict, style_dict,match
     fig = style_dict['fig']
     ax = style_dict['ax']
     
-    hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6')
+    add_cms_label(plt.gca(), plot_dict['year'], kind=plot_dict.get('cms_kind', 'sim'))
     
     # get signal point info
     si = utils.get_signal_point_dict(sig_histo)
@@ -733,7 +990,7 @@ def plot_signal_2D_match(sig_histo, m1, delta, ctau, plot_dict, style_dict,match
     m1 = samp_df.m1[0]
     dmchi = samp_df.dmchi[0]
     ctau = samp_df.ctau[0]
-    label = f'({m1}, {dmchi}) GeV, ctau = {int(ctau)}mm'
+    label = rf'$m_1$ = {round(m1, 5):g} GeV, $\delta$ = {fmt_delta(delta)}, $c\tau$ = {int(ctau)} mm'
     
     # get histogram from coffea output
     histo = sig_histo[plot_dict['variable']][{"samp":samp, "cut": plot_dict['cut']}]
@@ -920,7 +1177,7 @@ def plot_bkg_1d(bkg_histos, plot_dict, style_dict, isLegacy = False, processes =
         'doLogx': False,
         'doDensity': False,
         'doYerr': False, 
-        'xlabel': r"$L_{xy}$ [cm]",   # if None, the default will show up; otherwise give as a string, i.e. 'Electron dxy'
+        'xlabel': r"$L_{xy}$ (cm)",   # if None, the default will show up; otherwise give as a string, i.e. 'Electron dxy'
         'ylabel': 'Events/0.1cm',   # if None, the default will show up; otherwise give as a string, i.e. 'Efficiency'
         'label': None,    # if None, the default will show up; otherwise give as a string, i.e. 'Highest ctau signal samples'
         'flow': None,     # overflow
@@ -935,7 +1192,7 @@ def plot_bkg_1d(bkg_histos, plot_dict, style_dict, isLegacy = False, processes =
 
     # CMS styling
     #hep.cms.label(r"$\mathrm{Private Work}$", data=True, year=plot_dict['year'])
-    hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6')
+    add_cms_label(plt.gca(), plot_dict['year'], kind=plot_dict.get('cms_kind', 'sim'))
     
     if isLegacy:
         return plot_bkg_1d_legacy(ax, bkg_histos, plot_dict, style_dict, processes, isLegacy)
@@ -1059,11 +1316,9 @@ def plot_bkg_1d_legacy(ax, bkg_histos, plot_dict, style_dict, processes = 'all',
 
     hb = hist.Stack.from_dict(bkg_stack)
     
-    # Color map for each process
-    # cmap = mpl.colormaps['Set3'].colors
-    # cmap = ["#5790fc", "#f89c20", "#e42536", "#964a8b", "#9c9ca1", "#7a21dd"] # cms-recommended for 6-color scheme
-    cmap = ["#3f90da", "#ffa90e", "#bd1f01", "#94a4a2", "#832db6", "#a96b59", "#e76300", "#b9ac70", "#717581", "#92dadd"] # cms-recommended
-    
+    # Color map for each process (8 processes -> CMS 10-colour palette)
+    cmap = CMS_COLORS_10
+
     colors = { 'W+jets': cmap[0],
                'Z+jets': cmap[1],
                'QCD': cmap[2],
@@ -1123,7 +1378,7 @@ def plot_bkg_1d_stacked(bkg_histos, plot_dict, style_dict, isLegacy = False, pro
         'doLogx': False,
         'doDensity': False,
         'doYerr': False, 
-        'xlabel': r"$L_{xy}$ [cm]",   # if None, the default will show up; otherwise give as a string, i.e. 'Electron dxy'
+        'xlabel': r"$L_{xy}$ (cm)",   # if None, the default will show up; otherwise give as a string, i.e. 'Electron dxy'
         'ylabel': 'Events/0.1cm',   # if None, the default will show up; otherwise give as a string, i.e. 'Efficiency'
         'label': None,    # if None, the default will show up; otherwise give as a string, i.e. 'Highest ctau signal samples'
         'flow': None,     # overflow
@@ -1136,7 +1391,7 @@ def plot_bkg_1d_stacked(bkg_histos, plot_dict, style_dict, isLegacy = False, pro
     fig = style_dict['fig']
     ax = style_dict['ax']
     
-    hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6')
+    add_cms_label(plt.gca(), plot_dict['year'], kind=plot_dict.get('cms_kind', 'sim'))
     
     if isLegacy:
         return plot_bkg_1d_stacked_legacy(ax, bkg_histos, plot_dict, style_dict, processes = 'all', isLegacy = isLegacy)
@@ -1304,8 +1559,8 @@ def plot_bkg_2D(bkg_histos, plot_dict, style_dict, isLegacy=False, processes = '
         'doLogy': False, 
         'doLogx': False,
         'doLogz': True,
-        'xlabel': r"$v_{x}$ [cm]",   # if None, the default will show up; otherwise give as a string, i.e. 'Electron dxy'
-        'ylabel': r"$v_{y}$ [cm]",   # if None, the default will show up; otherwise give as a string, i.e. 'Efficiency'
+        'xlabel': r"$v_{x}$ (cm)",   # if None, the default will show up; otherwise give as a string, i.e. 'Electron dxy'
+        'ylabel': r"$v_{y}$ (cm)",   # if None, the default will show up; otherwise give as a string, i.e. 'Efficiency'
         'zlabel': 'Events',   
         'flow': None,     # overflow
         'doSave': False,
@@ -1315,7 +1570,7 @@ def plot_bkg_2D(bkg_histos, plot_dict, style_dict, isLegacy=False, processes = '
 
     """
     
-    hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6')
+    add_cms_label(plt.gca(), plot_dict['year'], kind=plot_dict.get('cms_kind', 'sim'))
 
     fig = style_dict['fig']
     ax = style_dict['ax']
@@ -1563,7 +1818,7 @@ def plot_data_2D(data_histo, plot_dict, style_dict):
     fig = style_dict['fig']
     ax = style_dict['ax']
     
-    hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6')
+    add_cms_label(plt.gca(), plot_dict['year'], kind=plot_dict.get('cms_kind', 'sim'))
 
     # Get list of data
     runs = list(data_histo['cutflow_cts'].keys())
@@ -1689,7 +1944,7 @@ def plot_data_MC_ratio(data_histo, bkg_histo, plot_dict, style_dict):
 def plot_samples_sigBkg(loader_sig,loader_bkg,hname,selection,samples,labels,outName,outD,
                  xlabel=None,ylabel=None,title=None,xlim=None,ylim=None,
                  ncol_leg=1,figsize=None,logy=False,logx=False,rebin=1j,
-                 save=True,show=False,density=False,yerr=True,histtype='errorbar',heplabel="Private Work",
+                 save=True,show=False,density=False,yerr=True,histtype='errorbar',year=None,cms_kind='sim',
                  legend_loc='best',legend_fontsize=12,label_fontsize=16,bkgOnly=False,sigOnly=False):
     if not figsize:
         figsize=(8,6)
@@ -1699,9 +1954,11 @@ def plot_samples_sigBkg(loader_sig,loader_bkg,hname,selection,samples,labels,out
         h_sig = loader_sig.load(hname)[selection]
         histos_sig = [h_sig[{"samp":s}][::rebin] for s in samples]
         labels_sig = labels
-        colors_sig = ['k','g','b','c']
-        if len(labels_sig) < len(colors_sig):
-            colors_sig = colors_sig[:len(labels_sig)]
+        if sigOnly:
+            colors_sig = cms_colors(len(labels_sig))[:len(labels_sig)]
+        else:
+            # signals drawn over the bkg_cmap stack: use the CMS colours it leaves free
+            colors_sig = SIGNAL_COLORS_WITH_BKG[:len(labels_sig)]
     if not sigOnly:
         # load bkg histograms
         h_bkg = loader_bkg.load(hname)[selection]
@@ -1745,8 +2002,7 @@ def plot_samples_sigBkg(loader_sig,loader_bkg,hname,selection,samples,labels,out
     if logx:
         plt.xscale('log')
     plt.legend(ncol=ncol_leg,fontsize=legend_fontsize,loc=legend_loc)
-    hep.cms.text(heplabel)
-    #hep.cms.label("Simulation", data=True, year=2018)
+    add_cms_label(plt.gca(), year, kind=cms_kind)
     plt.tight_layout()
     if save:
         os.makedirs(outD,exist_ok=True)
@@ -1774,8 +2030,8 @@ def make_cdf_summary_sigVsBkg(dfs,loader_sig,loader_bkg,hname_sig,hname_bkg,sele
             else:
                 edges = hsamp.axes[0].edges[:-1] if right else hsamp.axes[0].edges[1:]
             x,eff_real = makeCDF(hsamp,edges[0],edges[-1],right=right,category=category)
-            plt.plot(x,eff_real,color='green',alpha=0.5,lw=2)
-        handles.append(Line2D([],[],lw=2,color='green',label="Signals"))
+            plt.plot(x,eff_real,color=SIGNAL_COLORS_WITH_BKG[0],alpha=0.5,lw=2)
+        handles.append(Line2D([],[],lw=2,color=SIGNAL_COLORS_WITH_BKG[0],label="Signals"))
     if not sigOnly:
         hbkg = loader_bkg.load(hname_bkg)[selection]
         for bkg_cat in loader_bkg.cats:
@@ -1837,9 +2093,9 @@ def make_Nminus1_sigVsBkg(dfs,loader_sig,loader_bkg,hname_sig,hname_bkg,selectio
         else:
             edges = hsamp.axes[0].edges[:-1] if right else hsamp.axes[0].edges[1:]
         x,sig_yields = makeCDF(hsamp,edges[0],edges[-1],right=right,category=category,nevents=True)
-        plt.plot(x,sig_yields/tot_bkg,color='green',alpha=0.5,lw=2)
-        
-    handles = [Line2D([],[],lw=2,color='green',label="Signals")]
+        plt.plot(x,sig_yields/tot_bkg,color=SIGNAL_COLORS_WITH_BKG[0],alpha=0.5,lw=2)
+
+    handles = [Line2D([],[],lw=2,color=SIGNAL_COLORS_WITH_BKG[0],label="Signals")]
     plt.legend(handles=handles,loc=legend_loc,ncol=ncol_leg)
     if xlabel:
         plt.xlabel(xlabel)
