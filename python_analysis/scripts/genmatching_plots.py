@@ -16,15 +16,7 @@ import coffea.util as util
 import analysisTools.utils as utils
 import analysisTools.plotTools as ptools
 
-plt.rcParams.update({
-    'font.size':        20,
-    'axes.titlesize':   24,
-    'axes.labelsize':   20,
-    'xtick.labelsize':  20,
-    'ytick.labelsize':  20,
-    'legend.fontsize':  18,
-    'figure.titlesize': 24,
-})
+ptools.set_plot_style()
 
 outdir    = os.path.join(REPO_ROOT, 'workarea')
 vers      = 'Jul2026noID'
@@ -93,12 +85,12 @@ _2d_var_specs = [
     ('dRj',           r'Min $\Delta R$(ele, jet)',              False),
     ('PFRelIso',      r'PF Relative Isolation',                 False),
     ('miniRelIsoCorr',r'Corrected Mini Relative Isolation',     False),
-    ('pt',            r'Reco $p_T$ [GeV]',                      False),
+    ('pt',            r'Reco $p_T$ (GeV)',                      False),
     ('eta',           r'Reco $\eta$',                           False),
-    ('genlxy',        r'Gen $L_{xy}$ [cm]',                     True),
-    ('genpt',         r'Gen $p_T$ [GeV]',                       False),
+    ('genlxy',        r'Gen $L_{xy}$ (cm)',                     True),
+    ('genpt',         r'Gen $p_T$ (GeV)',                       False),
     ('trkChi2',       r'Track $\chi^2/\mathrm{dof}$',           False),
-    ('dxy',           r'Reco $d_{xy}$ [cm]',                    False),
+    ('dxy',           r'Reco $d_{xy}$ (cm)',                    False),
 ]
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -131,8 +123,7 @@ def median_profile_from_2D(h2d):
 # ── Section 1: 1D dR distributions ───────────────────────────────────────────
 # 1a: one plot per rank, overlay all three collections
 for rank, rstyle in rank_styles.items():
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = ptools.new_fig(year)
     for coll, cstyle in coll_styles.items():
         h = s_hists[f'dr_to_gen_{coll}_{rank}'][{"cut": cut, "samp": sum}]
         hep.histplot(h, ax=ax, histtype='step', density=True,
@@ -142,15 +133,14 @@ for rank, rstyle in rank_styles.items():
     ax.set_ylabel('A.U.')
     ax.set_yscale('log')
     ax.set_title(rf'{rstyle["label"]} electron min $\Delta R$(reco, gen) — all samples')
-    ax.legend()
+    ptools.place_legend(ax)
     plt.tight_layout()
     plt.savefig(f'{plotdir}/hist_{seltag}_dr_to_gen_{rank}_allcolls.png')
     plt.close(fig)
 
 # 1b: one plot per collection, overlay both ranks
 for coll, cstyle in coll_styles.items():
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = ptools.new_fig(year)
     for rank, rstyle in rank_styles.items():
         h = s_hists[f'dr_to_gen_{coll}_{rank}'][{"cut": cut, "samp": sum}]
         hep.histplot(h, ax=ax, histtype='step', density=True,
@@ -161,7 +151,7 @@ for coll, cstyle in coll_styles.items():
     ax.set_ylabel('A.U.')
     ax.set_yscale('log')
     ax.set_title(rf'{cstyle["label"]} min $\Delta R$(reco, gen): leading vs subleading — all samples')
-    ax.legend()
+    ptools.place_legend(ax)
     plt.tight_layout()
     plt.savefig(f'{plotdir}/hist_{seltag}_dr_to_gen_{coll}_bothranks.png')
     plt.close(fig)
@@ -170,8 +160,7 @@ for coll, cstyle in coll_styles.items():
 #     useful for choosing/validating the dR < 0.1 threshold
 
 for rank, rstyle in rank_styles.items():
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = ptools.new_fig(year)
     for coll, cstyle in coll_styles.items():
         h    = s_hists[f'dr_to_gen_{coll}_{rank}'][{"cut": cut, "samp": sum}]
         vals = h.values()
@@ -189,7 +178,7 @@ for rank, rstyle in rank_styles.items():
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.set_title(rf'{rstyle["label"]} electron cumulative $\Delta R$(reco, gen) — all samples')
-    ax.legend()
+    ptools.place_legend(ax)
     plt.tight_layout()
     plt.savefig(f'{plotdir}/hist_{seltag}_dr_to_gen_{rank}_cdf_allcolls.png')
     plt.close(fig)
@@ -208,12 +197,12 @@ for coll, cstyle in coll_styles.items():
             if not np.any(vals > 0):
                 continue
 
-            fig, ax = plt.subplots(figsize=size)
-            hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+            fig, ax = ptools.new_fig(year, cms_label=False)
             vals_pos = np.where(vals > 0, vals, np.nan)
             pcm = ax.pcolormesh(x_edges, dr_edges, vals_pos.T, cmap='viridis', norm=LogNorm())
             plt.colorbar(pcm, ax=ax, label='Events')
-            ax.axhline(0.1, color='red', ls='--', lw=1.2, label=r'$\Delta R = 0.1$')
+            ptools.add_cms_label(ax, year)
+            ax.axhline(0.1, color='gray', ls='--', lw=1.2, label=r'$\Delta R = 0.1$')
             ax.set_xlabel(varlabel)
             ax.set_ylabel(r'$\Delta R$(reco, gen)')
             if doLogx:
@@ -232,8 +221,7 @@ for coll, cstyle in coll_styles.items():
 
 for rank, rstyle in rank_styles.items():
     for varname, varlabel, doLogx in _2d_var_specs:
-        fig, ax = plt.subplots(figsize=size)
-        hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+        fig, ax = ptools.new_fig(year)
         for coll, cstyle in coll_styles.items():
             histname = f'dr_to_gen_vs_{varname}_{coll}_{rank}'
             h2d      = s_hists[histname][{"cut": cut, "samp": sum}]
@@ -256,7 +244,7 @@ for rank, rstyle in rank_styles.items():
         ax.set_title(
             rf'{rstyle["label"]} electron $\Delta R$(reco, gen) vs {varlabel} — all samples'
         )
-        ax.legend(fontsize=16, ncol=2)
+        ptools.place_legend(ax, fontsize=16, ncol=2)
         plt.tight_layout()
         plt.savefig(f'{plotdir}/hist_{seltag}_dr_to_gen_vs_{varname}_{rank}_profile_allsamps.png')
         plt.close(fig)
@@ -269,8 +257,7 @@ for rank, rstyle in rank_styles.items():
 # 4a: n_reco_near_gen — matching ambiguity: how many reco electrons land within
 #     dR < 0.1 of the nearest gen particle?
 
-fig, ax = plt.subplots(figsize=size)
-hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+fig, ax = ptools.new_fig(year)
 for i, (coll, cstyle) in enumerate(coll_styles.items()):
     h = s_hists[f'n_reco_near_gen_{coll}'][{"cut": cut, "samp": sum}]
     hep.histplot(h, ax=ax, histtype='step', density=True,
@@ -279,7 +266,7 @@ for i, (coll, cstyle) in enumerate(coll_styles.items()):
 ax.set_xlabel(r'$N$ reco electrons within $\Delta R < 0.1$ of nearest gen')
 ax.set_ylabel('A.U.')
 ax.set_title(r'Reco electron matching ambiguity — all samples')
-ax.legend()
+ptools.place_legend(ax)
 plt.tight_layout()
 plt.savefig(f'{plotdir}/hist_{seltag}_n_reco_near_gen_allcolls.png')
 plt.close(fig)
@@ -287,8 +274,7 @@ plt.close(fig)
 # 4b: dr_to_nearest_other_reco — intra-collection clone distance
 
 for rank, rstyle in rank_styles.items():
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = ptools.new_fig(year)
     for coll, cstyle in coll_styles.items():
         h = s_hists[f'dr_to_nearest_other_reco_{coll}_{rank}'][{"cut": cut, "samp": sum}]
         hep.histplot(h, ax=ax, histtype='step', density=True,
@@ -298,7 +284,7 @@ for rank, rstyle in rank_styles.items():
     ax.set_ylabel('A.U.')
     ax.set_yscale('log')
     ax.set_title(rf'{rstyle["label"]} electron intra-collection clone distance — all samples')
-    ax.legend()
+    ptools.place_legend(ax)
     plt.tight_layout()
     plt.savefig(f'{plotdir}/hist_{seltag}_dr_to_nearest_other_reco_{rank}_allcolls.png')
     plt.close(fig)
@@ -308,8 +294,7 @@ for rank, rstyle in rank_styles.items():
 # Flipped coverage: how many gen particles (0, 1, or 2) are within dR < 0.1
 # of any reco electron in the collection?
 
-fig, ax = plt.subplots(figsize=size)
-hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+fig, ax = ptools.new_fig(year)
 for i, (coll, cstyle) in enumerate(coll_styles.items()):
     h = s_hists[f'n_gen_near_reco_{coll}'][{"cut": cut, "samp": sum}]
     hep.histplot(h, ax=ax, histtype='step', density=True,
@@ -318,7 +303,7 @@ for i, (coll, cstyle) in enumerate(coll_styles.items()):
 ax.set_xlabel(r'$N$ gen particles within $\Delta R < 0.1$ of any reco electron')
 ax.set_ylabel('A.U.')
 ax.set_title(r'Gen particle coverage by reco collection — all samples')
-ax.legend()
+ptools.place_legend(ax)
 plt.tight_layout()
 plt.savefig(f'{plotdir}/hist_{seltag}_n_gen_near_reco_allcolls.png')
 plt.close(fig)
@@ -333,15 +318,14 @@ genpart_styles = {
 
 # Secondary variable specs for gen-to-reco 2D hists
 _gen2reco_var_specs = [
-    ('genpt',  r'Gen $p_T$ [GeV]',   False),
+    ('genpt',  r'Gen $p_T$ (GeV)',   False),
     ('geneta', r'Gen $\eta$',         False),
-    ('genlxy', r'Gen $L_{xy}$ [cm]', True),
+    ('genlxy', r'Gen $L_{xy}$ (cm)', True),
 ]
 
 # 6a: one plot per collection, overlay ele and pos
 for coll, cstyle in coll_styles.items():
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = ptools.new_fig(year)
     for genpart, gpstyle in genpart_styles.items():
         h = s_hists[f'dr_gen_to_reco_{coll}_{genpart}'][{"cut": cut, "samp": sum}]
         hep.histplot(h, ax=ax, histtype='step', density=True,
@@ -352,15 +336,14 @@ for coll, cstyle in coll_styles.items():
     ax.set_ylabel('A.U.')
     ax.set_yscale('log')
     ax.set_title(rf'{cstyle["label"]} min $\Delta R$(gen, reco): $e^-$ vs $e^+$ — all samples')
-    ax.legend()
+    ptools.place_legend(ax)
     plt.tight_layout()
     plt.savefig(f'{plotdir}/hist_{seltag}_dr_gen_to_reco_{coll}_bothparts.png')
     plt.close(fig)
 
 # 6b: one plot per genpart, overlay both collections
 for genpart, gpstyle in genpart_styles.items():
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = ptools.new_fig(year)
     for coll, cstyle in coll_styles.items():
         h = s_hists[f'dr_gen_to_reco_{coll}_{genpart}'][{"cut": cut, "samp": sum}]
         hep.histplot(h, ax=ax, histtype='step', density=True,
@@ -370,7 +353,7 @@ for genpart, gpstyle in genpart_styles.items():
     ax.set_ylabel('A.U.')
     ax.set_yscale('log')
     ax.set_title(rf'{gpstyle["label"]} min $\Delta R$(gen, reco) — all samples')
-    ax.legend()
+    ptools.place_legend(ax)
     plt.tight_layout()
     plt.savefig(f'{plotdir}/hist_{seltag}_dr_gen_to_reco_{genpart}_allcolls.png')
     plt.close(fig)
@@ -388,12 +371,12 @@ for coll, cstyle in coll_styles.items():
             if not np.any(vals > 0):
                 continue
 
-            fig, ax = plt.subplots(figsize=size)
-            hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+            fig, ax = ptools.new_fig(year, cms_label=False)
             vals_pos = np.where(vals > 0, vals, np.nan)
             pcm = ax.pcolormesh(x_edges, dr_edges, vals_pos.T, cmap='viridis', norm=LogNorm())
             plt.colorbar(pcm, ax=ax, label='Events')
-            ax.axhline(0.1, color='red', ls='--', lw=1.2, label=r'$\Delta R = 0.1$')
+            ptools.add_cms_label(ax, year)
+            ax.axhline(0.1, color='gray', ls='--', lw=1.2, label=r'$\Delta R = 0.1$')
             ax.set_xlabel(varlabel)
             ax.set_ylabel(r'Min $\Delta R$(gen, reco)')
             if doLogx:
@@ -408,8 +391,7 @@ for coll, cstyle in coll_styles.items():
 
 # 6d: profile plots (median + 90th pct) — one plot per variable, overlay colls and genparts
 for varname, varlabel, doLogx in _gen2reco_var_specs:
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = ptools.new_fig(year)
     for coll, cstyle in coll_styles.items():
         for genpart, gpstyle in genpart_styles.items():
             gtag     = f'{coll}_{genpart}'
@@ -431,7 +413,7 @@ for varname, varlabel, doLogx in _gen2reco_var_specs:
     if doLogx:
         ax.set_xscale('log')
     ax.set_title(rf'Gen-to-reco $\Delta R$ vs {varlabel} — all samples')
-    ax.legend(fontsize=14, ncol=2)
+    ptools.place_legend(ax, fontsize=14, ncol=2)
     plt.tight_layout()
     plt.savefig(f'{plotdir}/hist_{seltag}_dr_gen_to_reco_vs_{varname}_profile_allsamps.png')
     plt.close(fig)
@@ -441,7 +423,7 @@ for varname, varlabel, doLogx in _gen2reco_var_specs:
 
 _ee_var_specs = [
     ('dr', r'$\Delta R(e^+e^-)$', 'dr_gen_vs_dr_reco_ee'),
-    ('pt', r'$p_T(e^+e^-)$ [GeV]', 'pt_gen_vs_pt_reco_ee'),
+    ('pt', r'$p_T(e^+e^-)$ (GeV)', 'pt_gen_vs_pt_reco_ee'),
 ]
 _ee_fill_styles = {
     'matched': {'label': 'Matched vtx'},
@@ -459,11 +441,11 @@ for varkey, varlabel, histbase in _ee_var_specs:
         if not np.any(vals > 0):
             continue
 
-        fig, ax = plt.subplots(figsize=size)
-        hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+        fig, ax = ptools.new_fig(year, cms_label=False)
         vals_pos = np.where(vals > 0, vals, np.nan)
         pcm = ax.pcolormesh(gen_edges, reco_edges, vals_pos.T, cmap='viridis', norm=LogNorm())
         plt.colorbar(pcm, ax=ax, label='Events')
+        ptools.add_cms_label(ax, year)
         # diagonal reference line
         lim = min(gen_edges[-1], reco_edges[-1])
         ax.plot([0, lim], [0, lim], 'r--', lw=1.2, label='Gen = Reco')
@@ -478,8 +460,7 @@ for varkey, varlabel, histbase in _ee_var_specs:
 # 7b: overlay matched vs selvtx — 1D projections (gen axis and reco axis)
 for varkey, varlabel, histbase in _ee_var_specs:
     for axis_idx, axis_label in [(0, 'Gen'), (1, 'Reco')]:
-        fig, ax = plt.subplots(figsize=size)
-        hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+        fig, ax = ptools.new_fig(year)
         for filltype, fstyle in _ee_fill_styles.items():
             histname = f'{histbase}_{filltype}'
             h2d      = s_hists[histname][{"cut": cut, "samp": sum}]
@@ -489,7 +470,7 @@ for varkey, varlabel, histbase in _ee_var_specs:
         ax.set_xlabel(rf'{axis_label} {varlabel}')
         ax.set_ylabel('A.U.')
         ax.set_title(rf'{axis_label} {varlabel}: matched vs selected vtx — all samples')
-        ax.legend()
+        ptools.place_legend(ax)
         plt.tight_layout()
         plt.savefig(f'{plotdir}/hist_{seltag}_{histbase}_{axis_label.lower()}_proj_allsamps.png')
         plt.close(fig)
@@ -562,7 +543,7 @@ for title, outname, variables, doLogy, solid_label, dotted_label, do_ann in sig_
         ctaus  = series['ctaus']
         tag    = series['tag']
 
-        fig, ax = plt.subplots(figsize=size)
+        fig, ax = ptools.new_fig(plot_dict['year'])
         style_dict = {
             **style_dict_base_sig,
             'fig': fig, 'ax': ax,
@@ -574,7 +555,7 @@ for title, outname, variables, doLogy, solid_label, dotted_label, do_ann in sig_
         for m1 in m1s:
             for delta in deltas:
                 for ctau in ctaus:
-                    result = ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx=cmap_idx)
+                    result = ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx=cmap_idx, ncolors=len(m1s)*len(deltas)*len(ctaus))
                     if result is not None and do_ann:
                         histo, clr = result
                         if isinstance(histo, list):
@@ -584,8 +565,6 @@ for title, outname, variables, doLogy, solid_label, dotted_label, do_ann in sig_
                             _annotate_counts(ax, histo, clr, fontsize=9)
                     cmap_idx += 1
 
-        hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6', ax=ax)
-
         handles, labels = ax.get_legend_handles_labels()
         if is_paired and solid_label is not None:
             handles += [
@@ -593,9 +572,8 @@ for title, outname, variables, doLogy, solid_label, dotted_label, do_ann in sig_
                 mlines.Line2D([], [], color='black', ls='--', label=dotted_label),
             ]
             labels += [solid_label, dotted_label]
-        ax.legend(handles=handles, labels=labels)
-
-        plt.title(rf'{title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
+        plt.title(rf'{title}: $M_1$ = {m1s}, $\delta$ = {ptools.fmt_delta(deltas)}, c$\tau$ = {ctaus}mm')
+        ptools.place_legend(ax, handles=handles, labels=labels)
         plt.tight_layout()
         plt.savefig(f'{plotdir}/hist_{seltag}_{outname}_{tag}.png')
-        plt.close()
+        plt.close(fig)

@@ -3,20 +3,13 @@ import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 from matplotlib.colors import LogNorm
 import mplhep as hep
+import hist
 import coffea.util as util
 import analysisTools.utils as utils
 import analysisTools.plotTools as ptools
 import os
 
-plt.rcParams.update({
-    'font.size':        20,
-    'axes.titlesize':   24,
-    'axes.labelsize':   20,
-    'xtick.labelsize':  20,
-    'ytick.labelsize':  20,
-    'legend.fontsize':  18,
-    'figure.titlesize': 24,
-})
+ptools.set_plot_style()
 
 outdir    = 'workarea'
 vers      = 'Jun2026noID'
@@ -26,7 +19,6 @@ saved_signal_hists = f"{outdir}/hists_sig{vers}_{selection}-sel_{hists_tag}.coff
 seltag   = 'minjdphi'
 cut      = 'cut8'
 year     = 2024
-size     = (16, 12)
 
 s_hists = util.load(saved_signal_hists)[0]
 s_pts   = utils.get_signal_point_dict(s_hists)
@@ -57,13 +49,10 @@ rank_styles = {
 plottag = f'sig{vers}_{selection}-sel'
 
 
-def _samp_name(m1, delta, ctau):
-    row = s_pts[np.isclose(s_pts.m1, m1) & np.isclose(s_pts.delta, delta) & (s_pts.ctau == ctau)]
-    return row['name'].iloc[0] if not row.empty else None
 
 
 def _sig_label(m1, delta, ctau):
-    return rf'$M_1$={m1}, $\Delta$={delta}, $c\tau$={ctau} mm'
+    return rf'$M_1$={m1}, $\delta$={ptools.fmt_delta(delta)}, $c\tau$={ctau} mm'
 
 
 def _varbin_histplot(h, ax, **kwargs):
@@ -111,7 +100,7 @@ def _run_sig_plots(specs):
             deltas = series['deltas']
             ctaus  = series['ctaus']
             tag    = series['tag']
-            fig, ax = plt.subplots(figsize=size)
+            fig, ax = ptools.new_fig(year)
             style_dict = {
                 **style_dict_base_sig,
                 'fig': fig, 'ax': ax,
@@ -122,9 +111,8 @@ def _run_sig_plots(specs):
             for m1 in m1s:
                 for delta in deltas:
                     for ctau in ctaus:
-                        ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx=cmap_idx)
+                        ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx=cmap_idx, ncolors=len(m1s)*len(deltas)*len(ctaus))
                         cmap_idx += 1
-            hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6', ax=ax)
             handles, labels = ax.get_legend_handles_labels()
             if is_paired and solid_label is not None:
                 handles += [
@@ -132,8 +120,8 @@ def _run_sig_plots(specs):
                     mlines.Line2D([], [], color='black', ls='--', label=dotted_label),
                 ]
                 labels += [solid_label, dotted_label]
-            ax.legend(handles=handles, labels=labels)
-            plt.title(rf'{title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
+            ax.set_title(f'{title}\n' + rf'$M_1$ = {m1s}, $\delta$ = {ptools.fmt_delta(deltas)}, c$\tau$ = {ctaus}mm')
+            ptools.place_legend(ax, handles=handles, labels=labels)
             plt.tight_layout()
             plt.savefig(f'plots/hist_{seltag}_{outname}_{tag}.png')
             plt.close()
@@ -143,16 +131,15 @@ def _run_sig_plots(specs):
 # One plot per collection: overlay gen leading, gen subleading, and reco pt.
 
 for coll, cstyle in coll_styles.items():
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = ptools.new_fig(year)
     for obj_key, obj_label, color, ls in obj_styles:
         h = s_hists[f'{obj_key}_pt_{coll}'][{"cut": cut, "samp": sum}]
         hep.histplot(h, ax=ax, histtype='step', density=True,
                      label=obj_label, color=color, linestyle=ls, linewidth=2)
-    ax.set_xlabel(r'$p_T$ [GeV]')
+    ax.set_xlabel(r'$p_T$ (GeV)')
     ax.set_ylabel('A.U.')
     ax.set_title(rf'{cstyle["label"]} merged: gen & reco $p_T$ — all samples')
-    ax.legend()
+    ptools.place_legend(ax)
     plt.tight_layout()
     plt.savefig(f'plots/hist_{seltag}_merged_pt_{coll}_allsamps.png')
     plt.close(fig)
@@ -183,8 +170,7 @@ _run_sig_plots([
 # One plot per collection: overlay gen leading, gen subleading, and reco eta.
 
 for coll, cstyle in coll_styles.items():
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = ptools.new_fig(year)
     for obj_key, obj_label, color, ls in obj_styles:
         h = s_hists[f'{obj_key}_eta_{coll}'][{"cut": cut, "samp": sum}]
         hep.histplot(h, ax=ax, histtype='step', density=True,
@@ -192,7 +178,7 @@ for coll, cstyle in coll_styles.items():
     ax.set_xlabel(r'$\eta$')
     ax.set_ylabel('A.U.')
     ax.set_title(rf'{cstyle["label"]} merged: gen & reco $\eta$ — all samples')
-    ax.legend()
+    ptools.place_legend(ax)
     plt.tight_layout()
     plt.savefig(f'plots/hist_{seltag}_merged_eta_{coll}_allsamps.png')
     plt.close(fig)
@@ -202,8 +188,7 @@ for coll, cstyle in coll_styles.items():
 # One plot per collection: overlay dR to gen leading and gen subleading.
 
 for coll, cstyle in coll_styles.items():
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = ptools.new_fig(year)
     for rank, rstyle in rank_styles.items():
         h = s_hists[f'dr_reco_gen_{rank}_{coll}'][{"cut": cut, "samp": sum}]
         hep.histplot(h, ax=ax, histtype='step', density=True,
@@ -213,7 +198,7 @@ for coll, cstyle in coll_styles.items():
     ax.set_xlabel(r'$\Delta R$(reco, gen)')
     ax.set_ylabel('A.U.')
     ax.set_title(rf'{cstyle["label"]} merged: reco-gen $\Delta R$ — all samples')
-    ax.legend()
+    ptools.place_legend(ax)
     plt.tight_layout()
     plt.savefig(f'plots/hist_{seltag}_dr_reco_gen_{coll}_allsamps.png')
     plt.close(fig)
@@ -237,16 +222,15 @@ _run_sig_plots([
 # ── Section 4: reco dxy (merged only) ────────────────────────────────────────
 # One plot overlaying both collections.
 
-fig, ax = plt.subplots(figsize=size)
-hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+fig, ax = ptools.new_fig(year)
 for coll, cstyle in coll_styles.items():
     h = s_hists[f'reco_dxy_{coll}'][{"cut": cut, "samp": sum}]
     hep.histplot(h, ax=ax, histtype='step', density=True,
                  label=cstyle['label'], color=cstyle['color'], linewidth=2)
-ax.set_xlabel(r'Reco $|d_{xy}|$ [cm]')
+ax.set_xlabel(r'Reco $|d_{xy}|$ (cm)')
 ax.set_ylabel('A.U.')
 ax.set_title(r'Merged reco electron $|d_{xy}|$ — all samples')
-ax.legend()
+ptools.place_legend(ax)
 plt.tight_layout()
 plt.savefig(f'plots/hist_{seltag}_reco_dxy_allcolls_allsamps.png')
 plt.close(fig)
@@ -271,15 +255,14 @@ PLOT_DPT_HISTS = False
 
 if PLOT_DPT_HISTS:
     _dpt_specs = [
-        ('abs', r'$p_T^{\rm reco} - p_T^{\rm gen}$ [GeV]'),
+        ('abs', r'$p_T^{\rm reco} - p_T^{\rm gen}$ (GeV)'),
         ('rel', r'$(p_T^{\rm reco} - p_T^{\rm gen})/p_T^{\rm gen}$'),
     ]
 
     # All-samples overlay: leading vs subleading, per (collection, quantity type)
     for qty, xlabel in _dpt_specs:
         for coll, cstyle in coll_styles.items():
-            fig, ax = plt.subplots(figsize=size)
-            hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+            fig, ax = ptools.new_fig(year)
             for rank, rstyle in rank_styles.items():
                 h = s_hists[f'dpt_{qty}_{rank}_{coll}'][{"cut": cut, "samp": sum}]
                 _varbin_histplot(h, ax, histtype='step',
@@ -288,7 +271,7 @@ if PLOT_DPT_HISTS:
             ax.set_xlabel(xlabel)
             ax.set_ylabel('A.U.')
             ax.set_title(rf'{cstyle["label"]} merged: $\Delta p_T$ ({qty}) — all samples')
-            ax.legend()
+            ptools.place_legend(ax)
             plt.tight_layout()
             plt.savefig(f'plots/hist_{seltag}_dpt_{qty}_{coll}_allsamps.png')
             plt.close(fig)
@@ -300,17 +283,16 @@ if PLOT_DPT_HISTS:
                 deltas = series['deltas']
                 ctaus  = series['ctaus']
                 tag    = series['tag']
-                fig, ax = plt.subplots(figsize=size)
-                hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+                fig, ax = ptools.new_fig(year)
                 cmap_idx = 0
                 for m1 in m1s:
                     for delta in deltas:
                         for ctau in ctaus:
-                            sname = _samp_name(m1, delta, ctau)
+                            sname = ptools.samp_name(s_pts,m1, delta, ctau)
                             if sname is None:
                                 cmap_idx += 1
                                 continue
-                            color = f'C{cmap_idx}'
+                            color = ptools.cms_colors(len(m1s)*len(deltas)*len(ctaus))[cmap_idx]
                             label = _sig_label(m1, delta, ctau)
                             for rank, rstyle in rank_styles.items():
                                 h = s_hists[f'dpt_{qty}_{rank}_{coll}'][{'cut': cut, 'samp': sname}]
@@ -320,8 +302,8 @@ if PLOT_DPT_HISTS:
                             cmap_idx += 1
                 ax.set_xlabel(xlabel)
                 ax.set_ylabel('A.U.')
-                ax.legend(fontsize=13)
-                plt.title(rf'{cstyle["label"]} merged: $\Delta p_T$ ({qty}) — {tag}')
+                ax.set_title(rf'{cstyle["label"]} merged: $\Delta p_T$ ({qty}) — {tag}')
+                ptools.place_legend(ax)
                 plt.tight_layout()
                 plt.savefig(f'plots/hist_{seltag}_merged_dpt_{qty}_{coll}_{tag}.png')
                 plt.close(fig)
@@ -341,13 +323,13 @@ if PLOT_DPT_HISTS:
                 vals = h2d.values() / dpt_widths[np.newaxis, :]  # events / (dpt bin width)
                 if not np.any(vals > 0):
                     continue
-                fig, ax = plt.subplots(figsize=size)
-                hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+                fig, ax = ptools.new_fig(year, cms_label=False)
                 pcm = ax.pcolormesh(pt_edges, dpt_edges, np.where(vals > 0, vals, np.nan).T,
                                     cmap='viridis')
                 clabel = r'Events / GeV' if qty == 'abs' else r'Events / (unit $\Delta p_T/p_T$)'
                 plt.colorbar(pcm, ax=ax, label=clabel)
-                ax.set_xlabel(rf'Gen $p_T$ ({rank_label}) [GeV]')
+                ptools.add_cms_label(ax, year)
+                ax.set_xlabel(rf'Gen $p_T$ ({rank_label}) (GeV)')
                 ax.set_ylabel(ylabel)
                 ax.set_title(
                     rf'{cstyle["label"]} merged — $\Delta p_T$ ({qty}) vs gen $p_T$ ({rank_label}) — all samples'
@@ -368,12 +350,12 @@ if PLOT_DPT_HISTS:
                 vals = h2d.values() / dpt_widths[np.newaxis, :]  # events / (dpt bin width)
                 if not np.any(vals > 0):
                     continue
-                fig, ax = plt.subplots(figsize=size)
-                hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+                fig, ax = ptools.new_fig(year, cms_label=False)
                 pcm = ax.pcolormesh(dr_edges, dpt_edges, np.where(vals > 0, vals, np.nan).T,
                                     cmap='viridis')
                 clabel = r'Events / GeV' if qty == 'abs' else r'Events / (unit $\Delta p_T/p_T$)'
                 plt.colorbar(pcm, ax=ax, label=clabel)
+                ptools.add_cms_label(ax, year)
                 ax.set_xlabel(r'Gen $\Delta R(e^+e^-)$')
                 ax.set_ylabel(ylabel)
                 ax.set_title(
@@ -388,16 +370,15 @@ if PLOT_DPT_HISTS:
 # For each comparison quantity, one plot per collection overlaying merged and resolved.
 
 comp_specs = [
-    ('gen_lxy',      r'Gen $L_{xy}$ [cm]',                True),
+    ('gen_lxy',      r'Gen $L_{xy}$ (cm)',                True),
     ('gen_ee_dr',    r'Gen $\Delta R(e^+e^-)$',            True),
-    ('gen_ee_pt',    r'Gen $p_T(e^+e^-)$ [GeV]',          False),
+    ('gen_ee_pt',    r'Gen $p_T(e^+e^-)$ (GeV)',          False),
     ('reco_trkchi2', r'Reco track $\chi^2/\mathrm{dof}$', True),
 ]
 
 for histbase, xlabel, do_logy in comp_specs:
     for coll, cstyle in coll_styles.items():
-        fig, ax = plt.subplots(figsize=size)
-        hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+        fig, ax = ptools.new_fig(year)
         for scenario, sstyle in scenario_styles.items():
             h = s_hists[f'{histbase}_{scenario}_{coll}'][{"cut": cut, "samp": sum}]
             hep.histplot(h, ax=ax, histtype='step', density=True,
@@ -408,7 +389,7 @@ for histbase, xlabel, do_logy in comp_specs:
         if do_logy:
             ax.set_yscale('log')
         ax.set_title(rf'{cstyle["label"]} — {xlabel}: merged vs resolved — all samples')
-        ax.legend()
+        ptools.place_legend(ax)
         plt.tight_layout()
         plt.savefig(f'plots/hist_{seltag}_{histbase}_{coll}_merged_vs_resolved.png')
         plt.close(fig)
@@ -438,12 +419,12 @@ for scenario, sstyle in scenario_styles.items():
         if not np.any(vals > 0):
             continue
 
-        fig, ax = plt.subplots(figsize=size)
-        hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+        fig, ax = ptools.new_fig(year, cms_label=False)
         vals_pos = np.where(vals > 0, vals, np.nan)
         pcm = ax.pcolormesh(lxy_edges, dr_edges, vals_pos.T, cmap='viridis', norm=LogNorm())
         plt.colorbar(pcm, ax=ax, label='Events')
-        ax.set_xlabel(r'Gen $L_{xy}$ [cm]')
+        ptools.add_cms_label(ax, year)
+        ax.set_xlabel(r'Gen $L_{xy}$ (cm)')
         ax.set_ylabel(r'Gen $\Delta R(e^+e^-)$')
         ax.set_xscale('log')
         ax.set_title(
@@ -542,8 +523,7 @@ def _display_data(fracs, errs, top6):
 # ─ All-samples aggregate (one plot per collection) ───────────────────────────
 
 for coll, cstyle in coll_styles.items():
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = ptools.new_fig(year)
     h           = s_hists[f'reco_cat_{coll}'][{'cut': cut, 'samp': sum}]
     fracs, errs = _cat_fracs(h)
     top6        = _top6_cats([fracs])
@@ -553,7 +533,7 @@ for coll, cstyle in coll_styles.items():
            color=cstyle['color'], alpha=0.8, edgecolor='black', linewidth=0.8,
            error_kw={'ecolor': 'black', 'capsize': 4, 'elinewidth': 1.2})
     ax.set_xticks(x)
-    ax.set_xticklabels(xlbls, fontsize=15)
+    ax.set_xticklabels(xlbls, fontsize=24)
     ax.set_ylabel('Fraction of events')
     ax.set_ylim(0, None)
     ax.set_title(rf'{cstyle["label"]}: reco category distribution — all samples')
@@ -571,7 +551,7 @@ for coll, cstyle in coll_styles.items():
         tag    = series['tag']
 
         sig_pts = [(m1, d, ct) for m1 in m1s for d in deltas for ct in ctaus]
-        sig_pts = [(m1, d, ct) for m1, d, ct in sig_pts if _samp_name(m1, d, ct) is not None]
+        sig_pts = [(m1, d, ct) for m1, d, ct in sig_pts if ptools.samp_name(s_pts,m1, d, ct) is not None]
         if not sig_pts:
             continue
 
@@ -580,7 +560,7 @@ for coll, cstyle in coll_styles.items():
         pt_data   = []
         all_fracs = []
         for m1, delta, ctau in sig_pts:
-            sname = _samp_name(m1, delta, ctau)
+            sname = ptools.samp_name(s_pts,m1, delta, ctau)
             h     = s_hists[f'reco_cat_{coll}'][{'cut': cut, 'samp': sname}]
             f, e  = _cat_fracs(h)
             pt_data.append((m1, delta, ctau, f, e))
@@ -591,22 +571,21 @@ for coll, cstyle in coll_styles.items():
         bar_w = 0.8 / n_pts
         x     = np.arange(7)
 
-        fig, ax = plt.subplots(figsize=size)
-        hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+        fig, ax = ptools.new_fig(year)
 
         for idx, (m1, delta, ctau, fracs, errs) in enumerate(pt_data):
             vals, errs_, xlbls = _display_data(fracs, errs, top6)
             offsets = x - 0.4 + bar_w * (idx + 0.5)
             ax.bar(offsets, vals, width=bar_w, label=_sig_label(m1, delta, ctau),
-                   yerr=errs_, color=f'C{idx}', alpha=0.8, edgecolor='black', linewidth=0.5,
+                   yerr=errs_, color=ptools.cms_colors(n_pts)[idx], alpha=0.8, edgecolor='black', linewidth=0.5,
                    error_kw={'ecolor': 'black', 'capsize': 3, 'elinewidth': 1.0})
 
         ax.set_xticks(x)
-        ax.set_xticklabels(xlbls, fontsize=15)
+        ax.set_xticklabels(xlbls, fontsize=24)
         ax.set_ylabel('Fraction of events')
         ax.set_ylim(0, None)
         ax.set_title(rf'{cstyle["label"]}: reco category distribution — {tag}')
-        ax.legend(fontsize=13)
+        ptools.place_legend(ax)
         plt.tight_layout()
         plt.savefig(f'plots/hist_{seltag}_reco_cat_{coll}_{tag}.png')
         plt.close(fig)
@@ -624,7 +603,7 @@ for coll, cstyle in coll_styles.items():
     for m1 in _narrow_series['m1s']:
         for delta in _narrow_series['deltas']:
             for ctau in _narrow_series['ctaus']:
-                sname = _samp_name(m1, delta, ctau)
+                sname = ptools.samp_name(s_pts,m1, delta, ctau)
                 if sname is None:
                     print(f"\n{_sig_label(m1, delta, ctau)}: sample not found, skipping")
                     continue
@@ -645,7 +624,7 @@ _bycat_styles = {
 
 _bycat_vars = [
     ('gen_ee_dr',  r'Gen $\Delta R(e^+e^-)$'),
-    ('gen_ee_pt',  r'Gen $p_T(e^+e^-)$ [GeV]'),
+    ('gen_ee_pt',  r'Gen $p_T(e^+e^-)$ (GeV)'),
     ('gen_ee_eta', r'Gen $\eta(e^+e^-)$'),
 ]
 
@@ -673,14 +652,13 @@ def _plot_bycat(ax, h_full):
 
 for coll, cstyle in coll_styles.items():
     for histbase, xlabel in _bycat_vars:
-        fig, ax = plt.subplots(figsize=size)
-        hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+        fig, ax = ptools.new_fig(year)
         h_full = s_hists[f'{histbase}_cat_{coll}'][{'cut': cut, 'samp': sum}]
         _plot_bycat(ax, h_full)
         ax.set_xlabel(xlabel)
         ax.set_ylabel('A.U.')
         ax.set_title(rf'{cstyle["label"]}: {xlabel} — by reco category, all samples')
-        ax.legend()
+        ptools.place_legend(ax)
         plt.tight_layout()
         plt.savefig(f'plots/hist_{seltag}_{histbase}_bycat_{coll}_allsamps.png')
         plt.close(fig)
@@ -690,19 +668,18 @@ for coll, cstyle in coll_styles.items():
 for coll, cstyle in coll_styles.items():
     for histbase, xlabel in _bycat_vars:
         for m1, delta, ctau in _bycat_indiv:
-            sname = _samp_name(m1, delta, ctau)
+            sname = ptools.samp_name(s_pts,m1, delta, ctau)
             if sname is None:
                 continue
-            fig, ax = plt.subplots(figsize=size)
-            hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+            fig, ax = ptools.new_fig(year)
             h_full = s_hists[f'{histbase}_cat_{coll}'][{'cut': cut, 'samp': sname}]
             _plot_bycat(ax, h_full)
             ax.set_xlabel(xlabel)
             ax.set_ylabel('A.U.')
             ax.set_title(
-                rf'{cstyle["label"]}: {xlabel} — by reco category, {_sig_label(m1, delta, ctau)}'
+                rf'{cstyle["label"]}: {xlabel} — by reco category' + f'\n{_sig_label(m1, delta, ctau)}'
             )
-            ax.legend()
+            ptools.place_legend(ax)
             plt.tight_layout()
             m1s = str(m1).replace('.', 'p')
             ds  = str(delta).replace('.', 'p')
@@ -710,3 +687,54 @@ for coll, cstyle in coll_styles.items():
                 f'plots/hist_{seltag}_{histbase}_bycat_{coll}_m1-{m1s}_d-{ds}_ctau-{ctau}.png'
             )
             plt.close(fig)
+
+
+# ── Section 10: gen ee dR, merged vs resolved only (fraction of events) ──────
+# Like the Section 9 gen_ee_dr_bycat plots, but only the merged and resolved
+# categories, rebinned 2x (adjacent bins merged), each curve normalized so its
+# in-range bins sum to 1 (y = fraction of that category's events per bin).
+# Uses RAW (unweighted) event counts with Poisson errors, not xsec-weighted
+# sums: the weighted sum is dominated by a few hundred heavy-weight
+# Mchi-55 events in the merged category, inflating its error bars. Raw counts
+# are recovered per sample as value^2/variance (exact when the event weight is
+# constant within a sample, which holds here to ~1%), then summed over samples.
+
+_mr_plotdir = 'plots/mergedmatch'
+os.makedirs(_mr_plotdir, exist_ok=True)
+
+
+def _raw_counts(h):
+    """Unweighted per-bin counts for a Weight-storage hist with a 'samp' axis
+    (constant weight per sample assumed): sum over samples of value^2/variance."""
+    vals = h.values()
+    vars_ = h.variances()
+    with np.errstate(divide='ignore', invalid='ignore'):
+        n = np.where(vars_ > 0, vals**2 / vars_, 0.)
+    samp_idx = [ax.name for ax in h.axes].index('samp')
+    return np.round(n).sum(axis=samp_idx)
+
+
+for coll, cstyle in coll_styles.items():
+    h_full = s_hists[f'gen_ee_dr_cat_{coll}'][{'cut': cut}]
+    h_full = h_full[{'dr': hist.rebin(2)}]
+    edges = h_full.axes['dr'].edges
+    fig, ax = ptools.new_fig(year)
+    for cat in ['merged', 'resolved']:
+        kstyle = _bycat_styles[cat]
+        counts = _raw_counts(h_full[{'cat': cat}])
+        total = counts.sum()
+        if total <= 0:
+            continue
+        hep.histplot(counts / total, edges, ax=ax, histtype='step',
+                     yerr=np.sqrt(counts) / total,
+                     label=kstyle['label'], color=kstyle['color'],
+                     linestyle=kstyle['ls'], linewidth=2)
+    ax.set_xlabel(r'Gen $\Delta R(e^+e^-)$')
+    ax.set_ylabel('Fraction of Events')
+    ax.set_title(rf'{cstyle["label"]}: Gen $\Delta R(e^+e^-)$ by Reco Category')
+    ptools.place_legend(ax)
+    plt.tight_layout()
+    outpath = f'{_mr_plotdir}/hist_{seltag}_gen_ee_dr_mergedres_{coll}_allsamps.png'
+    plt.savefig(outpath)
+    plt.close(fig)
+    print(f"Saved: {outpath}")

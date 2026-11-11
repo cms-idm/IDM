@@ -41,9 +41,9 @@ from analysisTools.analysisSubroutines import defineGoodVertices, defineGoodLptV
 # a good vertex and eff is trivially 1.
 
 # --- local axes (50 bins each) ---
-gen_ee_pt     = Regular(50, 0, 50,     name="pt",  label="Gen $p_{T}(e^+e^-)$ [GeV]")
-gen_lxy       = Regular(50, 0, 25,     name="lxy", label="Gen $L_{xy}$ [cm]")
-gen_lxy_log   = Regular(50, 1e-3, 100, name="lxy", label="Gen $L_{xy}$ [cm]", transform=transform.log)
+gen_ee_pt     = Regular(50, 0, 50,     name="pt",  label="Gen $p_{T}(e^+e^-)$ (GeV)")
+gen_lxy       = Regular(50, 0, 25,     name="lxy", label="Gen $L_{xy}$ (cm)")
+gen_lxy_log   = Regular(50, 1e-3, 100, name="lxy", label="Gen $L_{xy}$ (cm)", transform=transform.log)
 gen_ee_dr     = Regular(50, 0, 2,      name="dr",  label=r"Gen $\Delta R(e^+e^-)$")
 gen_ee_dr_log = Regular(50, 1e-4, 10,  name="dr",  label=r"Gen $\Delta R(e^+e^-)$", transform=transform.log)
 gen_ee_eta    = Regular(50, -2.5, 2.5, name="eta", label=r"Gen $\eta(e^+e^-)$")
@@ -76,8 +76,8 @@ NUMERATORS = {
 # 2D gen Lxy vs gen ee pT (coarse variable bins), split into coarse gen ee dR bins
 # via a third axis (one eff map per dR bin), same num/den scheme:
 #   vtxreco_gen_lxy_vs_pt_den, <prefix>_gen_lxy_vs_pt_<suffix>
-gen_lxy_2d   = Variable([0, 1, 5, 10, 15, 100],   name="lxy", label="Gen $L_{xy}$ [cm]")
-gen_ee_pt_2d = Variable([0, 5, 10, 20, 100],      name="pt",  label="Gen $p_{T}(e^+e^-)$ [GeV]")
+gen_lxy_2d   = Variable([0, 1, 5, 10, 15, 100],   name="lxy", label="Gen $L_{xy}$ (cm)")
+gen_ee_pt_2d = Variable([0, 5, 10, 20, 100],      name="pt",  label="Gen $p_{T}(e^+e^-)$ (GeV)")
 gen_ee_dr_2d = Variable([0, 0.01, 0.1, 1, 5],     name="dr",  label=r"Gen $\Delta R(e^+e^-)$")
 NAME_2D = "gen_lxy_vs_pt"
 

@@ -9,6 +9,12 @@ from hist import Hist
 from hist.storage import Weight
 
 import coffea.util as util
+import analysisTools.plotTools as ptools
+
+ptools.set_plot_style()
+
+# signal samples are combined across years, so no year on the CMS label
+year = None
 
 outdir = 'workarea'
 plotdir = './plots/vtxreco'
@@ -29,9 +35,9 @@ CUTS = {
 
 # Gen variables filled in configs/histo_configs/vtxreco.py: name -> (x label, log x)
 VARIABLES = {
-    'gen_ee_pt'     : (r'Gen $p_{T}(e^+e^-)$ [GeV]', False),
-    'gen_lxy'       : (r'Gen $L_{xy}$ [cm]',         False),
-    'gen_lxy_log'   : (r'Gen $L_{xy}$ [cm]',         True),
+    'gen_ee_pt'     : (r'Gen $p_{T}(e^+e^-)$ (GeV)', False),
+    'gen_lxy'       : (r'Gen $L_{xy}$ (cm)',         False),
+    'gen_lxy_log'   : (r'Gen $L_{xy}$ (cm)',         True),
     'gen_ee_dr'     : (r'Gen $\Delta R(e^+e^-)$',    False),
     'gen_ee_dr_log' : (r'Gen $\Delta R(e^+e^-)$',    True),
     'gen_ee_eta'    : (r'Gen $\eta(e^+e^-)$',        False),
@@ -173,7 +179,7 @@ def plot_eff(sig_histo, var, cut, group):
     samples = list(sig_histo['cutflow'].keys())
     h_den = sig_histo[f'vtxreco_{var}_den']
 
-    fig, ax = plt.subplots(figsize=(10, 8))
+    fig, ax = ptools.new_fig(year)
     for prefix, suffix, label, color in cfg['curves']:
         h_eff = combine_neff_ratio(sig_histo[f'{prefix}_{var}_{suffix}'], h_den, samples, cut)
         ax.errorbar(h_eff.axes[0].centers, h_eff.values(), yerr=np.sqrt(h_eff.variances()),
@@ -183,7 +189,7 @@ def plot_eff(sig_histo, var, cut, group):
         ax.set_xscale('log')
     ax.set_ylim(0, 1.05)
     ax.grid()
-    ax.legend(fontsize=16)
+    ptools.place_legend(ax, fontsize=16)
     ax.set_xlabel(xlabel, fontsize=20)
     ax.set_ylabel(cfg['ylabel'], fontsize=20)
     ax.set_title(f'{cfg["ylabel"]} [{CUTS[cut].capitalize()}, All Signal Samples]', fontsize=16)
@@ -226,7 +232,7 @@ def sample_m1(samp):
 
 def sample_point(samp):
     """
-    Parse the signal point (m1, delta = dMchi/m1, ctau [mm]) from a signal
+    Parse the signal point (m1, delta = dMchi/m1, ctau (mm)) from a signal
     sample name, independent of year (see sample_m1).
     """
     dmchi = float(re.search(r'dMchi-([\d]+p[\d]+)', samp).group(1).replace('p', '.'))
@@ -259,7 +265,7 @@ def plot_eff_2d(sig_histo, cut, prefix, suffix, idr, run2range=False, point=None
         samples = [s for s in samples if np.allclose(sample_point(s), point)]
         m1, delta, ctau = point
         point_tag = f'm1-{m1:g}_delta-{delta:g}_ctau-{ctau:g}'
-        point_title = rf'$m_1$ = {m1:g} GeV, $\Delta$ = {delta:g}, $c\tau$ = {ctau:g} mm'
+        point_title = rf'$m_1$ = {m1:g} GeV, $\delta$ = {ptools.fmt_delta(delta)}, $c\tau$ = {ctau:g} mm'
     h_num = cut_slice(sig_histo[f'{prefix}_{VAR_2D}_{suffix}'], cut)
     h_den = cut_slice(sig_histo[f'vtxreco_{VAR_2D}_den'], cut)
 
@@ -282,10 +288,11 @@ def plot_eff_2d(sig_histo, cut, prefix, suffix, idr, run2range=False, point=None
         dr_subtitle = ''
         dr_tag = 'alldr'
 
-    fig, ax = plt.subplots(figsize=(10, 8))
+    fig, ax = ptools.new_fig(year, cms_label=False)
     mesh = ax.pcolormesh(np.arange(n_pt + 1), np.arange(n_lxy + 1), eff,
                          cmap='viridis', vmin=0, vmax=1)
     fig.colorbar(mesh, ax=ax).set_label('Reco Efficiency', fontsize=18)
+    ptools.add_cms_label(ax, year)
 
     for i in range(n_lxy):
         for j in range(n_pt):
@@ -298,8 +305,8 @@ def plot_eff_2d(sig_histo, cut, prefix, suffix, idr, run2range=False, point=None
     ax.set_xticklabels([f'{e:g}' for e in pt_axis.edges])
     ax.set_yticks(np.arange(n_lxy + 1))
     ax.set_yticklabels([f'{e:g}' for e in lxy_axis.edges])
-    ax.set_xlabel(r'Gen $p_{T}(e^+e^-)$ [GeV]', fontsize=20)
-    ax.set_ylabel(r'Gen $L_{xy}$ [cm]', fontsize=20)
+    ax.set_xlabel(r'Gen $p_{T}(e^+e^-)$ (GeV)', fontsize=20)
+    ax.set_ylabel(r'Gen $L_{xy}$ (cm)', fontsize=20)
     sample_tag = point_title if point is not None else ('Run 2 Mass Range' if run2range else 'All Signal Samples')
     ax.set_title(f'{title} [{CUTS[cut].capitalize()}, {sample_tag}]' + dr_subtitle, fontsize=16)
     ax.tick_params(axis='both', labelsize=14)
@@ -316,7 +323,7 @@ def plot_eff_2d(sig_histo, cut, prefix, suffix, idr, run2range=False, point=None
 
 s_hists = util.load(saved_signal_hists)[0]
 
-# single signal point (m1 [GeV], delta, ctau [mm]) for the ee reco efficiency maps
+# single signal point (m1 (GeV), delta, ctau (mm)) for the ee reco efficiency maps
 SINGLE_POINT = (50, 0.2, 100)
 
 for cut in CUTS:

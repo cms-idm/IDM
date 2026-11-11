@@ -25,8 +25,8 @@ muonEtFrac= Regular(100,0,1,name="muonEtFrac",label="muonEtFrac")
 ###### Numerical Axes ######
 ############################
 # Electrons
-ele_pt = Regular(100,0,50,name="pt",label="$p_{T}$ [GeV]")
-ele_pt_zoom_fine = Regular(250,0,50,name="pt",label="$p_{T}$ [GeV]")
+ele_pt = Regular(100,0,50,name="pt",label="$p_{T}$ (GeV)")
+ele_pt_zoom_fine = Regular(250,0,50,name="pt",label="$p_{T}$ (GeV)")
 ele_eta = Regular(60,-3,3,name="eta",label=r"$\eta$")
 ele_eta_fine = Regular(300,-3,3,name="eta",label=r"$\eta$")
 ele_phi = Regular(64,-3.2,3.2,name="phi",label=r"$\phi$")
@@ -47,35 +47,35 @@ ele_miniRelIsoCorr = Regular(100,0,10,name="iso",label="Corrected Mini Relative 
 
 ele_prob = Regular(100,0,1,name="prob",label=r"Electron Track $\chi^2$ Probability")
 ele_angRes = Regular(100,0,0.1,name="angRes",label=r"Angular Resolution $\sqrt{\sigma_\eta^2 + \sigma_\phi^2}$")
-ele_dxy = Regular(100,0,40,name="dxy",label="Electron Track $d_{xy}$ [cm]")
+ele_dxy = Regular(100,0,40,name="dxy",label="Electron Track $d_{xy}$ (cm)")
 ele_dxySignif = Regular(150,0,150,name="dxy_signif",label=r"Electron Track $d_{xy}/\sigma_{d_{xy}}$")
-ele_dz = Regular(100,0,5,name="dz",label="Electron Track $d_{z}$ [cm]")
+ele_dz = Regular(100,0,5,name="dz",label="Electron Track $d_{z}$ (cm)")
 ele_dxydz = Regular(100,0,5,name="dxydz",label="Electron Track $d_{xy}/d_{z}$")
 ele_logdxydz = Regular(200,-10,10,name="logdxydz",label="Electron Track $log(d_{xy}/d_{z})$")
 
 # Dielectrons
-ee_mass = Regular(100,0,4,name="mass",label="$m_{e^+e^-}$ [GeV]")
+ee_mass = Regular(100,0,4,name="mass",label="$m_{e^+e^-}$ (GeV)")
 ee_dr = Regular(100,0,1,name='dr',label=r"$\Delta R$")
 ee_dr_narrow = Regular(100,0,0.2,name='dr',label=r"$\Delta R$")
-ee_ctau = Regular(100, 0, 1000, name="ctau", label=r"$c\tau$ [mm]")
-ee_ctau_pr = Regular(100, 0, 500, name="ctau", label=r"$c\tau$ [mm]")
+ee_ctau = Regular(100, 0, 1000, name="ctau", label=r"$c\tau$ (mm)")
+ee_ctau_pr = Regular(100, 0, 500, name="ctau", label=r"$c\tau$ (mm)")
 
 # Vertices
-vxy = Regular(2000,0,50,name="vxy",label="$v_{xy}$ [cm]")
-vxy_coarse = Regular(100,0,50,name="vxy",label="$v_{xy}$ [cm]")
-vxy_zoom_fine = Regular(250,0,25,name="vxy",label="$v_{xy}$ [cm]")
-Lxy_zoom_fine = Regular(200,0,40,name="lxy",label="$L_{xy}$ [cm]")
-vxy_zoom = Regular(200,0,20,name="vxy",label="$v_{xy}$ [cm]")
-vxy_zoomzoom = Regular(500,0,5,name="vxy",label="$v_{xy}$ [cm]")
-vxy_projected = Regular(4000,-50,50,name="vxy_projected",label="$v_{xy}$ [cm]")
-lxy_coarse = Regular(100,0,50,name="lxy",label="$L_{xy}$ [cm]")
-lxy_log = Regular(60,1e-4,100,name="lxy",label="$L_{xy}$ [cm]",transform=transform.log)
-vz = Regular(2000,0,50,name="vz",label="$v_{z}$ [cm]")
-vz_coarse = Regular(100,0,50,name="vz",label="$v_{z}$ [cm]")
-vz_fine = Regular(250,0,50,name="vz",label="$v_{z}$ [cm]")
-Lz_fine = Regular(250,0,50,name="lz",label="$L_{z}$ [cm]")
-mass = Regular(100,0,400,name="mass",label="$m_{e^+e^-}$ [GeV]")
-energy = Regular(200,0,100,name="energy",label="Dielectron Energy [GeV]")
+vxy = Regular(2000,0,50,name="vxy",label="$v_{xy}$ (cm)")
+vxy_coarse = Regular(100,0,50,name="vxy",label="$v_{xy}$ (cm)")
+vxy_zoom_fine = Regular(250,0,25,name="vxy",label="$v_{xy}$ (cm)")
+Lxy_zoom_fine = Regular(200,0,40,name="lxy",label="$L_{xy}$ (cm)")
+vxy_zoom = Regular(200,0,20,name="vxy",label="$v_{xy}$ (cm)")
+vxy_zoomzoom = Regular(500,0,5,name="vxy",label="$v_{xy}$ (cm)")
+vxy_projected = Regular(4000,-50,50,name="vxy_projected",label="$v_{xy}$ (cm)")
+lxy_coarse = Regular(100,0,50,name="lxy",label="$L_{xy}$ (cm)")
+lxy_log = Regular(60,1e-4,100,name="lxy",label="$L_{xy}$ (cm)",transform=transform.log)
+vz = Regular(2000,0,50,name="vz",label="$v_{z}$ (cm)")
+vz_coarse = Regular(100,0,50,name="vz",label="$v_{z}$ (cm)")
+vz_fine = Regular(250,0,50,name="vz",label="$v_{z}$ (cm)")
+Lz_fine = Regular(250,0,50,name="lz",label="$L_{z}$ (cm)")
+mass = Regular(100,0,400,name="mass",label="$m_{e^+e^-}$ (GeV)")
+energy = Regular(200,0,100,name="energy",label="Dielectron Energy (GeV)")
 dR_over_pT = Regular(100,0,10,name="dR_over_pT",label=r"$\Delta R/p_T$")
 dR_over_m = Regular(100,0,5,name="dR_over_m",label=r"$\Delta R/m$")
 dR_over_pTm = Regular(100,0,20,name="dR_over_pTm",label=r"$\Delta R/(p_T/m)$")
@@ -89,7 +89,7 @@ vtx_chi2 = Regular(150,0,30,name="chi2",label=r"Vertex Fit $\chi^2/df$")
 vtx_vxySignif = Regular(100,0,100,name="vxy_signif",label="Vertex $v_{xy}$ Significance")
 vtx_prob = Regular(100,0,1,name="prob",label=r"Vertex $\chi^2$ Probability")
 vtx_pt = Regular(100,0,200,name="pt",label="Selected Vertex $p_T$")
-vtx_mass = Regular(100,0,5,name="mass",label="$m_{e^+e^-}$ [GeV]")
+vtx_mass = Regular(100,0,5,name="mass",label="$m_{e^+e^-}$ (GeV)")
 ee_met_dphi = Regular(100,0,0.5,name="dphi",label=r"$\Delta \phi$")
 
 # Gen-matching
@@ -111,12 +111,12 @@ dR = Regular(100,0,6,name='dr',label=r"$\Delta R$")
 dR_zoom = Regular(100,0,1,name='dr_zoom',label=r"$\Delta R$")
 dRj = Regular(100,0,6,name='drj',label=r"$\Delta R$")
 dphi = Regular(64,0,3.2,name="dphi",label=r"$\Delta \phi$")
-dxy = Regular(40,0,0.2,name='dxy',label="$d_{xy}$ [cm]")
-dxy_fine = Regular(100,0,0.2,name='dxy',label="$d_{xy}$ [cm]")
+dxy = Regular(40,0,0.2,name='dxy',label="$d_{xy}$ (cm)")
+dxy_fine = Regular(100,0,0.2,name='dxy',label="$d_{xy}$ (cm)")
 pfiso = Regular(100,0,1,name='pfiso',label=r"$I_{\mathrm{PF}}^{\mathrm{rel}}$")
 #pfmet_pt = Regular(100,0,300,name='pfmet_pt',label="$I_{\mathrm{PF}}^{\mathrm{met}}$") #new
 dphi_generic = Regular(32,0,3.2,name="dphi",label=r"$\Delta \phi$")
-met_pt = Regular(100,0,400,name="met_pt",label="$p_T^{miss}$ [GeV]")
+met_pt = Regular(100,0,400,name="met_pt",label="$p_T^{miss}$ (GeV)")
 njets = Integer(0,8,name="njets",label="$N_{jets}$")
 nvtxs = Integer(0,8,name="nvtxs",label="$N_{vertices}$")
 neles = Integer(0,4,name="neles",label="$N_{electrons}$")
@@ -126,7 +126,7 @@ jet_abseta = Regular(30,0,3,name="eta",label=r"$Leading Jet |\eta|$")
 jet_pt = Regular(100,50,300,name="pt",label="Leading Jet $p_T$")
 met = Regular(100,50,300,name='met',label='met')
 cos_collinear = Regular(1000, -1, 1, name="cos_collinear", label=r"$cos(\theta_{collinear})$")
-ctau = Regular(10000, 0, 1000, name="ctau", label=r"$c\tau$ [mm]")
+ctau = Regular(10000, 0, 1000, name="ctau", label=r"$c\tau$ (mm)")
 
 # Electron ID
 ele_id = Regular(50,-1,4,name="ele_id",label="Low $p_T$ electron ID Score")
@@ -139,15 +139,15 @@ edges = np.concatenate([
     np.linspace(1.5, 10.0, 18),   # 18 bins × 0.5 width
     np.linspace(11.0, 50.0, 40),  # 40 bins × 1 width
 ])
-ele_pt_special = Variable(edges, name="pt", label="$p_{T}$ [GeV]")
-#Lxy_zoom_fine = Regular(400,0,40,name="lxy",label="$L_{xy}$ [cm]")
+ele_pt_special = Variable(edges, name="pt", label="$p_{T}$ (GeV)")
+#Lxy_zoom_fine = Regular(400,0,40,name="lxy",label="$L_{xy}$ (cm)")
 edges = np.concatenate([
     np.linspace(0, 0.1, 21),      # 20 bins × 0.005 width
     np.linspace(0.15, 1.0, 18),   # 18 bins × 0.05 width
     np.linspace(1.5, 10.0, 18),   # 18 bins × 0.5 width
     np.linspace(11.0, 40.0, 30),  # 30 bins × 1 width
 ])
-ele_lxy_special = Variable(edges, name="lxy", label="$L_{xy}$ [cm]")
+ele_lxy_special = Variable(edges, name="lxy", label="$L_{xy}$ (cm)")
 
 # resolution axes
 edges = np.concatenate([
@@ -161,15 +161,15 @@ res_pt = Variable(edges, name="res", label=r"$\Delta p_T/p_T^\mathrm{gen}$")
 res_e = Variable(edges, name="res", label=r"$\Delta E/E^\mathrm{gen}$")
 res_dxy = Variable(edges, name="res", label=r"$\Delta d_{xy}/d_{xy}^\mathrm{gen}$")
 
-ele_pt_res = Variable(np.concatenate([np.arange(0, 21, dtype=float), np.arange(22, 51, 2, dtype=float)]), name="pt", label="$p_{T}$ [GeV]")
-ele_lxy_res = Variable([0, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.7, 1, 1.5, 2, 3, 4, 5, 7, 10, 15, 20, 30, 40], name="lxy", label="$L_{xy}$ [cm]")
+ele_pt_res = Variable(np.concatenate([np.arange(0, 21, dtype=float), np.arange(22, 51, 2, dtype=float)]), name="pt", label="$p_{T}$ (GeV)")
+ele_lxy_res = Variable([0, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.7, 1, 1.5, 2, 3, 4, 5, 7, 10, 15, 20, 30, 40], name="lxy", label="$L_{xy}$ (cm)")
 ele_eta_res = Variable([-3, -2.4, -2., -1.8, -1.6, -1.4, -1.2, -1., -0.9, -0.8, -0.7, -0.6, -0.5, -0.4, -0.3, -0.2, -0.1, 0., 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.2, 1.4, 1.6, 1.8, 2., 2.4, 3.], name="eta", label="$\eta$")
 
 # Coarse axes for 3D mean-resolution histograms (match elerecoeff_plots_2D.py binning)
 _pt_edges_coarse  = [0, 1, 2, 5, 10, 20, 50]
 _lxy_edges_coarse = [0, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 40]
 _eta_edges_coarse = list(np.linspace(-3, 3, 9))
-genpt_coarse  = Variable(_pt_edges_coarse,  name='pt',  label=r'$p_T^\mathrm{gen}$ [GeV]')
-genlxy_coarse = Variable(_lxy_edges_coarse, name='lxy', label=r'$L_{xy}$ [cm]')
+genpt_coarse  = Variable(_pt_edges_coarse,  name='pt',  label=r'$p_T^\mathrm{gen}$ (GeV)')
+genlxy_coarse = Variable(_lxy_edges_coarse, name='lxy', label=r'$L_{xy}$ (cm)')
 geneta_coarse = Variable(_eta_edges_coarse, name='eta', label=r'$\eta^\mathrm{gen}$')
 

@@ -10,8 +10,8 @@ from hist.axis import Variable
 
 # coarse binning for the 4D per-electron reco efficiency hists (no flow bins; overflow is clipped into the top bin at fill time):
 # single-electron gen pt and |eta|, gen ee pair lxy and dR
-ee_pt_4d     = Variable([0, 5, 10, 20, 100],          name="pt",     label=r"Gen $p_T(e)$ [GeV]",        flow=False)
-ee_lxy_4d    = Variable([0, 1, 5, 10, 15, 100],       name="lxy",    label=r"Gen $L_{xy}(e^+e^-)$ [cm]", flow=False)
+ee_pt_4d     = Variable([0, 5, 10, 20, 100],          name="pt",     label=r"Gen $p_T(e)$ (GeV)",        flow=False)
+ee_lxy_4d    = Variable([0, 1, 5, 10, 15, 100],       name="lxy",    label=r"Gen $L_{xy}(e^+e^-)$ (cm)", flow=False)
 ee_dr_4d     = Variable([0, 0.01, 0.1, 1, 5],         name="dr",     label=r"Gen $\Delta R(e^+e^-)$",    flow=False)
 ee_abseta_4d = Variable([0, 1, 1.5, 2, 2.5, 3],       name="abseta", label=r"Gen $|\eta(e)|$",           flow=False)
 ee4d_cats    = ['lpt', 'ged', 'alpt', 'xlpt', 'none', 'sumnoalpt', 'alptnosum']

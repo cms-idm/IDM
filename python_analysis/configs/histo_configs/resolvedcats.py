@@ -22,7 +22,7 @@ cut  = StrCategory([], name="cut",  label="Cut Applied",  growth=True)
 
 vtx_sign = IntCategory([-1, 1], name="sign", label="Vertex sign (q1*q2)")
 
-ele_pt        = Regular(50, 0,   50,  name="pt",          label="$p_{T}$ [GeV]")
+ele_pt        = Regular(50, 0,   50,  name="pt",          label="$p_{T}$ (GeV)")
 ele_eta       = Regular(50, -3,   3,  name="eta",         label=r"$\eta$")
 ele_phi       = Regular(50, -3.2, 3.2, name="phi",        label=r"$\phi$")
 ele_trkHits   = Regular(50, 0,   30,  name="numTrkHits",   label="Number of Tracker Hits")
@@ -39,35 +39,35 @@ ele_miniIsoCorr    = Regular(50, 0, 100, name="iso", label="Corrected Mini Iso")
 ele_miniRelIsoCorr = Regular(50, 0,  10, name="iso", label="Corrected Mini Relative Iso")
 ele_prob    = Regular(50, 0, 1,   name="prob",   label=r"Electron Track $\chi^2$ Probability")
 ele_angRes  = Regular(50, 0, 0.1, name="angRes", label=r"Angular Resolution $\sqrt{\sigma_\eta^2 + \sigma_\phi^2}$")
-ele_dxy     = Regular(50, 0, 40,  name="dxy",    label="Electron Track $d_{xy}$ [cm]")
-ele_dz      = Regular(50, 0, 5,   name="dz",     label="Electron Track $d_{z}$ [cm]")
+ele_dxy     = Regular(50, 0, 40,  name="dxy",    label="Electron Track $d_{xy}$ (cm)")
+ele_dz      = Regular(50, 0, 5,   name="dz",     label="Electron Track $d_{z}$ (cm)")
 ele_id      = Regular(50, -1, 4,  name="ele_id", label="Low $p_T$ electron ID Score")
 
 ee_dr = Regular(50, 0, 1, name='dr', label=r"$\Delta R$")
 ee_dr_log = Regular(50, 1e-5, 1, name='dr', label=r"$\Delta R$", transform=hist.axis.transform.log)
 
-vxy_coarse = Regular(50, 0, 50, name="vxy", label="$v_{xy}$ [cm]")
-vz_coarse  = Regular(50, 0, 50, name="vz",  label="$v_{z}$ [cm]")
+vxy_coarse = Regular(50, 0, 50, name="vxy", label="$v_{xy}$ (cm)")
+vz_coarse  = Regular(50, 0, 50, name="vz",  label="$v_{z}$ (cm)")
 vtx_chi2   = Regular(50, 0, 30,  name="chi2", label=r"Vertex Fit $\chi^2/df$")
 vtx_pt     = Regular(50, 0, 200, name="pt",   label="Selected Vertex $p_T$")
-vtx_mass   = Regular(50, 0, 5,   name="mass", label="$m_{e^+e^-}$ [GeV]")
+vtx_mass   = Regular(50, 0, 5,   name="mass", label="$m_{e^+e^-}$ (GeV)")
 
 dphiJ    = Regular(50, 0, 3.2, name="dphiJ",   label=r"$\Delta \phi$")
 dR       = Regular(50, 0, 6,   name='dr',      label=r"$\Delta R$")
 dR_zoom  = Regular(50, 0, 1,   name='dr_zoom', label=r"$\Delta R$")
 dRj      = Regular(50, 0, 6,   name='drj',     label=r"$\Delta R$")
-dxy_fine = Regular(50, 0, 0.2, name='dxy',     label="$d_{xy}$ [cm]")
+dxy_fine = Regular(50, 0, 0.2, name='dxy',     label="$d_{xy}$ (cm)")
 
 # ── Extra axes not in histobins ──────────────────────────────────────────────
-_e_energy  = Regular(50,  0, 100,  name='e',        label='E [GeV]')
-_calIso    = Regular(50,  0, 100,  name='iso',       label='Calo Iso [GeV]')
+_e_energy  = Regular(50,  0, 100,  name='e',        label='E (GeV)')
+_calIso    = Regular(50,  0, 100,  name='iso',       label='Calo Iso (GeV)')
 _calRelIso = Regular(50,  0,   5,  name='relIso',    label='Calo Relative Iso')
-_rhoEA     = Regular(50,  0,  20,  name='rhoEA',     label=r'$\rho \times EA$ [GeV]')
+_rhoEA     = Regular(50,  0,  20,  name='rhoEA',     label=r'$\rho \times EA$ (GeV)')
 _sieie     = Regular(50,  0,0.05,  name='sieie',     label=r'$\sigma_{i\eta i\eta}$')
 _dEtaSeed  = Regular(50,  0,0.01,  name='dEtaSeed',  label=r'$|\Delta\eta_\mathrm{seed}|$')
 _dPhiIn    = Regular(50,  0, 0.1,  name='dPhiIn',    label=r'$|\Delta\phi_\mathrm{in}|$')
 _HoE       = Regular(50,  0,   1,  name='HoE',       label='H/E')
-_invEmP    = Regular(50,  0, 0.1,  name='invEmP',    label=r'$|1/E - 1/p|$ [GeV$^{-1}$]')
+_invEmP    = Regular(50,  0, 0.1,  name='invEmP',    label=r'$|1/E - 1/p|$ (GeV$^{-1}$)')
 _missHits  = Integer(0,    5,       name='missHits',  label='Exp. Missing Inner Hits')
 _charge    = IntCategory([-1, 1],   name='charge',    label='Charge')
 _drNearestEle = Regular(50, 0, 6,  name='drNearestEle', label=r'Min $\Delta R(e, e_{\mathrm{other\ lpt}})$')
@@ -76,16 +76,16 @@ _drNearestEle = Regular(50, 0, 6,  name='drNearestEle', label=r'Min $\Delta R(e,
 # other AllLptElectron -- large dPt/dVxy/dVz/opposite charge point to a
 # genuine second electron, while near-zero values across the board point to
 # a duplicate GSF track.
-_dPt      = Regular(50, -50, 50, name='dpt',    label=r'$p_T(e_{\mathrm{sel}}) - p_T(e_{\mathrm{near}})$ [GeV]')
+_dPt      = Regular(50, -50, 50, name='dpt',    label=r'$p_T(e_{\mathrm{sel}}) - p_T(e_{\mathrm{near}})$ (GeV)')
 _dPtRel   = Regular(50,  -2,  2, name='dptRel', label=r'$(p_T(e_{\mathrm{sel}}) - p_T(e_{\mathrm{near}}))/p_T(e_{\mathrm{sel}})$')
-_dVxyNear = Regular(50,   0, 10, name='dvxy',   label=r'$|v_{xy}(e_{\mathrm{sel}}) - v_{xy}(e_{\mathrm{near}})|$ [cm]')
-_dVzNear  = Regular(50,   0, 10, name='dvz',    label=r'$|v_z(e_{\mathrm{sel}}) - v_z(e_{\mathrm{near}})|$ [cm]')
-_dDxyNear = Regular(50,   0,  5, name='ddxy',   label=r'$|d_{xy}(e_{\mathrm{sel}}) - d_{xy}(e_{\mathrm{near}})|$ [cm]')
-_dDzNear  = Regular(50,   0,  5, name='ddz',    label=r'$|d_z(e_{\mathrm{sel}}) - d_z(e_{\mathrm{near}})|$ [cm]')
+_dVxyNear = Regular(50,   0, 10, name='dvxy',   label=r'$|v_{xy}(e_{\mathrm{sel}}) - v_{xy}(e_{\mathrm{near}})|$ (cm)')
+_dVzNear  = Regular(50,   0, 10, name='dvz',    label=r'$|v_z(e_{\mathrm{sel}}) - v_z(e_{\mathrm{near}})|$ (cm)')
+_dDxyNear = Regular(50,   0,  5, name='ddxy',   label=r'$|d_{xy}(e_{\mathrm{sel}}) - d_{xy}(e_{\mathrm{near}})|$ (cm)')
+_dDzNear  = Regular(50,   0,  5, name='ddz',    label=r'$|d_z(e_{\mathrm{sel}}) - d_z(e_{\mathrm{near}})|$ (cm)')
 
 # Axes for the vertex (vtx) record's own scalar fields -- see _VTX_HISTS and
 # _VTXLEG_HISTS below.
-_vtxVxyErr    = Regular(50, 0, 10,  name='sigma_vxy', label='$v_{xy}$ Error [cm]')
+_vtxVxyErr    = Regular(50, 0, 10,  name='sigma_vxy', label='$v_{xy}$ Error (cm)')
 _vtxProb      = Regular(50, 0, 1,   name='prob',       label=r'Vertex $\chi^2$ Probability')
 _metDphi      = Regular(50, 0, 3.2, name='METdPhi',     label=r'$\Delta\phi(\mathrm{vtx}, E_T^{\mathrm{miss}})$')
 _eleDphi      = Regular(50, 0, 3.2, name='eleDphi',    label=r'$\Delta\phi(e_1, e_2)$')
@@ -95,13 +95,13 @@ _legType      = StrCategory(['L', 'R'],         name='ele_type', label='Leg Coll
 _legMatchType = IntCategory([], name='matchType', label='Leg Gen Match Type', growth=True)
 _matchSignAx  = IntCategory([], name='matchSign', label='Vertex Gen-Match Sign', growth=True)
 _boolFlag     = IntCategory([0, 1], name='flag', label='Boolean Flag')
-_vtxLegDxyErr = Regular(50, 0, 5, name='dxyErr', label=r'Refit $d_{xy}$ Error [cm]')
-_vtxLegDzErr  = Regular(50, 0, 5, name='dzErr',  label=r'Refit $d_z$ Error [cm]')
+_vtxLegDxyErr = Regular(50, 0, 5, name='dxyErr', label=r'Refit $d_{xy}$ Error (cm)')
+_vtxLegDzErr  = Regular(50, 0, 5, name='dzErr',  label=r'Refit $d_z$ Error (cm)')
 
 # Same variable-width style as histobins.py's ele_lxy_res, extended out to 150 cm.
 _gen_lxy = Variable(
     [0, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.7, 1, 1.5, 2, 3, 4, 5, 7, 10, 15, 20, 30, 40, 50, 70, 100, 150],
-    name='lxy', label='$L_{xy}$ [cm]',
+    name='lxy', label='$L_{xy}$ (cm)',
 )
 
 # Every per-electron reco block below (res_*, vtx_ele_*, and their
@@ -179,9 +179,9 @@ _VTXELE_HISTS = [(f, a) for f, a in _ELE_HISTS if f not in _VTXELE_EXCLUDE]
 # into mindRj/mindPhiJ), e{1,2}_idx (a plain array index, not a physical
 # quantity).
 _VTX_HISTS = [
-    ('vxy',        'vxy',        vxy_coarse),     # reco transverse vertex displacement [cm]
-    ('sigmavxy',   'sigmavxy',   _vtxVxyErr),      # uncertainty on vxy [cm]
-    ('vz',         'vz',         vz_coarse),       # reco vertex z position [cm]
+    ('vxy',        'vxy',        vxy_coarse),     # reco transverse vertex displacement (cm)
+    ('sigmavxy',   'sigmavxy',   _vtxVxyErr),      # uncertainty on vxy (cm)
+    ('vz',         'vz',         vz_coarse),       # reco vertex z position (cm)
     ('prob',       'prob',       _vtxProb),        # vertex fit chi2 probability
     ('dr_raw',     'dR',         ee_dr),           # e1-e2 dR, pre-refit
     ('sign',       'sign',       vtx_sign),        # q(e1)*q(e2)
@@ -198,7 +198,7 @@ _VTX_HISTS = [
     ('cos_collinear_fromPV',       'cos_collinear_fromPV',       _cosCollinear),
     ('cos_collinear_fromPV_refit', 'cos_collinear_fromPV_refit', _cosCollinear),
     ('gen_cos_collinear_fromPV',   'gen_cos_collinear_fromPV',   _cosCollinear),  # gen-level analog, signal MC only
-    ('projectedLxy', 'projectedLxy', vxy_coarse),  # vxy projected onto the collinear direction [cm]
+    ('projectedLxy', 'projectedLxy', vxy_coarse),  # vxy projected onto the collinear direction (cm)
     ('vxy_fromPV',   'vxy_fromPV',   vxy_coarse),  # sqrt'd below -- ntuple stores it squared
     ('typ',        'typ',        _vtxType),        # leg-collection combination (LL/LR/RR)
     ('isGood',     'isGood',     _boolFlag),
@@ -219,10 +219,10 @@ _VTXLEG_HISTS = [
     ('typ',          _legType),        # which collection (Electron="R"/LptElectron="L") this leg came from
     ('isMatched',    _boolFlag),       # leg-level gen-match flag
     ('matchType',    _legMatchType),   # leg-level gen-match type code
-    ('refit_dxy',    dxy_fine),        # vertex-constrained refit dxy [cm]
-    ('refit_dxyErr', _vtxLegDxyErr),   # uncertainty on refit dxy [cm]
-    ('refit_dz',     ele_dz),          # vertex-constrained refit dz [cm]
-    ('refit_dzErr',  _vtxLegDzErr),    # uncertainty on refit dz [cm]
+    ('refit_dxy',    dxy_fine),        # vertex-constrained refit dxy (cm)
+    ('refit_dxyErr', _vtxLegDxyErr),   # uncertainty on refit dxy (cm)
+    ('refit_dz',     ele_dz),          # vertex-constrained refit dz (cm)
+    ('refit_dzErr',  _vtxLegDzErr),    # uncertainty on refit dz (cm)
     ('refit_chi2',   ele_chi2),        # vertex-constrained refit leg chi2
 ]
 _VTXLEG_ABS_FIELDS = {'refit_dxy', 'refit_dz'}
@@ -247,7 +247,7 @@ _FIELD_ALIASES = {'IDscore': 'ID', 'full5x5sigmaIetaIeta': 'full55sigmaIetaIeta'
 # can't just reuse _FIELD_ALIASES, which would wrongly redirect IDscore->ID.
 _VTXELE_FIELD_ALIASES = {'full5x5sigmaIetaIeta': 'full55sigmaIetaIeta'}
 
-# Approximate electron mass [GeV], used only to build a Lorentz vector for
+# Approximate electron mass (GeV), used only to build a Lorentz vector for
 # the two resolved reco legs (see _make_p4) -- negligible next to detector
 # resolution at the pt scales histogrammed here, included anyway since it's free.
 _ELECTRON_MASS = 0.000511

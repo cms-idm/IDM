@@ -3,17 +3,10 @@ import matplotlib.pyplot as plt
 import mplhep as hep
 import coffea.util as util
 import analysisTools.utils as utils
+import analysisTools.plotTools as ptools
 import os
 
-plt.rcParams.update({
-    'font.size':        20,
-    'axes.titlesize':   24,
-    'axes.labelsize':   20,
-    'xtick.labelsize':  20,
-    'ytick.labelsize':  20,
-    'legend.fontsize':  18,
-    'figure.titlesize': 24,
-})
+ptools.set_plot_style()
 
 outdir    = 'workarea'
 vers      = 'Jul2026noID'
@@ -23,7 +16,6 @@ saved_signal_hists = f"{outdir}/hists_sig{vers}_{selection}-sel_{hists_tag}.coff
 seltag = 'minjdphi'
 cut    = 'cut8'
 year   = 2024
-size   = (16, 12)
 
 s_hists = util.load(saved_signal_hists)[0]
 s_pts   = utils.get_signal_point_dict(s_hists)
@@ -54,13 +46,8 @@ series_list = [
 ]
 
 
-def _samp_name(m1, delta, ctau):
-    row = s_pts[np.isclose(s_pts.m1, m1) & np.isclose(s_pts.delta, delta) & (s_pts.ctau == ctau)]
-    return row['name'].iloc[0] if not row.empty else None
-
-
 def _sig_label(m1, delta, ctau):
-    return rf'$M_1$={m1}, $\Delta$={delta}, $c\tau$={ctau} mm'
+    return rf'$M_1$={m1}, $\delta$={ptools.fmt_delta(delta)}, $c\tau$={ctau} mm'
 
 
 def _varbin_histplot(h, ax, **kwargs):
@@ -87,10 +74,10 @@ def _histplot(h, ax, varbin=False, **kwargs):
 # (hist_key_suffix, xlabel, doLogy, varbin)
 # hist keys: {cat}_{suffix}  e.g. mele_gen_lxy, mpho_gen_lxy
 _gen_vars = [
-    ('gen_lxy',         r'Gen $L_{xy}$ [cm]',                True,  True),
-    ('gen_ee_pt',       r'Gen $p_T(e^+e^-)$ [GeV]',          False, False),
-    ('gen_lead_pt',     r'Gen leading $p_T$ [GeV]',           False, False),
-    ('gen_sublead_pt',  r'Gen subleading $p_T$ [GeV]',        False, False),
+    ('gen_lxy',         r'Gen $L_{xy}$ (cm)',                True,  True),
+    ('gen_ee_pt',       r'Gen $p_T(e^+e^-)$ (GeV)',          False, False),
+    ('gen_lead_pt',     r'Gen leading $p_T$ (GeV)',           False, False),
+    ('gen_sublead_pt',  r'Gen subleading $p_T$ (GeV)',        False, False),
     ('gen_ee_dr',       r'Gen $\Delta R(e^+e^-)$',             True,  False),
     ('gen_ee_eta',      r'Gen $\eta(e^+e^-)$',                False, False),
     ('gen_lead_eta',    r'Gen leading $\eta$',                 False, False),
@@ -99,39 +86,39 @@ _gen_vars = [
 
 # (hist_key, xlabel, doLogy, varbin)
 _mele_vars = [
-    ('mele_pt',                  r'Reco $p_T$ [GeV]',                          False, False),
+    ('mele_pt',                  r'Reco $p_T$ (GeV)',                          False, False),
     ('mele_eta',                 r'Reco $\eta$',                                False, False),
     ('mele_phi',                 r'Reco $\phi$',                                False, False),
-    ('mele_e',                   r'Reco $E$ [GeV]',                             False, False),
+    ('mele_e',                   r'Reco $E$ (GeV)',                             False, False),
     ('mele_ID',                  r'Low-$p_T$ ele ID score',                     False, False),
     ('mele_IDscore',             r'Low-$p_T$ ele ID score',                     False, False),
     ('mele_angRes',              r'Angular resolution $\sqrt{\sigma_\eta^2+\sigma_\phi^2}$', False, False),
-    ('mele_vxy',                 r'$|v_{xy}|$ [cm]',                            True,  False),
-    ('mele_vz',                  r'$|v_z|$ [cm]',                               True,  False),
-    ('mele_dxy',                 r'$|d_{xy}|$ [cm]',                            True,  False),
-    ('mele_dz',                  r'$|d_z|$ [cm]',                               False, False),
+    ('mele_vxy',                 r'$|v_{xy}|$ (cm)',                            True,  False),
+    ('mele_vz',                  r'$|v_z|$ (cm)',                               True,  False),
+    ('mele_dxy',                 r'$|d_{xy}|$ (cm)',                            True,  False),
+    ('mele_dz',                  r'$|d_z|$ (cm)',                               False, False),
     ('mele_trkChi2',             r'Track $\chi^2/\mathrm{dof}$',                True,  False),
     ('mele_trkProb',             r'Track $\chi^2$ probability',                  True,  False),
     ('mele_numTrackerHits',      r'Number of tracker hits',                      False, False),
     ('mele_numPixHits',          r'Number of pixel hits',                        False, False),
     ('mele_numStripHits',        r'Number of strip hits',                        False, False),
     ('mele_charge',              r'Charge',                                      False, False),
-    ('mele_trkIso',              r'Tracker iso [GeV]',                           True,  False),
+    ('mele_trkIso',              r'Tracker iso (GeV)',                           True,  False),
     ('mele_trkRelIso',           r'Tracker relative iso',                        True,  False),
-    ('mele_calIso',              r'Calo iso [GeV]',                              True,  False),
+    ('mele_calIso',              r'Calo iso (GeV)',                              True,  False),
     ('mele_calRelIso',           r'Calo relative iso',                           True,  False),
-    ('mele_PFIso',               r'PF iso [GeV]',                                True,  False),
+    ('mele_PFIso',               r'PF iso (GeV)',                                True,  False),
     ('mele_PFRelIso',            r'PF relative iso',                             True,  False),
-    ('mele_miniIso',             r'Mini iso [GeV]',                              True,  False),
+    ('mele_miniIso',             r'Mini iso (GeV)',                              True,  False),
     ('mele_miniRelIso',          r'Mini relative iso',                           True,  False),
-    ('mele_PFIsoEleCorr',        r'PF iso (ele-corr) [GeV]',                     True,  False),
+    ('mele_PFIsoEleCorr',        r'PF iso (ele-corr) (GeV)',                     True,  False),
     ('mele_PFRelIsoEleCorr',     r'PF relative iso (ele-corr)',                  True,  False),
-    ('mele_miniIsoEleCorr',      r'Mini iso (ele-corr) [GeV]',                   True,  False),
+    ('mele_miniIsoEleCorr',      r'Mini iso (ele-corr) (GeV)',                   True,  False),
     ('mele_miniRelIsoEleCorr',   r'Mini relative iso (ele-corr)',                True,  False),
-    ('mele_chadIso',             r'Charged hadron iso [GeV]',                    True,  False),
-    ('mele_nhadIso',             r'Neutral hadron iso [GeV]',                    True,  False),
-    ('mele_phoIso',              r'Photon iso [GeV]',                            True,  False),
-    ('mele_rhoEA',               r'$\rho \times EA$ [GeV]',                      False, False),
+    ('mele_chadIso',             r'Charged hadron iso (GeV)',                    True,  False),
+    ('mele_nhadIso',             r'Neutral hadron iso (GeV)',                    True,  False),
+    ('mele_phoIso',              r'Photon iso (GeV)',                            True,  False),
+    ('mele_rhoEA',               r'$\rho \times EA$ (GeV)',                      False, False),
     ('mele_minDRtoReg',          r'Min $\Delta R$ to reg. electron',             True,  False),
     ('mele_drNearestEle',        r'Min $\Delta R$ to other low-$p_T$ ele',       True,  False),
     ('mele_mindRj',              r'Min $\Delta R$ to jet',                       True,  False),
@@ -140,28 +127,28 @@ _mele_vars = [
     ('mele_absdEtaSeed',         r'$|\Delta\eta_\mathrm{seed}|$',                False, False),
     ('mele_absdPhiIn',           r'$|\Delta\phi_\mathrm{in}|$',                  False, False),
     ('mele_HoverE',              r'H/E',                                         True,  False),
-    ('mele_abs1overEm1overP',    r'$|1/E - 1/p|$ [GeV$^{-1}$]',                 True,  False),
+    ('mele_abs1overEm1overP',    r'$|1/E - 1/p|$ (GeV$^{-1}$)',                 True,  False),
     ('mele_expMissingInnerHits', r'Exp. missing inner hits',                     False, False),
 ]
 
 _mpho_vars = [
-    ('mpho_pt',            r'Reco $p_T$ [GeV]',                         False, False),
+    ('mpho_pt',            r'Reco $p_T$ (GeV)',                         False, False),
     ('mpho_eta',           r'Reco $\eta$',                               False, False),
     ('mpho_phi',           r'Reco $\phi$',                               False, False),
-    ('mpho_energy',        r'Reco $E$ [GeV]',                            False, False),
+    ('mpho_energy',        r'Reco $E$ (GeV)',                            False, False),
     ('mpho_r9',            r'R9',                                        False, False),
     ('mpho_full5x5_r9',    r'Full 5$\times$5 R9',                        False, False),
     ('mpho_sIeIe',         r'$\sigma_{i\eta i\eta}$',                    False, False),
     ('mpho_full5x5_sIeIe', r'Full 5$\times$5 $\sigma_{i\eta i\eta}$',    False, False),
     ('mpho_HoE',           r'H/E',                                       True,  False),
     ('mpho_full5x5_HoE',   r'Full 5$\times$5 H/E',                      True,  False),
-    ('mpho_chIso',         r'Charged hadron iso [GeV]',                  True,  False),
-    ('mpho_nhIso',         r'Neutral hadron iso [GeV]',                  True,  False),
-    ('mpho_phIso',         r'Photon iso [GeV]',                          True,  False),
-    ('mpho_puChIso',       r'PU-subtracted charged hadron iso [GeV]',   True,  False),
-    ('mpho_trkIso',        r'Tracker iso [GeV]',                         True,  False),
-    ('mpho_ecalIso',       r'ECAL iso [GeV]',                            True,  False),
-    ('mpho_hcalIso',       r'HCAL iso [GeV]',                            True,  False),
+    ('mpho_chIso',         r'Charged hadron iso (GeV)',                  True,  False),
+    ('mpho_nhIso',         r'Neutral hadron iso (GeV)',                  True,  False),
+    ('mpho_phIso',         r'Photon iso (GeV)',                          True,  False),
+    ('mpho_puChIso',       r'PU-subtracted charged hadron iso (GeV)',   True,  False),
+    ('mpho_trkIso',        r'Tracker iso (GeV)',                         True,  False),
+    ('mpho_ecalIso',       r'ECAL iso (GeV)',                            True,  False),
+    ('mpho_hcalIso',       r'HCAL iso (GeV)',                            True,  False),
     ('mpho_mindRj',        r'Min $\Delta R$ to jet',                     True,  False),
     ('mpho_mindPhiJ',      r'Min $\Delta\phi$ to jet',                   True,  False),
 ]
@@ -176,8 +163,7 @@ _res_vars = [(f'res_{key[len("mele_"):]}', xlabel, doLogy, varbin) for key, xlab
 
 print("Section 1: gen ee kinematics (all-samples)")
 for var, xlabel, doLogy, varbin in _gen_vars:
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = ptools.new_fig(year)
     any_drawn = False
     for cat, cstyle in cat_styles.items():
         hkey = f'{cat}_{var}'
@@ -198,7 +184,7 @@ for var, xlabel, doLogy, varbin in _gen_vars:
     if doLogy:
         ax.set_yscale('log')
     ax.set_title(rf'Merged categories: {xlabel} — all samples')
-    ax.legend()
+    ptools.place_legend(ax)
     plt.tight_layout()
     plt.savefig(f'{plotdir}/hist_{seltag}_{var}_cats_allsamps.png')
     plt.close(fig)
@@ -215,14 +201,13 @@ for var, xlabel, doLogy, varbin in _gen_vars:
             continue
         for series in series_list:
             m1s, deltas, ctaus, tag = series['m1s'], series['deltas'], series['ctaus'], series['tag']
-            fig, ax = plt.subplots(figsize=size)
-            hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+            fig, ax = ptools.new_fig(year)
             cmap_idx = 0
             any_drawn = False
             for m1 in m1s:
                 for delta in deltas:
                     for ctau in ctaus:
-                        sname = _samp_name(m1, delta, ctau)
+                        sname = ptools.samp_name(s_pts, m1, delta, ctau)
                         if sname is None:
                             cmap_idx += 1
                             continue
@@ -232,7 +217,7 @@ for var, xlabel, doLogy, varbin in _gen_vars:
                             continue
                         _histplot(h, ax, varbin=varbin,
                                   histtype='step', label=_sig_label(m1, delta, ctau),
-                                  color=f'C{cmap_idx}', linewidth=2)
+                                  color=ptools.cms_colors(len(m1s)*len(deltas)*len(ctaus))[cmap_idx], linewidth=2)
                         any_drawn = True
                         cmap_idx += 1
             if not any_drawn:
@@ -242,7 +227,7 @@ for var, xlabel, doLogy, varbin in _gen_vars:
             ax.set_ylabel('A.U.')
             if doLogy:
                 ax.set_yscale('log')
-            ax.legend(fontsize=13)
+            ptools.place_legend(ax, fontsize=13)
             plt.title(rf'{cstyle["label"]}: {xlabel} — {tag}')
             plt.tight_layout()
             plt.savefig(f'{plotdir}/hist_{seltag}_{hkey}_{tag}.png')
@@ -260,8 +245,7 @@ for key, xlabel, doLogy, varbin in _mele_vars:
     h = s_hists[key][{'cut': cut, 'samp': sum}]
     if np.sum(h.values()) == 0:
         continue
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = ptools.new_fig(year)
     _histplot(h, ax, varbin=varbin,
               histtype='step', color='C0', linewidth=2)
     ax.set_xlabel(xlabel)
@@ -279,14 +263,13 @@ for key, xlabel, doLogy, varbin in _mele_vars:
         continue
     for series in series_list:
         m1s, deltas, ctaus, tag = series['m1s'], series['deltas'], series['ctaus'], series['tag']
-        fig, ax = plt.subplots(figsize=size)
-        hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+        fig, ax = ptools.new_fig(year)
         cmap_idx = 0
         any_drawn = False
         for m1 in m1s:
             for delta in deltas:
                 for ctau in ctaus:
-                    sname = _samp_name(m1, delta, ctau)
+                    sname = ptools.samp_name(s_pts, m1, delta, ctau)
                     if sname is None:
                         cmap_idx += 1
                         continue
@@ -296,7 +279,7 @@ for key, xlabel, doLogy, varbin in _mele_vars:
                         continue
                     _histplot(h, ax, varbin=varbin,
                               histtype='step', label=_sig_label(m1, delta, ctau),
-                              color=f'C{cmap_idx}', linewidth=2)
+                              color=ptools.cms_colors(len(m1s)*len(deltas)*len(ctaus))[cmap_idx], linewidth=2)
                     any_drawn = True
                     cmap_idx += 1
         if not any_drawn:
@@ -306,7 +289,7 @@ for key, xlabel, doLogy, varbin in _mele_vars:
         ax.set_ylabel('A.U.')
         if doLogy:
             ax.set_yscale('log')
-        ax.legend(fontsize=13)
+        ptools.place_legend(ax, fontsize=13)
         plt.title(rf'Merged electron: {xlabel} — {tag}')
         plt.tight_layout()
         plt.savefig(f'{plotdir}/hist_{seltag}_{key}_{tag}.png')
@@ -338,8 +321,7 @@ for key, xlabel, doLogy, varbin in _mele_othergen_dr_vars:
     h = s_hists[key][{'cut': cut, 'samp': sum}]
     if np.sum(h.values()) == 0:
         continue
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = ptools.new_fig(year)
     _histplot(h, ax, varbin=varbin,
               histtype='step', color='C0', linewidth=2)
     ax.set_xlabel(xlabel)
@@ -357,14 +339,13 @@ for key, xlabel, doLogy, varbin in _mele_othergen_dr_vars:
         continue
     for series in series_list:
         m1s, deltas, ctaus, tag = series['m1s'], series['deltas'], series['ctaus'], series['tag']
-        fig, ax = plt.subplots(figsize=size)
-        hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+        fig, ax = ptools.new_fig(year)
         cmap_idx = 0
         any_drawn = False
         for m1 in m1s:
             for delta in deltas:
                 for ctau in ctaus:
-                    sname = _samp_name(m1, delta, ctau)
+                    sname = ptools.samp_name(s_pts, m1, delta, ctau)
                     if sname is None:
                         cmap_idx += 1
                         continue
@@ -374,7 +355,7 @@ for key, xlabel, doLogy, varbin in _mele_othergen_dr_vars:
                         continue
                     _histplot(h, ax, varbin=varbin,
                               histtype='step', label=_sig_label(m1, delta, ctau),
-                              color=f'C{cmap_idx}', linewidth=2)
+                              color=ptools.cms_colors(len(m1s)*len(deltas)*len(ctaus))[cmap_idx], linewidth=2)
                     any_drawn = True
                     cmap_idx += 1
         if not any_drawn:
@@ -384,7 +365,7 @@ for key, xlabel, doLogy, varbin in _mele_othergen_dr_vars:
         ax.set_ylabel('A.U.')
         if doLogy:
             ax.set_yscale('log')
-        ax.legend(fontsize=13)
+        ptools.place_legend(ax, fontsize=13)
         plt.title(rf'Merged electron: {xlabel} — {tag}')
         plt.tight_layout()
         plt.savefig(f'{plotdir}/hist_{seltag}_{key}_{tag}.png')
@@ -402,8 +383,7 @@ _othergen_dr_styles = [
     ('mele_othergen_dr_losttrack',  'Lost track',         'C5'),
 ]
 
-fig, ax = plt.subplots(figsize=size)
-hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+fig, ax = ptools.new_fig(year)
 any_drawn = False
 for key, label, color in _othergen_dr_styles:
     if key not in s_hists:
@@ -419,7 +399,7 @@ if any_drawn:
     ax.set_ylabel('A.U.')
     ax.set_yscale('log')
     ax.set_title(r'Merged electron: other-gen $\Delta R$ by object type — all samples')
-    ax.legend()
+    ptools.place_legend(ax)
     plt.tight_layout()
     plt.savefig(f'{plotdir}/hist_{seltag}_mele_othergen_dr_overlay_allsamps.png')
 plt.close(fig)
@@ -436,8 +416,7 @@ for key, xlabel, doLogy, varbin in _mpho_vars:
     h = s_hists[key][{'cut': cut, 'samp': sum}]
     if np.sum(h.values()) == 0:
         continue
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = ptools.new_fig(year)
     _histplot(h, ax, varbin=varbin,
               histtype='step', color='C1', linewidth=2)
     ax.set_xlabel(xlabel)
@@ -455,14 +434,13 @@ for key, xlabel, doLogy, varbin in _mpho_vars:
         continue
     for series in series_list:
         m1s, deltas, ctaus, tag = series['m1s'], series['deltas'], series['ctaus'], series['tag']
-        fig, ax = plt.subplots(figsize=size)
-        hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+        fig, ax = ptools.new_fig(year)
         cmap_idx = 0
         any_drawn = False
         for m1 in m1s:
             for delta in deltas:
                 for ctau in ctaus:
-                    sname = _samp_name(m1, delta, ctau)
+                    sname = ptools.samp_name(s_pts, m1, delta, ctau)
                     if sname is None:
                         cmap_idx += 1
                         continue
@@ -472,7 +450,7 @@ for key, xlabel, doLogy, varbin in _mpho_vars:
                         continue
                     _histplot(h, ax, varbin=varbin,
                               histtype='step', label=_sig_label(m1, delta, ctau),
-                              color=f'C{cmap_idx}', linewidth=2)
+                              color=ptools.cms_colors(len(m1s)*len(deltas)*len(ctaus))[cmap_idx], linewidth=2)
                     any_drawn = True
                     cmap_idx += 1
         if not any_drawn:
@@ -482,7 +460,7 @@ for key, xlabel, doLogy, varbin in _mpho_vars:
         ax.set_ylabel('A.U.')
         if doLogy:
             ax.set_yscale('log')
-        ax.legend(fontsize=13)
+        ptools.place_legend(ax, fontsize=13)
         plt.title(rf'Merged photon: {xlabel} — {tag}')
         plt.tight_layout()
         plt.savefig(f'{plotdir}/hist_{seltag}_{key}_{tag}.png')
@@ -500,8 +478,7 @@ for key, xlabel, doLogy, varbin in _res_vars:
     h = s_hists[key][{'cut': cut, 'samp': sum}]
     if np.sum(h.values()) == 0:
         continue
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = ptools.new_fig(year)
     _histplot(h, ax, varbin=varbin,
               histtype='step', color='C2', linewidth=2)
     ax.set_xlabel(xlabel)
@@ -519,14 +496,13 @@ for key, xlabel, doLogy, varbin in _res_vars:
         continue
     for series in series_list:
         m1s, deltas, ctaus, tag = series['m1s'], series['deltas'], series['ctaus'], series['tag']
-        fig, ax = plt.subplots(figsize=size)
-        hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+        fig, ax = ptools.new_fig(year)
         cmap_idx = 0
         any_drawn = False
         for m1 in m1s:
             for delta in deltas:
                 for ctau in ctaus:
-                    sname = _samp_name(m1, delta, ctau)
+                    sname = ptools.samp_name(s_pts, m1, delta, ctau)
                     if sname is None:
                         cmap_idx += 1
                         continue
@@ -536,7 +512,7 @@ for key, xlabel, doLogy, varbin in _res_vars:
                         continue
                     _histplot(h, ax, varbin=varbin,
                               histtype='step', label=_sig_label(m1, delta, ctau),
-                              color=f'C{cmap_idx}', linewidth=2)
+                              color=ptools.cms_colors(len(m1s)*len(deltas)*len(ctaus))[cmap_idx], linewidth=2)
                     any_drawn = True
                     cmap_idx += 1
         if not any_drawn:
@@ -546,7 +522,7 @@ for key, xlabel, doLogy, varbin in _res_vars:
         ax.set_ylabel('A.U.')
         if doLogy:
             ax.set_yscale('log')
-        ax.legend(fontsize=13)
+        ptools.place_legend(ax, fontsize=13)
         plt.title(rf'Resolved: {xlabel} — {tag}')
         plt.tight_layout()
         plt.savefig(f'{plotdir}/hist_{seltag}_{key}_{tag}.png')
@@ -562,15 +538,15 @@ for key, xlabel, doLogy, varbin in _res_vars:
 # (rather than making an incomplete mele/res-only or mpho-only duplicate).
 _xcat_vars = [
     ('E',             {'mele': 'mele_e',                      'mpho': 'mpho_energy', 'res': 'res_e'},
-     r'Reco $E$ [GeV]',         False),
+     r'Reco $E$ (GeV)',         False),
     ('trkIso',        {'mele': 'mele_trkIso',                 'mpho': 'mpho_trkIso', 'res': 'res_trkIso'},
-     r'Tracker iso [GeV]',      True),
+     r'Tracker iso (GeV)',      True),
     ('chadIso',       {'mele': 'mele_chadIso',                'mpho': 'mpho_chIso',  'res': 'res_chadIso'},
-     r'Charged hadron iso [GeV]', True),
+     r'Charged hadron iso (GeV)', True),
     ('nhadIso',       {'mele': 'mele_nhadIso',                'mpho': 'mpho_nhIso',  'res': 'res_nhadIso'},
-     r'Neutral hadron iso [GeV]', True),
+     r'Neutral hadron iso (GeV)', True),
     ('phoIso',        {'mele': 'mele_phoIso',                 'mpho': 'mpho_phIso',  'res': 'res_phoIso'},
-     r'Photon iso [GeV]',       True),
+     r'Photon iso (GeV)',       True),
     ('HoE',           {'mele': 'mele_HoverE',                 'mpho': 'mpho_HoE',    'res': 'res_HoverE'},
      r'H/E',                    True),
     ('sigmaIetaIeta', {'mele': 'mele_full55sigmaIetaIeta',    'mpho': 'mpho_full5x5_sIeIe', 'res': 'res_full55sigmaIetaIeta'},
@@ -614,8 +590,7 @@ for key, xlabel, doLogy, varbin in _mele_vars + _mpho_vars + _mele_othergen_dr_v
     _cats_overlay_vars.setdefault(suffix, (xlabel, doLogy))
 
 for var, (xlabel, doLogy) in _cats_overlay_vars.items():
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = ptools.new_fig(year)
     any_drawn = False
     for cat, cstyle in cat_styles.items():
         hkey = f'{_cat_hist_prefix.get(cat, cat)}_{var}'
@@ -636,7 +611,7 @@ for var, (xlabel, doLogy) in _cats_overlay_vars.items():
     if doLogy:
         ax.set_yscale('log')
     ax.set_title(rf'Merged categories: reco {xlabel} — all samples')
-    ax.legend()
+    ptools.place_legend(ax)
     plt.tight_layout()
     plt.savefig(f'{plotdir}/hist_{seltag}_reco_{var}_cats_allsamps.png')
     plt.close(fig)
@@ -651,8 +626,7 @@ for var, (xlabel, doLogy) in _cats_overlay_vars.items():
 
 print("Section 6: isolation/shower-shape overlays across categories (all-samples)")
 for tag, key_map, xlabel, doLogy in _xcat_vars:
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = ptools.new_fig(year)
     any_drawn = False
     for cat, cstyle in cat_styles.items():
         hkey = key_map.get(cat)
@@ -673,7 +647,7 @@ for tag, key_map, xlabel, doLogy in _xcat_vars:
     if doLogy:
         ax.set_yscale('log')
     ax.set_title(rf'Merged categories: reco {xlabel} — all samples')
-    ax.legend()
+    ptools.place_legend(ax)
     plt.tight_layout()
     plt.savefig(f'{plotdir}/hist_{seltag}_reco_{tag}_cats_allsamps.png')
     plt.close(fig)
@@ -685,8 +659,8 @@ for tag, key_map, xlabel, doLogy in _xcat_vars:
 """
 print("Section 7: merged-photon gen Lxy vs shower-shape/ID (all-samples)")
 _mpho_2d_vars = [
-    ('mpho_gen_lxy_vs_HoE',   r'Gen $L_{xy}$ [cm]', 'H/E'),
-    ('mpho_gen_lxy_vs_sieie', r'Gen $L_{xy}$ [cm]', r'$\sigma_{i\eta i\eta}^{5\times5}$'),
+    ('mpho_gen_lxy_vs_HoE',   r'Gen $L_{xy}$ (cm)', 'H/E'),
+    ('mpho_gen_lxy_vs_sieie', r'Gen $L_{xy}$ (cm)', r'$\sigma_{i\eta i\eta}^{5\times5}$'),
 ]
 
 for key, xlabel, ylabel in _mpho_2d_vars:
@@ -695,8 +669,7 @@ for key, xlabel, ylabel in _mpho_2d_vars:
     h = s_hists[key][{'cut': cut, 'samp': sum}]
     if np.sum(h.values()) == 0:
         continue
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = ptools.new_fig(year)
     hep.hist2dplot(h, ax=ax, norm=plt.matplotlib.colors.LogNorm(), cbarextend=True)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
@@ -721,8 +694,7 @@ _lxy_slice_styles = [
 ]
 
 for base_key, xlabel, doLogy in _lxy_slice_vars:
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = ptools.new_fig(year)
     any_drawn = False
     for suffix, label, color, ls in _lxy_slice_styles:
         hkey = f'{base_key}{suffix}'
@@ -742,7 +714,7 @@ for base_key, xlabel, doLogy in _lxy_slice_vars:
     if doLogy:
         ax.set_yscale('log')
     ax.set_title(rf'Merged photon: {xlabel} by gen $L_{{xy}}$ — all samples')
-    ax.legend()
+    ptools.place_legend(ax)
     plt.tight_layout()
     plt.savefig(f'{plotdir}/hist_{seltag}_{base_key}_lxyslices_allsamps.png')
     plt.close(fig)
@@ -776,8 +748,7 @@ _mpho_comparison_styles = [
 print("Section 9: merged-electron vs zero-match/other-object comparisons (all-samples)")
 for key, xlabel, doLogy, varbin in _mele_vars:
     base = key[len('mele_'):]
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = ptools.new_fig(year)
     any_drawn = False
     for infix, label, color, ls in _mele_comparison_styles:
         hkey = f'mele_{infix}{base}'
@@ -797,7 +768,7 @@ for key, xlabel, doLogy, varbin in _mele_vars:
     if doLogy:
         ax.set_yscale('log')
     ax.set_title(rf'Merged electron: {xlabel} — matched vs zero-match (leading/other) vs other — all samples')
-    ax.legend()
+    ptools.place_legend(ax)
     plt.tight_layout()
     plt.savefig(f'{plotdir}/hist_{seltag}_mele_{base}_matched_vs_zero_vs_other_allsamps.png')
     plt.close(fig)
@@ -805,8 +776,7 @@ for key, xlabel, doLogy, varbin in _mele_vars:
 print("Section 9: merged-photon vs zero-match/other-object comparisons (all-samples)")
 for key, xlabel, doLogy, varbin in _mpho_vars:
     base = key[len('mpho_'):]
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = ptools.new_fig(year)
     any_drawn = False
     for infix, label, color, ls in _mpho_comparison_styles:
         hkey = f'mpho_{infix}{base}'
@@ -826,7 +796,7 @@ for key, xlabel, doLogy, varbin in _mpho_vars:
     if doLogy:
         ax.set_yscale('log')
     ax.set_title(rf'Merged photon: {xlabel} — matched vs zero-match vs other — all samples')
-    ax.legend()
+    ptools.place_legend(ax)
     plt.tight_layout()
     plt.savefig(f'{plotdir}/hist_{seltag}_mpho_{base}_matched_vs_zero_vs_other_allsamps.png')
     plt.close(fig)
@@ -852,8 +822,7 @@ _nearestEle_comparison_styles = [
 print("Section 10: nearest-electron realism check (all-samples)")
 for key, xlabel, doLogy, varbin in _mele_vars:
     base = key[len('mele_'):]
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = ptools.new_fig(year)
     any_drawn = False
     for prefix, label, color, ls in _nearestEle_comparison_styles:
         hkey = f'{prefix}_{base}'
@@ -873,7 +842,7 @@ for key, xlabel, doLogy, varbin in _mele_vars:
     if doLogy:
         ax.set_yscale('log')
     ax.set_title(rf'Nearest-electron realism check: {xlabel} — all samples')
-    ax.legend()
+    ptools.place_legend(ax)
     plt.tight_layout()
     plt.savefig(f'{plotdir}/hist_{seltag}_{base}_nearestEle_realism_allsamps.png')
     plt.close(fig)
@@ -887,13 +856,13 @@ for key, xlabel, doLogy, varbin in _mele_vars:
 # point to a duplicate GSF track rather than a genuine second nearby electron.
 
 _mele_nearestEle_relational_vars = [
-    ('mele_nearestEle_dPt',        r'$p_T(e_{\mathrm{sel}}) - p_T(e_{\mathrm{near}})$ [GeV]',                    False, False),
+    ('mele_nearestEle_dPt',        r'$p_T(e_{\mathrm{sel}}) - p_T(e_{\mathrm{near}})$ (GeV)',                    False, False),
     ('mele_nearestEle_dPtRel',     r'$(p_T(e_{\mathrm{sel}}) - p_T(e_{\mathrm{near}}))/p_T(e_{\mathrm{sel}})$',   False, False),
     ('mele_nearestEle_chargeProd', r'Charge product ($q_{\mathrm{sel}} \times q_{\mathrm{near}}$)',               False, False),
-    ('mele_nearestEle_dVxy',       r'$|v_{xy}(e_{\mathrm{sel}}) - v_{xy}(e_{\mathrm{near}})|$ [cm]',              True,  False),
-    ('mele_nearestEle_dVz',        r'$|v_z(e_{\mathrm{sel}}) - v_z(e_{\mathrm{near}})|$ [cm]',                    True,  False),
-    ('mele_nearestEle_dDxy',       r'$|d_{xy}(e_{\mathrm{sel}}) - d_{xy}(e_{\mathrm{near}})|$ [cm]',              True,  False),
-    ('mele_nearestEle_dDz',        r'$|d_z(e_{\mathrm{sel}}) - d_z(e_{\mathrm{near}})|$ [cm]',                    True,  False),
+    ('mele_nearestEle_dVxy',       r'$|v_{xy}(e_{\mathrm{sel}}) - v_{xy}(e_{\mathrm{near}})|$ (cm)',              True,  False),
+    ('mele_nearestEle_dVz',        r'$|v_z(e_{\mathrm{sel}}) - v_z(e_{\mathrm{near}})|$ (cm)',                    True,  False),
+    ('mele_nearestEle_dDxy',       r'$|d_{xy}(e_{\mathrm{sel}}) - d_{xy}(e_{\mathrm{near}})|$ (cm)',              True,  False),
+    ('mele_nearestEle_dDz',        r'$|d_z(e_{\mathrm{sel}}) - d_z(e_{\mathrm{near}})|$ (cm)',                    True,  False),
     ('mele_nearestEle_drZoom',     r'$\Delta R(e_{\mathrm{sel}}, e_{\mathrm{near}})$ (zoom)',                     False, False),
 ]
 
@@ -904,8 +873,7 @@ for key, xlabel, doLogy, varbin in _mele_nearestEle_relational_vars:
     h = s_hists[key][{'cut': cut, 'samp': sum}]
     if np.sum(h.values()) == 0:
         continue
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = ptools.new_fig(year)
     _histplot(h, ax, varbin=varbin,
               histtype='step', color='C0', linewidth=2)
     ax.set_xlabel(xlabel)
@@ -943,8 +911,7 @@ for key, xlabel, doLogy in _oppQ_dist_vars:
     h = s_hists[key][{'cut': cut, 'samp': sum}]
     if np.sum(h.values()) == 0:
         continue
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = ptools.new_fig(year)
     _histplot(h, ax, histtype='step', color='C0', linewidth=2)
     ax.axvline(0.1 if 'dr_to_targetgen' in key else 0.2, color='k', linestyle=':', linewidth=1.5)
     ax.set_xlabel(xlabel)
@@ -966,8 +933,7 @@ if _reason_key in s_hists:
         cats = list(h.axes[0])
         vals = h.values()
         fracs = vals / total
-        fig, ax = plt.subplots(figsize=size)
-        hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+        fig, ax = ptools.new_fig(year)
         ax.bar(cats, fracs, color='C0')
         for i, f in enumerate(fracs):
             ax.text(i, f, f'{f:.2f}', ha='center', va='bottom')

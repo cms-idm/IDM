@@ -27,6 +27,8 @@ import glob
 import numpy as np
 from scipy.optimize import curve_fit
 
+ptools.set_plot_style()
+
 def exponential(x, A, lam):
     return A * np.exp(-lam * x)
 
@@ -159,9 +161,6 @@ s_cutsname = utils.get_signal_list_of_cuts(s_hists, get_cut_idx = False)
 
 df = utils.get_signal_cutflow_dict(s_hists, 'cutflow')
 
-size = (16, 12)
-fig, ax = plt.subplots(figsize=size)
-
 # Plot settings
 plot_label = 'gen-chi2-ctau-proper'
 sel_label = 'prevtx'
@@ -172,8 +171,11 @@ plot_dict = {
     'cut': 'cut1',
 }
 
+fig, ax = ptools.new_fig(plot_dict['year'])
+
 style_dict = {
     'fig': fig, 'ax': ax,
+    'doCMSLabel': False,
     'rebin': 1j, 'xlim': None,     # if None, the default will show up; otherwise give as a list, i.e. [0, 10]
     'doLogy': True, 'doLogx': False, 'doDensity': True, 'doYerr': True, 
     'xlabel': None,   # if None, the default will show up; otherwise give as a string, i.e. 'Electron dxy'
@@ -195,7 +197,7 @@ cmap_idx = 0
 for m1 in m1s:
     for delta in deltas:
         for ctau in ctaus:
-            histo, color = ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx)
+            histo, color = ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx, ncolors = len(m1s)*len(deltas)*len(ctaus))
             hlist += histo
             for ih, h in enumerate(histo):
                 fit_and_plot_exponential(
@@ -205,17 +207,18 @@ for m1 in m1s:
                 )
             cmap_idx += 1
 
-plt.title(rf'{plot_title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
+plt.title(rf'{plot_title}: $M_1$ = {m1s}, $\delta$ = {ptools.fmt_delta(deltas)}, c$\tau$ = {ctaus}mm')
 set_log_ylimits(ax, hlist, density=style_dict['doDensity'])
-plt.legend()
+ptools.place_legend(ax)
 plt.savefig(f"{plotdir}/hist_{sel_label}_{plot_label}_ctau-{utils.stringfy_friendly(ctaus[0])}_m1-narrow.png")
+plt.close(fig)
 
 # signal points
 m1s = [0.05, 0.5, 5, 50]
 deltas = [0.1, 0.2]
 ctaus = [10]
 
-fig, ax = plt.subplots(figsize=size)
+fig, ax = ptools.new_fig(plot_dict['year'])
 style_dict['fig'] = fig; style_dict['ax'] = ax
 
 # Plot for variables signal points
@@ -224,7 +227,7 @@ hlist = []
 for m1 in m1s:
     for delta in deltas:
         for ctau in ctaus:
-            histo, color = ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx)
+            histo, color = ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx, ncolors = len(m1s)*len(deltas)*len(ctaus))
             hlist += histo
             for ih, h in enumerate(histo):
                 fit_and_plot_exponential(
@@ -234,17 +237,18 @@ for m1 in m1s:
                 )
             cmap_idx += 1
 
-plt.title(rf'{plot_title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
+plt.title(rf'{plot_title}: $M_1$ = {m1s}, $\delta$ = {ptools.fmt_delta(deltas)}, c$\tau$ = {ctaus}mm')
 set_log_ylimits(ax, hlist, density=style_dict['doDensity'])
-plt.legend()
+ptools.place_legend(ax)
 plt.savefig(f"{plotdir}/hist_{sel_label}_{plot_label}_ctau-{utils.stringfy_friendly(ctaus[0])}_m1-wide.png")
+plt.close(fig)
 
 # signal points
 m1s = [1, 2, 5]
 deltas = [0.1]
 ctaus = [1, 10, 100]
 
-fig, ax = plt.subplots(figsize=size)
+fig, ax = ptools.new_fig(plot_dict['year'])
 style_dict['fig'] = fig; style_dict['ax'] = ax
 
 # Plot for variables signal points
@@ -253,7 +257,7 @@ hlist = []
 for m1 in m1s:
     for delta in deltas:
         for ctau in ctaus:
-            histo, color = ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx)
+            histo, color = ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx, ncolors = len(m1s)*len(deltas)*len(ctaus))
             hlist += histo
             for ih, h in enumerate(histo):
                 popt, perr, chi2_dof = fit_and_plot_exponential(
@@ -267,17 +271,18 @@ for m1 in m1s:
                 pass
             cmap_idx += 1
 
-plt.title(rf'{plot_title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
+plt.title(rf'{plot_title}: $M_1$ = {m1s}, $\delta$ = {ptools.fmt_delta(deltas)}, c$\tau$ = {ctaus}mm')
 set_log_ylimits(ax, hlist, density=style_dict['doDensity'])
-plt.legend()
+ptools.place_legend(ax)
 plt.savefig(f"{plotdir}/hist_{sel_label}_{plot_label}_delta-{utils.stringfy_friendly(deltas[0])}.png")
+plt.close(fig)
 
 # signal points
 m1s = [5]
 deltas = [0.05, 0.1, 0.2]
 ctaus = [1, 10, 100]
 
-fig, ax = plt.subplots(figsize=size)
+fig, ax = ptools.new_fig(plot_dict['year'])
 style_dict['fig'] = fig; style_dict['ax'] = ax
 
 # Plot for variables signal points
@@ -286,7 +291,7 @@ hlist = []
 for m1 in m1s:
     for delta in deltas:
         for ctau in ctaus:
-            histo, color = ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx)
+            histo, color = ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx, ncolors = len(m1s)*len(deltas)*len(ctaus))
             hlist += histo
             for ih, h in enumerate(histo):
                 fit_and_plot_exponential(
@@ -296,8 +301,9 @@ for m1 in m1s:
                 )
             cmap_idx +=	1
 
-plt.title(rf'{plot_title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
+plt.title(rf'{plot_title}: $M_1$ = {m1s}, $\delta$ = {ptools.fmt_delta(deltas)}, c$\tau$ = {ctaus}mm')
 set_log_ylimits(ax, hlist, density=style_dict['doDensity'])
-plt.legend()
+ptools.place_legend(ax)
 plt.savefig(f"{plotdir}/hist_{sel_label}_{plot_label}_m1-{utils.stringfy_friendly(m1s[0])}.png")
+plt.close(fig)
 

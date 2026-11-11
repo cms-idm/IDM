@@ -19,22 +19,10 @@ import json
 import os
 import glob
 
-plt.rcParams.update({
-    'font.size':        24,
-    'axes.titlesize':   32,
-    # Lift the title clear of the CMS / lumi label hep.cms.label draws just
-    # above the axes.
-    'axes.titlepad':    44,
-    'axes.labelsize':   34,
-    'xtick.labelsize':  30,
-    'ytick.labelsize':  30,
-    'legend.fontsize':  24,
-    'figure.titlesize': 32,
-})
+ptools.set_plot_style()
 
 # Cut-name labels on the x-axis stay small so the long descriptions fit.
 CUT_LABEL_FS = 17
-CMS_LABEL_FS = 26
 LEGEND_FS = 20
 # Background labels are short, so they're packed into columns.
 BKG_LEGEND_NCOL = 3
@@ -59,13 +47,6 @@ plottag = f'sb{bkg_vers}_{selection}-sel'
 # All samples here are processed as year 2024; 'cutflow_cts' is already
 # xsec * getLumi(2024) * efficiency, so it's plotted as-is (no rescaling).
 LUMI_FB, _ = tools.getLumi(year)
-
-
-def _new_fig():
-    fig, ax = plt.subplots(figsize=(16, 12))
-    hep.cms.label('Private Work', data=True, year=year, lumi=round(LUMI_FB),
-                  com='13.6', ax=ax, fontsize=CMS_LABEL_FS)
-    return fig, ax
 
 
 # ---- Cut-column alignment ----------------------------------------------
@@ -185,9 +166,8 @@ def _select_sig_points(sig_df, plot_dict):
 
 def _sig_label(sig_dict):
     m1 = round(sig_dict['m1'], 5)
-    dmchi = round(sig_dict['dmchi'], 5)
     ctau = int(sig_dict['ctau'])
-    return rf"($M_1$, $\Delta$) = ({m1}, {dmchi}) GeV, c$\tau$ = {ctau}mm"
+    return rf"$M_1$ = {m1:g} GeV, $\delta$ = {ptools.fmt_delta(sig_dict['delta'])}, c$\tau$ = {ctau}mm"
 
 def plot_sig_bkg_yields(sig_histo, bkg_histos, sig_df_eff, sig_df_cts, bkg_df_cts, plot_dict,
                          sig_df_wts=None, show=False):
@@ -219,7 +199,7 @@ def plot_sig_bkg_yields(sig_histo, bkg_histos, sig_df_eff, sig_df_cts, bkg_df_ct
         'ylim': None,   # None to auto-scale to the plotted data, or [ymin, ymax]
         'doLog': True,
         'ylabel': 'Events',
-        'title': rf"Cutflow: $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm",
+        'title': rf"Cutflow: $\delta$ = {ptools.fmt_delta(deltas)}, c$\tau$ = {ctaus}mm",
 
         # Plot saving
         'doSave': False,
@@ -237,7 +217,7 @@ def plot_sig_bkg_yields(sig_histo, bkg_histos, sig_df_eff, sig_df_cts, bkg_df_ct
     if sig_df_wts is not None:
         sig_df_wts = realign_cutflow_df(sig_df_wts, sig_desc_to_idx, union_idx)
 
-    fig, ax = _new_fig()
+    fig, ax = ptools.new_fig(year, lumi=round(LUMI_FB))
 
     plotted_vals = []
 
@@ -349,7 +329,7 @@ def plot_sig_bkg_ratios(sig_histo, bkg_histos, sig_df_cts, bkg_df_cts, plot_dict
     bkg_total = bkg_df_cts.loc['Total'].values.astype(float)
     bkg_total = np.where(bkg_total > 0, bkg_total, np.nan)
 
-    fig, ax = _new_fig()
+    fig, ax = ptools.new_fig(year, lumi=round(LUMI_FB))
 
     plotted_vals = []
 

@@ -7,6 +7,11 @@ import analysisTools.utils as utils
 import analysisTools.plotTools as ptools
 import coffea.util as util
 
+ptools.set_plot_style()
+
+# signal samples are combined across years, so no year on the CMS label
+year = None
+
 outdir = 'workarea'
 plotdir = './plots/vtxrecoeff'
 os.makedirs(plotdir, exist_ok=True)
@@ -51,7 +56,7 @@ def plot_vtx_eff_vs_m1(sig_histo, s_pts, plot_dict):
 
     plot_dict = {
         'deltas': [0.1],        # dMchi/m1 values to draw curves for
-        'ctaus':  [1, 10, 100], # ctau [mm] values to draw curves for
+        'ctaus':  [1, 10, 100], # ctau (mm) values to draw curves for
 
         'ylim': None,   # None to auto-scale, or [ymin, ymax]
         'doLog': True,
@@ -69,7 +74,7 @@ def plot_vtx_eff_vs_m1(sig_histo, s_pts, plot_dict):
     # m1 = 0.05 GeV samples are excluded -- edge-of-grid point with poor stats
     df = df[~np.isclose(df['m1'], 0.05)]
 
-    fig, ax = plt.subplots(figsize=(10, 8))
+    fig, ax = ptools.new_fig(year)
 
     deltas = plot_dict['deltas']
     ctaus = plot_dict['ctaus']
@@ -83,7 +88,7 @@ def plot_vtx_eff_vs_m1(sig_histo, s_pts, plot_dict):
             if sel.empty:
                 print(f"No signal points found for delta={delta}, ctau={ctau}")
                 continue
-            label = rf"$\Delta$ = {delta}, c$\tau$ = {int(ctau)}mm"
+            label = rf"$\delta$ = {ptools.fmt_delta(delta)}, c$\tau$ = {int(ctau)}mm"
             ax.plot(sel['m1'], sel['vtx_eff'], label=label, color=colors[color_idx],
                      marker='o', markersize=5, lw=2)
             color_idx += 1
@@ -97,11 +102,11 @@ def plot_vtx_eff_vs_m1(sig_histo, s_pts, plot_dict):
         ax.set_ylim(ylim[0], ylim[1])
 
     ax.grid()
-    ax.set_xlabel(r'$m_1$ [GeV]', fontsize=20)
+    ax.set_xlabel(r'$m_1$ (GeV)', fontsize=20)
     ax.set_ylabel('Vertex Reco Efficiency', fontsize=20)
     ax.set_title(plot_dict.get('title', ''), fontsize=18)
     ax.tick_params(axis='both', labelsize=14)
-    ax.legend(loc='best', fontsize=14)
+    ptools.place_legend(ax, fontsize=14)
 
     if plot_dict.get('doSave', False):
         os.makedirs(plot_dict['outDir'], exist_ok=True)
@@ -146,6 +151,6 @@ plot_vtx_eff_vs_m1(s_hists, s_pts, plot_dict)
 # ctau dependence at fixed delta
 plot_dict['deltas'] = [0.1]
 plot_dict['ctaus'] = [1, 10, 100]
-plot_dict['title'] = rf'Vertex Reco Efficiency [AN Selection]: $\Delta$ = {plot_dict["deltas"][0]}'
+plot_dict['title'] = rf'Vertex Reco Efficiency [AN Selection]: $\delta$ = {ptools.fmt_delta(plot_dict["deltas"][0])}'
 plot_dict['outName'] = f'vtxrecoeff_vs_m1_{plottag}_delta-{utils.stringfy_friendly(plot_dict["deltas"][0])}.png'
 plot_vtx_eff_vs_m1(s_hists, s_pts, plot_dict)

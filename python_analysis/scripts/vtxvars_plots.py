@@ -23,6 +23,8 @@ import coffea.util as util
 import analysisTools.utils as utils
 import analysisTools.plotTools as ptools
 
+ptools.set_plot_style()
+
 outdir = os.path.join(REPO_ROOT, 'workarea')
 vers = 'Jul2026noID'
 selection = 'anmatchvtx'
@@ -102,7 +104,7 @@ for title, outname, variables, doLogy, solid_label, dotted_label in plot_specs:
         ctaus  = series['ctaus']
         tag    = series['tag']
 
-        fig, ax = plt.subplots(figsize=size)
+        fig, ax = ptools.new_fig(plot_dict['year'])
         style_dict = {
             **style_dict_base,
             'fig': fig, 'ax': ax,
@@ -114,11 +116,8 @@ for title, outname, variables, doLogy, solid_label, dotted_label in plot_specs:
         for m1 in m1s:
             for delta in deltas:
                 for ctau in ctaus:
-                    ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx=cmap_idx)
+                    ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx=cmap_idx, ncolors=len(m1s)*len(deltas)*len(ctaus))
                     cmap_idx += 1
-
-        # CMS label once per plot
-        hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6', ax=ax)
 
         # legend: signal point handles from ax, plus line-style legend entries when paired
         handles, labels = ax.get_legend_handles_labels()
@@ -129,9 +128,8 @@ for title, outname, variables, doLogy, solid_label, dotted_label in plot_specs:
             ]
             labels += [solid_label, dotted_label]
 
-        ax.legend(handles=handles, labels=labels)
-
-        plt.title(rf'{title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
+        plt.title(rf'{title}: $M_1$ = {m1s}, $\delta$ = {ptools.fmt_delta(deltas)}, c$\tau$ = {ctaus}mm')
+        ptools.place_legend(ax, handles=handles, labels=labels)
         plt.tight_layout()
         plt.savefig(f'{plotdir}/hist_{plottag}_{outname}_{tag}.png')
-        plt.close()
+        plt.close(fig)

@@ -18,15 +18,7 @@ import coffea.util as util
 import analysisTools.utils as utils
 import analysisTools.plotTools as ptools
 
-plt.rcParams.update({
-    'font.size':        20,
-    'axes.titlesize':   24,
-    'axes.labelsize':   20,
-    'xtick.labelsize':  20,
-    'ytick.labelsize':  20,
-    'legend.fontsize':  20,
-    'figure.titlesize': 24,
-})
+ptools.set_plot_style()
 
 outdir    = os.path.join(REPO_ROOT, 'workarea')
 vers      = 'Jul2026noID'
@@ -352,7 +344,7 @@ def get_samp_name(m1, delta, ctau):
     return row.index[0] if not row.empty else None
 
 def sample_label(row):
-    return rf"$M_1$={row['m1']:.3g}, $\Delta$={row['delta']:.3g}, $c\tau$={row['ctau']:.0f} mm"
+    return rf"$M_1$={row['m1']:.3g}, $\delta$={ptools.fmt_delta(row['delta'])}, $c\tau$={row['ctau']:.0f} mm"
 
 series_list = [
     {'m1s': [0.05, 0.5, 5, 50], 'deltas': [0.1],            'ctaus': [10],         'tag': 'ctau-10_delta-0p1_m1-wide'   },
@@ -379,8 +371,8 @@ qty_configs = [
 ]
 
 gen_var_configs = [
-    {'var': 'genpt',  'label': r'$p_T^\mathrm{gen}$ [GeV]', 'doLogx': False},
-    {'var': 'genlxy', 'label': r'$L_{xy}$ [cm]',             'doLogx': True},
+    {'var': 'genpt',  'label': r'$p_T^\mathrm{gen}$ (GeV)', 'doLogx': False},
+    {'var': 'genlxy', 'label': r'$L_{xy}$ (cm)',             'doLogx': True},
     {'var': 'geneta', 'label': r'$\eta^\mathrm{gen}$',        'doLogx': False},
 ]
 
@@ -411,8 +403,7 @@ for qcfg in qty_configs:
     res_edges   = h_ged.axes[0].edges
     c_ged,  v_ged  = _equalize_res_bins(res_edges, h_ged.values(),  h_ged.variances())
     c_xlpt, v_xlpt = _equalize_res_bins(res_edges, h_xlpt.values(), h_xlpt.variances())
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = ptools.new_fig(year)
     hep.histplot([c_ged, c_xlpt], bins=res_edges, ax=ax, histtype='errorbar', density=True,
                  yerr=[np.sqrt(v_ged), np.sqrt(v_xlpt)],
                  label=['GED', 'XCleaned LowPt'], color=['C0', 'C1'],
@@ -442,7 +433,7 @@ for qcfg in qty_configs:
     ax.set_ylabel('A.U.')
     ax.set_xlim(*qcfg['xlim'])
     ax.set_title(f'Electron {qcfg["title"]} — all samples')
-    ax.legend()
+    ptools.place_legend(ax)
     if param_lines:
         ax.text(0.02, 0.98, '\n'.join(param_lines), transform=ax.transAxes,
                 fontsize=18, va='top', ha='left',
@@ -464,8 +455,7 @@ for qcfg in qty_configs:
         x_g, mn_g, sd_g, _, vg, *_ = profile_from_2D(s_hists[f'res_{qty}_vs_{gvar}_ged' ][{"cut": cut, "samp": sum}], rebin=1, fit_range=qcfg['fit_range'])
         #x_a, mn_a, sd_a, _, va, *_ = profile_from_2D(s_hists[f'res_{qty}_vs_{gvar}_alpt'][{"cut": cut, "samp": sum}], rebin=2, fit_range=qcfg['fit_range'])
         x_x, mn_x, sd_x, _, vx, *_ = profile_from_2D(s_hists[f'res_{qty}_vs_{gvar}_xlpt'][{"cut": cut, "samp": sum}], rebin=1, fit_range=qcfg['fit_range'])
-        fig, ax = plt.subplots(figsize=size)
-        hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+        fig, ax = ptools.new_fig(year)
         #ax.plot(x_l[vl], mn_l[vl], '-', color='C0', label=r'LowPt ($\mu \pm\,\sigma$)')
         #ax.fill_between(x_l[vl], mn_l[vl] - sd_l[vl], mn_l[vl] + sd_l[vl], color='C0', alpha=0.3, label='_')
         ax.plot(x_g[vg], mn_g[vg], '-', color='C0', label=r'GED ($\mu \pm\,\sigma$)')
@@ -481,7 +471,7 @@ for qcfg in qty_configs:
         if gvcfg['doLogx']:
             ax.set_xscale('log')
         ax.set_title(f'Electron {qcfg["title"]} vs {gvcfg["label"]} — all samples')
-        ax.legend()
+        ptools.place_legend(ax)
         plt.tight_layout()
         plt.savefig(f'{plotdir}/hist_{seltag}_res_{qty}_vs_{gvar}_profile_allsamps.png')
         plt.close(fig)
@@ -528,11 +518,11 @@ for histname, title, doLogx in _2d_specs:
     res_edges = h2d.axes[1].edges
     vals      = h2d.values()
 
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+    fig, ax = ptools.new_fig(year, cms_label=False)
     vals_pos = np.where(vals > 0, vals, np.nan)
     pcm = ax.pcolormesh(x_edges, res_edges, vals_pos.T, cmap='viridis', norm=LogNorm())
     plt.colorbar(pcm, ax=ax, label='Events')
+    ptools.add_cms_label(ax, year)
     ax.set_xlabel(h2d.axes[0].label)
     ax.set_ylabel(h2d.axes[1].label)
     if doLogx:
@@ -563,10 +553,10 @@ for histbase, title_base, cbar_label, fit_range in _mean2d_specs:
         pt_edges, y_edges, mu, _ = profile_from_3D(h3d, fit_range=fit_range)
 
         vmax = np.nanmax(np.abs(mu))
-        fig, ax = plt.subplots(figsize=size)
-        hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+        fig, ax = ptools.new_fig(year, cms_label=False)
         pcm = ax.pcolormesh(pt_edges, y_edges, mu.T, cmap=_cmap_res, vmin=-vmax, vmax=vmax)
         plt.colorbar(pcm, ax=ax, label=cbar_label)
+        ptools.add_cms_label(ax, year)
         ax.set_xlabel(h3d.axes[0].label)
         ax.set_ylabel(h3d.axes[1].label)
         ax.set_title(f'{title_base} ({reco_label}) — all samples')
@@ -594,10 +584,10 @@ for histbase, title_base, cbar_label, fit_range in _sigma2d_specs:
         h3d = s_hists[histname][{"cut": cut, "samp": sum}]
         pt_edges, y_edges, _, sigma = profile_from_3D(h3d, fit_range=fit_range)
 
-        fig, ax = plt.subplots(figsize=size)
-        hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+        fig, ax = ptools.new_fig(year, cms_label=False)
         pcm = ax.pcolormesh(pt_edges, y_edges, sigma.T, cmap=_cmap_rms)
         plt.colorbar(pcm, ax=ax, label=cbar_label)
+        ptools.add_cms_label(ax, year)
         ax.set_xlabel(h3d.axes[0].label)
         ax.set_ylabel(h3d.axes[1].label)
         ax.set_title(f'{title_base} ({reco_label}) — all samples')
@@ -635,8 +625,7 @@ for qcfg in qty_configs:
         se_g_plot = np.where(vg & np.isfinite(se_g), se_g, np.nan)
         sd_x_plot = np.where(vx, sd_x, np.nan)
         se_x_plot = np.where(vx & np.isfinite(se_x), se_x, np.nan)
-        fig, ax = plt.subplots(figsize=size)
-        hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+        fig, ax = ptools.new_fig(year)
         hep.histplot(
             [sd_g_plot, sd_x_plot], bins=xedg_g,
             histtype='step', yerr=[se_g_plot, se_x_plot],
@@ -649,7 +638,7 @@ for qcfg in qty_configs:
         if gvcfg['doLogx']:
             ax.set_xscale('log')
         ax.set_title(f'Electron {qcfg["title"]} DSCB $\\sigma$ vs {gvcfg["label"]} — all samples')
-        ax.legend()
+        ptools.place_legend(ax)
         plt.tight_layout()
         plt.savefig(f'{plotdir}/hist_{seltag}_res_{qty}_vs_{gvar}_sigma1D_allsamps.png')
         plt.close(fig)
@@ -700,8 +689,7 @@ for qcfg in qty_configs:
             counts_g, var_g = _equalize_res_bins(res_edges, counts_g_raw, var_g_raw)
             counts_x, var_x = _equalize_res_bins(res_edges, counts_x_raw, var_x_raw)
 
-            fig, ax = plt.subplots(figsize=size)
-            hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax)
+            fig, ax = ptools.new_fig(year)
             hep.histplot(
                 [counts_g, counts_x], bins=res_edges, ax=ax,
                 histtype='errorbar', density=True,
@@ -745,7 +733,7 @@ for qcfg in qty_configs:
                 f'Electron {qcfg["title"]}: '
                 rf'{sspec["label"]} $\in$ [{lo}, {hi}] {sspec["unit"]} — all samples'
             )
-            ax.legend()
+            ptools.place_legend(ax)
             plt.tight_layout()
             lo_str = str(lo).replace('.', 'p').replace('-', 'n')
             hi_str = str(hi).replace('.', 'p').replace('-', 'n')

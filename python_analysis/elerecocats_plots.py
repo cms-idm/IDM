@@ -11,6 +11,13 @@ REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
+import analysisTools.plotTools as ptools
+
+ptools.set_plot_style()
+
+# signal samples are combined across years, so no year on the CMS label
+year = None
+
 outdir = os.path.join(REPO_ROOT, 'workarea')
 plotdir = os.path.join(REPO_ROOT, 'plots', 'elerecoeff', 'reasons')
 os.makedirs(plotdir, exist_ok=True)
@@ -37,8 +44,8 @@ CATS = {
 }
 
 VAR_LABELS = {
-    'pt':     r'Gen $p_{T}(e)$ [GeV]',
-    'lxy':    r'Gen $L_{xy}(e^+e^-)$ [cm]',
+    'pt':     r'Gen $p_{T}(e)$ (GeV)',
+    'lxy':    r'Gen $L_{xy}(e^+e^-)$ (cm)',
     'dr':     r'Gen $\Delta R(e^+e^-)$',
     'abseta': r'Gen $|\eta(e)|$',
 }
@@ -46,7 +53,7 @@ VAR_LABELS = {
 # elerecoeff ee4d categories that partition the gen electrons by matchType, so their sum is all gen electrons
 ALL_CATS = ['lpt', 'ged', 'none']
 
-# single signal point (m1 [GeV], delta, ctau [mm]) to also make the plots for alone
+# single signal point (m1 (GeV), delta, ctau (mm)) to also make the plots for alone
 SINGLE_POINT = (50, 0.2, 100)
 
 
@@ -119,7 +126,7 @@ def sample_m1(samp):
 
 def sample_point(samp):
     """
-    Parse the signal point (m1, delta = dMchi/m1, ctau [mm]) from a signal
+    Parse the signal point (m1, delta = dMchi/m1, ctau (mm)) from a signal
     sample name, independent of year (see sample_m1).
     """
     dmchi = float(re.search(r'dMchi-([\d]+p[\d]+)', samp).group(1).replace('p', '.'))
@@ -133,7 +140,7 @@ def point_labels(point):
     if point is None:
         return 'All Signal Samples', plottag
     m1, delta, ctau = point
-    return (rf'$m_1$ = {m1:g} GeV, $\Delta$ = {delta:g}, $c\tau$ = {ctau:g} mm',
+    return (rf'$m_1$ = {m1:g} GeV, $\delta$ = {ptools.fmt_delta(delta)}, $c\tau$ = {ctau:g} mm',
             f'{plottag}_m1-{m1:g}_delta-{delta:g}_ctau-{ctau:g}')
 
 
@@ -191,9 +198,9 @@ def plot_reason_stack_1d(neff, overall, scale, reasons, axis, cat, cut, point=No
     n = len(axis)
     x = np.arange(n) + 0.5
 
-    fig, ax = plt.subplots(figsize=(10, 8))
+    fig, ax = ptools.new_fig(year)
     bottom = np.zeros(n)
-    colors = plt.cm.tab10(np.arange(len(reasons)))
+    colors = ptools.cms_colors(len(reasons))
     for ir, r in enumerate(reasons):
         ax.bar(x, neff[ir], width=1, bottom=bottom, color=colors[ir], edgecolor='black', label=r)
         bottom += neff[ir]
@@ -241,10 +248,11 @@ def plot_reason_map(frac, axes, cat, reason, cut, ilxy, idr, point=None):
         bin_tag += f'_dr{dr_lo:g}to{dr_hi:g}'
     frac = frac.T   # shape (n_eta, n_pt)
 
-    fig, ax = plt.subplots(figsize=(10, 8))
+    fig, ax = ptools.new_fig(year, cms_label=False)
     mesh = ax.pcolormesh(np.arange(n_pt + 1), np.arange(n_eta + 1), frac,
                          cmap='viridis', vmin=0, vmax=1)
     fig.colorbar(mesh, ax=ax).set_label(f'Fraction of {cat} electrons', fontsize=18)
+    ptools.add_cms_label(ax, year)
 
     for i in range(n_eta):
         for j in range(n_pt):

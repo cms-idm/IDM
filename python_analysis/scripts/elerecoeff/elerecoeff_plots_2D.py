@@ -31,6 +31,8 @@ import copy
 import warnings
 import mplhep as hep
 
+ptools.set_plot_style()
+
 outdir = os.path.join(REPO_ROOT, 'workarea')
 plotdir = os.path.join(REPO_ROOT, 'plots', 'elerecoeff')
 os.makedirs(plotdir, exist_ok=True)
@@ -123,8 +125,8 @@ def plot_2D_eff(h_eff, ax, title_str):
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', message='.*Locator attempting to generate.*')
         hep.hist2dplot(h_eff, ax=ax, cmap=_cmap, cmin=0, cmax=1, cbarextend=False)
-    ax.set_xlabel(r'$p_T$ [GeV]')
-    ax.set_ylabel(r'$L_{xy}$ [cm]')
+    ax.set_xlabel(r'$p_T$ (GeV)')
+    ax.set_ylabel(r'$L_{xy}$ (cm)')
     ax.set_title(title_str, fontsize=11)
     ax.xaxis.set_major_locator(mpl.ticker.FixedLocator(_pt_edges))
     ax.yaxis.set_major_locator(mpl.ticker.FixedLocator(_lxy_edges))
@@ -165,8 +167,7 @@ labels_all = {
 }
 
 for tag, h_eff in eff_all.items():
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6', ax=ax)
+    fig, ax = ptools.new_fig(plot_dict['year'])
     plot_2D_eff(h_eff, ax, rf'{title}: {labels_all[tag]} Efficiency ($p_T$ vs $L_{{xy}}$) — all samples')
     plt.tight_layout()
     plt.savefig(f"{plotdir}/hist_{plottag}_{tag}_allsamps.png")
@@ -203,7 +204,7 @@ for sname in selected_samples:
     slabel = sample_label(row)
 
     fig, axes = plt.subplots(2, 3, figsize=(size[0] * 3, size[1] * 2))
-    hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6', ax=axes[0, 0])
+    ptools.add_cms_label(axes[0, 0], plot_dict['year'])
     plot_2D_eff(eff_ps['lpt'],    axes[0, 0], rf'Lpt — {slabel}')
     plot_2D_eff(eff_ps['ged'],    axes[0, 1], rf'GED — {slabel}')
     plot_2D_eff(eff_ps['both'],   axes[0, 2], rf'Both — {slabel}')
