@@ -743,10 +743,10 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          nt.recoMuonPhi_.push_back(mu.phi());     
          nt.recoMuonEnergy_.push_back(mu.energy());
          nt.recoMuonCharge_.push_back(mu.charge());     
-         nt.recoMuonIDcutBasedLoose_.push_back(mu.passed('CutBasedIdLoose'));
-         nt.recoMuonIDcutBasedMedium_.push_back(mu.passed('CutBasedIdMedium'));
-         nt.recoMuonIDcutBasedMediumPrompt_.push_back(mu.passed('CutBasedIdMediumPrompt'));
-         nt.recoMuonIDcutBasedTight_.push_back(mu.passed('CutBasedIdTight'));
+         nt.recoMuonIDcutBasedLoose_.push_back(mu.passed(reco::Muon::CutBasedIdLoose));
+         nt.recoMuonIDcutBasedMedium_.push_back(mu.passed(reco::Muon::CutBasedIdMedium));
+         nt.recoMuonIDcutBasedMediumPrompt_.push_back(mu.passed(reco::Muon::CutBasedIdMediumPrompt));
+         nt.recoMuonIDcutBasedTight_.push_back(mu.passed(reco::Muon::CutBasedIdTight));
          nt.recoMuonIsPFMuon_.push_back(mu.isPFMuon());
          nt.recoMuonIsGlobalMuon_.push_back(mu.isGlobalMuon());
          nt.recoMuonIsStandAloneMuon_.push_back(mu.isStandAloneMuon());

@@ -26,8 +26,8 @@ YEAR     = '2024'
 NTHREADS = 4
 IS_DATA  = 'False'
 IS_SIG   = 'False'
-CMSSW    = 'CMSSW_14_0_21'
-ENV_TAR  = 'ntuplizer_CMSSW_14_0_21_acrobert.tar.gz'
+CMSSW    = os.environ['CMSSW_VERSION']
+ENV_TAR  = f'ntuplizer_{CMSSW}_acrobert.tar.gz'
 
 XRD      = 'root://cmseos.fnal.gov/'
 EOS_BASE      = f'/store/group/lpcmetx/iDMe/Samples/Ntuples/background_{VERS}/{YEAR}'
