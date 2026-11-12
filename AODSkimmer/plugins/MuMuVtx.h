@@ -188,7 +188,7 @@ namespace mumuvtx {
         Gen g;
         g.index = static_cast<int>(i);
         g.q = p.charge();
-        const double lxy = p.vertex().rho();
+        const float lxy = p.vertex().rho();  // float, as the producer's Gen::lxy, before the 740 cut
         g.accepted = std::abs(p.eta()) < 2.4 && lxy >= 0 && lxy < 740 && std::abs(p.vz()) < 960;
         const FreeTrajectoryState start(GlobalPoint(p.vx(), p.vy(), p.vz()), GlobalVector(p.px(), p.py(), p.pz()),
                                         TrackCharge(p.charge()), field);

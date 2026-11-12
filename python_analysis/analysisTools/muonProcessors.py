@@ -104,9 +104,7 @@ class MuMuPairRecoveryProcessor(processor.ProcessorABC):
         if not np.array_equal(n_obj, _np(ak.num(mu.originalIndex, axis=1), np.int64)):
             raise RuntimeError('RecoDisplacedMuon field lengths differ')
         vtx = events.mumuvtx
-        counts = _np(ak.num(vtx.status, axis=1), np.int64)
-        if not np.array_equal(counts, _np(events.nmumuvtx, np.int64)):
-            raise RuntimeError('nmumuvtx differs from the mumuvtx collection length')
+        counts = _np(ak.num(vtx.status, axis=1), np.int64)  # MySchema turns nmumuvtx into these offsets
         i1, i2 = vtx.m1_idx, vtx.m2_idx
         _check_pairs(n_obj, fixed, i1, i2, counts)
 
@@ -133,7 +131,7 @@ class MuMuPairRecoveryProcessor(processor.ProcessorABC):
         out['events'] = n
         out['truth_accepted'] = int(t.sum())
         sig_q = ak.fill_none(ak.pad_none(events.mumusig.charge, 2, clip=True), 0)
-        n_sig = _np(events.nmumusig, np.int64)
+        n_sig = _np(ak.num(events.mumusig.charge, axis=1), np.int64)  # nmumusig -> offsets in MySchema
         q_prod = _np(sig_q[:, 0], np.int64) * _np(sig_q[:, 1], np.int64)
         has_signal_pair = (n_sig == 2) & (q_prod < 0)
         out['has_signal_pair'] = int(has_signal_pair.sum())
