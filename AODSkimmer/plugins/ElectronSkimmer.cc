@@ -114,6 +114,7 @@
 #include "iDMe/CustomTools/interface/DisplacedDileptonAOD.hh"
 #include "iDMe/CustomTools/interface/JetCorrections.hh"
 #include "iDMe/CustomTools/interface/NtupleContainerV2.hh"
+#include "iDMe/AODSkimmer/plugins/MuMuVtx.h"
 //#include "iDMe/CustomTools/interface/IsolationCalculator.hh"
 #include "iDMe/CustomTools/interface/Helpers.hh"
 
@@ -226,6 +227,8 @@ class ElectronSkimmer : public edm::one::EDAnalyzer<edm::one::WatchRuns, edm::on
       PropagateToMuon genMuonPropagatorSt2_;
       const edm::ESGetToken<MuonDetLayerGeometry, MuonRecoGeometryRecord> muonGeometryToken_;
       const edm::ESGetToken<Propagator, TrackingComponentsRecord> stationPropagatorAlongToken_;
+      // mumuvtx PCA: original tracks to the fitted vertex, as PreselectedVertexing.
+      const edm::ESGetToken<Propagator, TrackingComponentsRecord> mumuVertexPropagatorToken_;
 
       const edm::EDGetTokenT<vector<reco::Track> > staMuonToken_;
       const edm::EDGetTokenT<vector<reco::Track> > dsaMuonToken_;
@@ -666,6 +669,8 @@ ElectronSkimmer::ElectronSkimmer(const edm::ParameterSet& ps)
    muonGeometryToken_(esConsumes<MuonDetLayerGeometry, MuonRecoGeometryRecord>()),
    stationPropagatorAlongToken_(esConsumes<Propagator, TrackingComponentsRecord>(
       ps.getParameter<edm::ESInputTag>("stationPropagatorAlong"))),
+   mumuVertexPropagatorToken_(esConsumes<Propagator, TrackingComponentsRecord>(
+      edm::ESInputTag("", "SteppingHelixPropagatorAny"))),
    staMuonToken_(consumes<vector<reco::Track> >(ps.getParameter<edm::InputTag>("standAloneMuons"))),
    dsaMuonToken_(consumes<vector<reco::Track> >(ps.getParameter<edm::InputTag>("displacedStandAloneMuons"))),
    displacedTrackToken_(mayConsume<vector<reco::Track> >(ps.getParameter<edm::InputTag>("displacedTracks"))),
@@ -1210,10 +1215,11 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    fillMuonCollection(recoDisplacedMuonHandle_, nt.recoDisplacedMuon_, true);
    // Cleaner products are absent when the input has no displacedMuons (the cleaner then puts nothing):
    // leave originalIndex empty and nRaw at -1, as RecoDisplacedMuonAvailable = 0.
+   edm::Handle<vector<int>> originalIndexHandle;
    if (!displacedMuonOriginalIndexToken_.isUninitialized()) {
-      const auto originalIndex = iEvent.getHandle(displacedMuonOriginalIndexToken_);
-      if (originalIndex.isValid()) {
-         nt.recoDisplacedMuonOriginalIndex_ = *originalIndex;
+      originalIndexHandle = iEvent.getHandle(displacedMuonOriginalIndexToken_);
+      if (originalIndexHandle.isValid()) {
+         nt.recoDisplacedMuonOriginalIndex_ = *originalIndexHandle;
          if (nt.recoDisplacedMuonOriginalIndex_.size() != static_cast<size_t>(nt.recoDisplacedMuon_.n))
             throw cms::Exception("ElectronSkimmer") << "displacedMuonsOriginalIndex size "
                << nt.recoDisplacedMuonOriginalIndex_.size() << " != displacedMuons size " << nt.recoDisplacedMuon_.n;
@@ -1223,6 +1229,18 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       const auto nRaw = iEvent.getHandle(displacedMuonNRawToken_);
       if (nRaw.isValid())
          nt.nRecoDisplacedMuonRaw_ = *nRaw;
+   }
+   // Dimuon pairs, fixed components and signal truth labels on the cleaned collection (needs its originalIndex;
+   // skipped, with mumuvtxAvailable = 0, when either is absent). Hierarchy G > I > DSA (kb DECISIONS 2026-10-30).
+   {
+      const auto* vertexPropagator =
+         dynamic_cast<const SteppingHelixPropagator*>(&iSetup.getData(mumuVertexPropagatorToken_));
+      if (!vertexPropagator) throw cms::Exception("ElectronSkimmer") << "Expected SteppingHelixPropagatorAny";
+      const bool cleaned = recoDisplacedMuonHandle_.isValid() && originalIndexHandle.isValid();
+      mumuvtx::fill(nt, cleaned ? recoDisplacedMuonHandle_.product() : nullptr,
+                    cleaned ? originalIndexHandle.product() : nullptr,
+                    !isData && genParticleHandle_.isValid() ? genParticleHandle_.product() : nullptr,
+                    beamspot, magneticField, *theB, *vertexPropagator, genMuonPropagatorSt2_, {{2, 0, 1}});
    }
    fillMuonCollection(slimmedDisplacedMuonHandle_, nt.slimmedDisplacedMuon_, true);
 

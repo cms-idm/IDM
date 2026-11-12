@@ -1316,6 +1316,22 @@ public:
     vector<float> lptvtx_e2_refitDzErr_;
     vector<float> lptvtx_e2_refitChi2_;
 
+    // Dimuon pair candidates, fixed vertexing component and signal truth labels (AODSkimmer/plugins/MuMuVtx.h).
+    int mumuvtxAvailable_;
+    int nmumuvtx_;
+    vector<int> mumuvtx_m1_idx_, mumuvtx_m2_idx_, mumuvtx_m1_typ_, mumuvtx_m2_typ_;
+    vector<int> mumuvtx_m1_charge_, mumuvtx_m2_charge_, mumuvtx_status_, mumuvtx_pcaOK_;
+    vector<float> mumuvtx_chi2_, mumuvtx_ndof_, mumuvtx_prob_, mumuvtx_vx_, mumuvtx_vy_, mumuvtx_vz_;
+    vector<float> mumuvtx_lxyBS_, mumuvtx_mass_, mumuvtx_pcaDR_, mumuvtx_pcaMuMuPt_, mumuvtx_pcaMuMuPhi_;
+    vector<float> mumuvtx_m1_pcaPt_, mumuvtx_m1_pcaEta_, mumuvtx_m1_pcaPhi_;
+    vector<float> mumuvtx_m2_pcaPt_, mumuvtx_m2_pcaEta_, mumuvtx_m2_pcaPhi_;
+    vector<int> recoDisplacedMuonFixedComp_, recoDisplacedMuonMumusigIdx_;
+    vector<int> recoDisplacedMuonInnerTrackIdPass_, recoDisplacedMuonOuterTrackIdPass_, recoDisplacedMuonGlobalTrackIdPass_;
+    vector<int> recoDisplacedMuonInnerTrackInEta_, recoDisplacedMuonOuterTrackInEta_, recoDisplacedMuonGlobalTrackInEta_;
+    int nmumusig_;
+    vector<int> mumusig_genIdx_, mumusig_charge_, mumusig_accepted_;
+    int mumusigTwoAcc_;
+
 protected:
     struct FlatP4Vector {
         const vector<math::XYZTLorentzVector>* p4;

@@ -1322,6 +1322,49 @@ void NtupleContainerV2::CreateTreeBranches() {
         }
     }
 
+
+    // Dimuon pair candidates (mumuvtx), fixed vertexing component and signal truth labels (mumusig);
+    // filled by AODSkimmer/plugins/MuMuVtx.h. Legs index RecoDisplacedMuon (local positions).
+    outT->Branch("mumuvtxAvailable", &mumuvtxAvailable_);
+    outT->Branch("nmumuvtx", &nmumuvtx_);
+    outT->Branch("mumuvtx_m1_idx", &mumuvtx_m1_idx_);
+    outT->Branch("mumuvtx_m2_idx", &mumuvtx_m2_idx_);
+    outT->Branch("mumuvtx_m1_typ", &mumuvtx_m1_typ_);
+    outT->Branch("mumuvtx_m2_typ", &mumuvtx_m2_typ_);
+    outT->Branch("mumuvtx_m1_charge", &mumuvtx_m1_charge_);
+    outT->Branch("mumuvtx_m2_charge", &mumuvtx_m2_charge_);
+    outT->Branch("mumuvtx_status", &mumuvtx_status_);
+    outT->Branch("mumuvtx_chi2", &mumuvtx_chi2_);
+    outT->Branch("mumuvtx_ndof", &mumuvtx_ndof_);
+    outT->Branch("mumuvtx_prob", &mumuvtx_prob_);
+    outT->Branch("mumuvtx_vx", &mumuvtx_vx_);
+    outT->Branch("mumuvtx_vy", &mumuvtx_vy_);
+    outT->Branch("mumuvtx_vz", &mumuvtx_vz_);
+    outT->Branch("mumuvtx_lxyBS", &mumuvtx_lxyBS_);
+    outT->Branch("mumuvtx_mass", &mumuvtx_mass_);
+    outT->Branch("mumuvtx_pcaOK", &mumuvtx_pcaOK_);
+    outT->Branch("mumuvtx_pcaDR", &mumuvtx_pcaDR_);
+    outT->Branch("mumuvtx_pcaMuMuPt", &mumuvtx_pcaMuMuPt_);
+    outT->Branch("mumuvtx_pcaMuMuPhi", &mumuvtx_pcaMuMuPhi_);
+    outT->Branch("mumuvtx_m1_pcaPt", &mumuvtx_m1_pcaPt_);
+    outT->Branch("mumuvtx_m1_pcaEta", &mumuvtx_m1_pcaEta_);
+    outT->Branch("mumuvtx_m1_pcaPhi", &mumuvtx_m1_pcaPhi_);
+    outT->Branch("mumuvtx_m2_pcaPt", &mumuvtx_m2_pcaPt_);
+    outT->Branch("mumuvtx_m2_pcaEta", &mumuvtx_m2_pcaEta_);
+    outT->Branch("mumuvtx_m2_pcaPhi", &mumuvtx_m2_pcaPhi_);
+    outT->Branch("RecoDisplacedMuon_fixedComp", &recoDisplacedMuonFixedComp_);
+    outT->Branch("RecoDisplacedMuon_mumusigIdx", &recoDisplacedMuonMumusigIdx_);
+    outT->Branch("RecoDisplacedMuon_innerTrack_idPass", &recoDisplacedMuonInnerTrackIdPass_);
+    outT->Branch("RecoDisplacedMuon_outerTrack_idPass", &recoDisplacedMuonOuterTrackIdPass_);
+    outT->Branch("RecoDisplacedMuon_globalTrack_idPass", &recoDisplacedMuonGlobalTrackIdPass_);
+    outT->Branch("RecoDisplacedMuon_innerTrack_inEta", &recoDisplacedMuonInnerTrackInEta_);
+    outT->Branch("RecoDisplacedMuon_outerTrack_inEta", &recoDisplacedMuonOuterTrackInEta_);
+    outT->Branch("RecoDisplacedMuon_globalTrack_inEta", &recoDisplacedMuonGlobalTrackInEta_);
+    outT->Branch("nmumusig", &nmumusig_);
+    outT->Branch("mumusig_genIdx", &mumusig_genIdx_);
+    outT->Branch("mumusig_charge", &mumusig_charge_);
+    outT->Branch("mumusig_accepted", &mumusig_accepted_);
+    outT->Branch("mumusigTwoAcc", &mumusigTwoAcc_);
 }
 
 // Mirrors the subset of CreateTreeBranches() that ElectronSkimmer::analyze() fills
@@ -1726,6 +1769,22 @@ void NtupleContainerV2::ClearTreeBranches() {
     recoDisplacedMuon_.clear();
     recoDisplacedMuonOriginalIndex_.clear();
     nRecoDisplacedMuonRaw_ = -1;
+    mumuvtxAvailable_ = 0;
+    nmumuvtx_ = 0;
+    for (auto* v : {&mumuvtx_m1_idx_, &mumuvtx_m2_idx_, &mumuvtx_m1_typ_, &mumuvtx_m2_typ_, &mumuvtx_m1_charge_,
+                    &mumuvtx_m2_charge_, &mumuvtx_status_, &mumuvtx_pcaOK_, &recoDisplacedMuonFixedComp_,
+                    &recoDisplacedMuonMumusigIdx_, &recoDisplacedMuonInnerTrackIdPass_,
+                    &recoDisplacedMuonOuterTrackIdPass_, &recoDisplacedMuonGlobalTrackIdPass_,
+                    &recoDisplacedMuonInnerTrackInEta_, &recoDisplacedMuonOuterTrackInEta_,
+                    &recoDisplacedMuonGlobalTrackInEta_, &mumusig_genIdx_, &mumusig_charge_, &mumusig_accepted_})
+        v->clear();
+    for (auto* v : {&mumuvtx_chi2_, &mumuvtx_ndof_, &mumuvtx_prob_, &mumuvtx_vx_, &mumuvtx_vy_, &mumuvtx_vz_,
+                    &mumuvtx_lxyBS_, &mumuvtx_mass_, &mumuvtx_pcaDR_, &mumuvtx_pcaMuMuPt_, &mumuvtx_pcaMuMuPhi_,
+                    &mumuvtx_m1_pcaPt_, &mumuvtx_m1_pcaEta_, &mumuvtx_m1_pcaPhi_, &mumuvtx_m2_pcaPt_,
+                    &mumuvtx_m2_pcaEta_, &mumuvtx_m2_pcaPhi_})
+        v->clear();
+    nmumusig_ = 0;
+    mumusigTwoAcc_ = 0;
     slimmedDisplacedMuon_.clear();
 
     nPFMuon_ = 0;
