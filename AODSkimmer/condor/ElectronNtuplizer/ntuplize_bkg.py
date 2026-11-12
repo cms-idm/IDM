@@ -4,8 +4,8 @@ import argparse
 
 XROOTD_REDIRECTOR = "root://cmsxrootd.fnal.gov/"
 
-CMSSW = 'CMSSW_14_0_21'
-compiled_CMSSW_envs = 'ntuplizer_CMSSW_14_0_21_acrobert.tar.gz'
+CMSSW = os.environ['CMSSW_VERSION']
+compiled_CMSSW_envs = f'ntuplizer_{CMSSW}_acrobert.tar.gz'
 
 def query_das_files(dataset):
     query = f"dasgoclient --query='file dataset={dataset}' -json"
