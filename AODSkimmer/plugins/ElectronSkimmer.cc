@@ -1209,7 +1209,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    fillMuonCollection(pfRecoMuHandle_, nt.slimmedMuon_, true);
    fillMuonCollection(recoDisplacedMuonHandle_, nt.recoDisplacedMuon_, true);
    // Cleaner products are absent when the input has no displacedMuons (the cleaner then puts nothing):
-   // leave originalIndex empty and nRaw at -1, as RecoDisplacedMuon_available = 0.
+   // leave originalIndex empty and nRaw at -1, as RecoDisplacedMuonAvailable = 0.
    if (!displacedMuonOriginalIndexToken_.isUninitialized()) {
       const auto originalIndex = iEvent.getHandle(displacedMuonOriginalIndexToken_);
       if (originalIndex.isValid()) {
@@ -3734,6 +3734,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       }
    }
 
+   nt.FillFlatP4();
    outT->Fill();
 
    } // end if (passesPtMiss)

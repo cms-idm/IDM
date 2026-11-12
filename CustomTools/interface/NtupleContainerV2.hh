@@ -2,6 +2,7 @@
 #define NTUPLECONTAINERV2_HH
 
 #include <vector>
+#include <deque>
 #include <map>
 #include <string>
 using std::vector;
@@ -24,6 +25,9 @@ public:
     // of any downstream preselection (see SetSlimTree/CreateSlimTreeBranches).
     void SetSlimTree(TTree *tree);
     void CreateSlimTreeBranches();
+    // Flat pt/eta/phi/mass beside every LorentzVector branch (coffea MySchema can't read split
+    // LorentzVector records). Call once per event, after all p4 are filled and before outT->Fill().
+    void FillFlatP4();
 
     // Trigger and event-level branches
     unsigned int fired_;
@@ -1313,6 +1317,20 @@ public:
     vector<float> lptvtx_e2_refitChi2_;
 
 protected:
+    struct FlatP4Vector {
+        const vector<math::XYZTLorentzVector>* p4;
+        vector<float> pt, eta, phi, mass;
+    };
+    struct FlatP4Scalar {
+        const math::XYZTLorentzVector* p4;
+        float pt, eta, phi, mass;
+    };
+    std::deque<FlatP4Vector> flatP4Vectors_;  // deque: stable addresses for TTree branches
+    std::deque<FlatP4Scalar> flatP4Scalars_;
+    // Branch the p4 and its flat components: name "X_p4" -> X_pt, X_eta, X_phi, X_mass;
+    // name "XP4" -> XPt, XEta, XPhi, XMass. flat = false: p4 only (flat names already taken).
+    void branchP4(const std::string& name, vector<math::XYZTLorentzVector>* p4, bool flat = true);
+    void branchP4(const std::string& name, math::XYZTLorentzVector* p4, bool flat = true);
     TTree * outT;
     // Slim, all-events tree (background only; see CreateSlimTreeBranches)
     TTree * outT_slim;
