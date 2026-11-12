@@ -8,6 +8,7 @@ import coffea.util as util
 import analysisTools.utils as utils
 import analysisTools.plotTools as ptools
 import os
+import warnings
 
 ptools.set_plot_style()
 
@@ -19,9 +20,25 @@ saved_signal_hists = f"{outdir}/hists_sig{vers}_{selection}-sel_{hists_tag}.coff
 seltag   = 'minjdphi'
 cut      = 'cut8'
 year     = 2024
+# m1 values excluded from every plot (all-samples sums and per-sample plots).
+# m1 = 0.05: nearly every event has gen dR(ee) < 0.01 with a much higher merged
+# fraction than other masses, which distorts the all-samples aggregates.
+exclude_m1s = [0.05]
 
 s_hists = util.load(saved_signal_hists)[0]
 s_pts   = utils.get_signal_point_dict(s_hists)
+
+# Drop excluded samples from the 'samp' axis of every hist, so "samp": sum and
+# per-sample lookups both skip them.
+_excl_samps = set(s_pts.name[np.isin(np.round(s_pts.m1, 4), exclude_m1s)])
+with warnings.catch_warnings():
+    # hist warns that list-selected-away bins don't go to overflow: intended.
+    warnings.filterwarnings('ignore', message='List indexing selection is experimental')
+    for _k, _h in s_hists.items():
+        if isinstance(_h, hist.Hist) and 'samp' in _h.axes.name:
+            s_hists[_k] = _h[{'samp': [s for s in _h.axes['samp'] if s not in _excl_samps]}]
+s_pts = s_pts[~s_pts.name.isin(_excl_samps)]
+print(f"Excluded {len(_excl_samps)} samples with m1 in {exclude_m1s}")
 
 os.makedirs('plots', exist_ok=True)
 
@@ -78,7 +95,7 @@ style_dict_base_sig = {
 }
 
 series_list = [
-    {'m1s': [0.05, 0.5, 5, 50], 'deltas': [0.1],            'ctaus': [10],         'tag': 'ctau-10_delta-0p1_m1-wide'},
+    {'m1s': [0.5, 5, 50],       'deltas': [0.1],            'ctaus': [10],         'tag': 'ctau-10_delta-0p1_m1-wide'},
     {'m1s': [0.5, 1, 2, 5],     'deltas': [0.1],            'ctaus': [10],         'tag': 'ctau-10_delta-0p1_m1-narrow'},
     {'m1s': [0.5],              'deltas': [0.1],            'ctaus': [1, 10, 100], 'tag': 'm1-0p5_delta-0p1'},
     {'m1s': [0.5],              'deltas': [0.05, 0.1, 0.2], 'ctaus': [10],         'tag': 'm1-0p5_ctau-10'},
@@ -691,8 +708,10 @@ for coll, cstyle in coll_styles.items():
 
 # ── Section 10: gen ee dR, merged vs resolved only (fraction of events) ──────
 # Like the Section 9 gen_ee_dr_bycat plots, but only the merged and resolved
-# categories, rebinned 2x (adjacent bins merged), each curve normalized so its
-# in-range bins sum to 1 (y = fraction of that category's events per bin).
+# categories, native binning, x-axis drawn only to dR = 0.5. Each bin shows
+# the fraction of ALL events in that dR bin (zero matched + merged + resolved)
+# that fall into the category, with binomial errors; the two curves plus the
+# (undrawn) zero-matched fraction sum to 1 in every bin.
 # Uses RAW (unweighted) event counts with Poisson errors, not xsec-weighted
 # sums: the weighted sum is dominated by a few hundred heavy-weight
 # Mchi-55 events in the merged category, inflating its error bars. Raw counts
@@ -716,22 +735,33 @@ def _raw_counts(h):
 
 for coll, cstyle in coll_styles.items():
     h_full = s_hists[f'gen_ee_dr_cat_{coll}'][{'cut': cut}]
-    h_full = h_full[{'dr': hist.rebin(2)}]
+    # Drop bins above dR = 0.5 so the floating y-range follows only the drawn
+    # bins (per-bin normalization, so this doesn't change the plotted values).
+    h_full = h_full[{'dr': slice(None, 0.5j)}]
     edges = h_full.axes['dr'].edges
+    # Per-bin denominator: all events in the bin, summed over every category
+    # (zero matched + merged + resolved).
+    n_all = sum(_raw_counts(h_full[{'cat': c}]) for c in _bycat_styles)
+    if n_all.sum() <= 0:
+        print(f"Skipping empty gen_ee_dr_cat_{coll}")
+        continue
     fig, ax = ptools.new_fig(year)
     for cat in ['merged', 'resolved']:
         kstyle = _bycat_styles[cat]
         counts = _raw_counts(h_full[{'cat': cat}])
-        total = counts.sum()
-        if total <= 0:
-            continue
-        hep.histplot(counts / total, edges, ax=ax, histtype='step',
-                     yerr=np.sqrt(counts) / total,
+        with np.errstate(divide='ignore', invalid='ignore'):
+            frac = np.where(n_all > 0, counts / n_all, np.nan)
+            # binomial error on the per-bin fraction
+            err = np.where(n_all > 0, np.sqrt(frac * (1 - frac) / n_all), np.nan)
+        hep.histplot(frac, edges, ax=ax, histtype='step', yerr=err,
                      label=kstyle['label'], color=kstyle['color'],
                      linestyle=kstyle['ls'], linewidth=2)
+    ax.set_xlim(0, 0.5)
+    ax.set_ylim(bottom=0)
     ax.set_xlabel(r'Gen $\Delta R(e^+e^-)$')
-    ax.set_ylabel('Fraction of Events')
+    ax.set_ylabel(r'Fraction of Events in $\Delta R$ Bin')
     ax.set_title(rf'{cstyle["label"]}: Gen $\Delta R(e^+e^-)$ by Reco Category')
+    plt.tight_layout()
     ptools.place_legend(ax)
     plt.tight_layout()
     outpath = f'{_mr_plotdir}/hist_{seltag}_gen_ee_dr_mergedres_{coll}_allsamps.png'
