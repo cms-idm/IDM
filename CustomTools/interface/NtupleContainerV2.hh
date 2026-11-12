@@ -1343,8 +1343,8 @@ protected:
     };
     std::deque<FlatP4Vector> flatP4Vectors_;  // deque: stable addresses for TTree branches
     std::deque<FlatP4Scalar> flatP4Scalars_;
-    // Branch the p4 and its flat components: name "X_p4" -> X_pt, X_eta, X_phi, X_mass;
-    // name "XP4" -> XPt, XEta, XPhi, XMass. flat = false: p4 only (flat names already taken).
+    // Branch the p4 outside the collection prefix ("X_y_p4" -> "XYP4") and its flat components inside it:
+    // "X_p4" -> X_pt, X_eta, X_phi, X_mass; "XP4" -> XPt, XEta, XPhi, XMass. flat = false: p4 only.
     void branchP4(const std::string& name, vector<math::XYZTLorentzVector>* p4, bool flat = true);
     void branchP4(const std::string& name, math::XYZTLorentzVector* p4, bool flat = true);
     TTree * outT;

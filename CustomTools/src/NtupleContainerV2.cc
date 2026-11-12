@@ -18,7 +18,7 @@ inline void flatComponents(const math::XYZTLorentzVector& v, float& pt, float& e
 }
 // Scalar availability flag outside the collection prefix, so coffea MySchema keeps it as an event-level
 // field: "RecoDisplacedMuon_outerTrack" -> "RecoDisplacedMuonOuterTrackAvailable".
-inline std::string availableName(const std::string& name) {
+inline std::string camelJoin(const std::string& name) {
     std::string out;
     bool upper = false;
     for (const char c : name) {
@@ -26,9 +26,19 @@ inline std::string availableName(const std::string& name) {
         out += upper ? static_cast<char>(std::toupper(static_cast<unsigned char>(c))) : c;
         upper = false;
     }
-    return out + "Available";
+    return out;
 }
-// "X_p4" -> ("X", "_pt", ...); "XP4" -> ("X", "Pt", ...).
+inline std::string availableName(const std::string& name) { return camelJoin(name) + "Available"; }
+// LorentzVector branches are split into fCoordinates sub-branches, which coffea MySchema can't zip into a
+// collection: the p4 itself goes outside the collection prefix, "X_y_p4" -> "XYP4", "X_yP4" -> "XYP4".
+inline std::string p4BranchName(const std::string& name) {
+    const bool snake = name.size() >= 3 && name.compare(name.size() - 3, 3, "_p4") == 0;
+    const bool camel = !snake && name.size() >= 2 && name.compare(name.size() - 2, 2, "P4") == 0;
+    if (!snake && !camel)
+        throw std::runtime_error("NtupleContainerV2::branchP4: name must end in _p4 or P4: " + name);
+    return camelJoin(name.substr(0, name.size() - (snake ? 3 : 2))) + "P4";
+}
+// Flat components stay in the collection: "X_p4" -> ("X_pt", ...); "XP4" -> ("XPt", ...).
 inline std::array<std::string, 4> flatNames(const std::string& name) {
     const bool snake = name.size() >= 3 && name.compare(name.size() - 3, 3, "_p4") == 0;
     const bool camel = !snake && name.size() >= 2 && name.compare(name.size() - 2, 2, "P4") == 0;
@@ -41,8 +51,8 @@ inline std::array<std::string, 4> flatNames(const std::string& name) {
 }  // namespace
 
 void NtupleContainerV2::branchP4(const std::string& name, vector<math::XYZTLorentzVector>* p4, bool flat) {
-    if (!flat) { outT->Branch(name.c_str(), p4); return; }
-    outT->Branch(name.c_str(), p4);
+    outT->Branch(p4BranchName(name).c_str(), p4);
+    if (!flat) return;
     flatP4Vectors_.push_back(FlatP4Vector{p4, {}, {}, {}, {}});
     auto& f = flatP4Vectors_.back();
     const auto names = flatNames(name);
@@ -53,8 +63,8 @@ void NtupleContainerV2::branchP4(const std::string& name, vector<math::XYZTLoren
 }
 
 void NtupleContainerV2::branchP4(const std::string& name, math::XYZTLorentzVector* p4, bool flat) {
-    if (!flat) { outT->Branch(name.c_str(), p4); return; }
-    outT->Branch(name.c_str(), p4);
+    outT->Branch(p4BranchName(name).c_str(), p4);
+    if (!flat) return;
     flatP4Scalars_.push_back(FlatP4Scalar{p4, -999.f, -999.f, -999.f, -999.f});
     auto& f = flatP4Scalars_.back();
     const auto names = flatNames(name);
