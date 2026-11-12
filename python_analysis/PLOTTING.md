@@ -56,15 +56,33 @@ go in `plotTools.py`, but check with the maintainers before changing it.
 Each script has one (`_finish` / `_finalize_plot`): sets xlabel, ylabel, title, log scales,
 legend, then saves and closes.
 
-### 4. 1D histograms
+### 4. 1D distributions (step lines)
 
-- `hep.histplot(..., histtype='step', linewidth=2)`, usually unit-area normalized
-  (`density=True` or `h/integral`).
+- Distributions are step lines: `hep.histplot(h, histtype='step', linewidth=2, yerr=...)`.
+  No markers.
+- Error bars are Poisson:
+  - unweighted fills: sqrt(N) per bin;
+  - weighted fills: sqrt(sum w^2) per bin. The histogram must store variances
+    (`hist.storage.Weight()`; `Sumw2()` in ROOT).
+  Pass them explicitly: `yerr=np.sqrt(h.variances())`. Never pass `yerr=True` on a weighted
+  histogram without Weight storage. On that storage hist/mplhep has no sum-of-weights-squared and
+  falls back to sqrt(sum w).
+- Unit-area plots: divide contents and errors by the same integral (`density=True` does this).
+  
 - **No default y-axis label**: choose one per plot, or ask.
 - Linestyle (`'-'`, `'--'`) for a second grouping dimension.
 - Log y when populations span orders of magnitude; log x when the axis is log-binned (check
   `axis.transform is not None`, or keep an explicit set of log-x keys).
 
+### 4c. Efficiencies (points)
+
+- Efficiencies, acceptances and fractions are points with error bars:
+  `ax.errorbar(x, eff, yerr=(eff - lo, hi - eff), xerr=half_bin_width, fmt='o', markersize=6,
+  capsize=0, lw=2)`. No connecting lines. A cutflow with categorical x uses no `xerr`.
+- Error bars: central Clopper–Pearson 68.3% interval from the raw counts k (pass) and n (total),
+  via `ptools.clopper_pearson(k, n, cl=0.683)`. Bins with n = 0 are not drawn.
+- y range 0 to 1 (headroom above 1 only for the legend, per section 2). The y label names
+  numerator and denominator in the caption, not on the axis.
 ### 4b. Colors (CMS Petroff palettes only)
 
 - ≤ 6 color-coded series: `ptools.CMS_COLORS_6`; 7–10: `ptools.CMS_COLORS_10`. Never mix them on
