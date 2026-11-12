@@ -59,7 +59,12 @@ public:
   }
 
   void produce(edm::StreamID, edm::Event& iEvent, const edm::EventSetup&) const override {
-    const auto& muons = iEvent.get(muonToken_);
+    // MiniAOD without reco::Muon displacedMuons (e.g. standard 2024 MiniAOD): put nothing, so downstream
+    // getHandle sees the products as absent. AOD-like input is cleaned as before.
+    const auto handle = iEvent.getHandle(muonToken_);
+    if (!handle.isValid())
+      return;
+    const auto& muons = *handle;
     const size_t n = muons.size();
 
     std::vector<std::vector<RefKey>> keys(n);
