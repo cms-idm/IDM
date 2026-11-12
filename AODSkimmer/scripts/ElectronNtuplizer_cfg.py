@@ -10,8 +10,7 @@ from Configuration.Eras.Era_Run2_2016_HIPM_cff import Run2_2016_HIPM
 
 #Run3 imports
 from Configuration.Eras.Era_Run3_cff import Run3                   #corresponds to Run3 2022 (maybe)
-from Configuration.Eras.Era_Run3_2023_cff import Run3_2023         #corresponds to Run3 2023
-from Configuration.Eras.Era_Run3_2024_cff import Run3_2024         # 2024
+# Run3_2023 and Run3_2024 are imported below only in CMSSW_14_0_21 (absent from CMSSW_13_0_13).
 
 import sys
 import os

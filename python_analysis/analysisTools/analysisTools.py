@@ -224,7 +224,14 @@ class Analyzer:
             proc = trigProcessor(self.sample_names,self.sample_info,self.sample_locs,self.histoFile,self.cuts,mode=self.mode,**kwargs)
         elif procType == 'bare':
             proc = bareProcessor(self.sample_names,self.sample_info,self.sample_locs,self.histoFile,self.cuts,mode=self.mode,**kwargs)
-        
+        elif procType == 'mumu':
+            # muon channel: dimuon pair recovery from the mumuvtx ntuple content (muonProcessors.py)
+            try:
+                from muonProcessors import MuMuPairRecoveryProcessor
+            except ModuleNotFoundError:
+                from analysisTools.muonProcessors import MuMuPairRecoveryProcessor
+            proc = MuMuPairRecoveryProcessor(self.sample_names,self.sample_info)
+
         if not self.newCoffea:
             if execr == "iterative":
                 executor = processor.IterativeExecutor()
