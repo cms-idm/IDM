@@ -899,7 +899,8 @@ ElectronSkimmer::fillDescriptions(edm::ConfigurationDescriptions& descriptions) 
    // Cleaner products (cleanedDisplacedMuons_cff); empty = displacedMuons is raw, branches left empty.
    desc.add<edm::InputTag>("displacedMuonsOriginalIndex", edm::InputTag(""));
    desc.add<edm::InputTag>("displacedMuonsNRaw", edm::InputTag(""));
-   desc.add<edm::InputTag>("slimmedDisplacedMuons", edm::InputTag("slimmedDisplacedMuons", "", "PAT"));
+   // No process name: take the latest producer (PAT in our iDMmu MiniAOD, RECO in standard 2024 MiniAOD).
+   desc.add<edm::InputTag>("slimmedDisplacedMuons", edm::InputTag("slimmedDisplacedMuons"));
 
    // Propagators used for gen/reco muon matching at the muon stations.
    // genMuonPropagatorSt1 should use useStation2 = false.
@@ -1207,14 +1208,22 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    };
    fillMuonCollection(pfRecoMuHandle_, nt.slimmedMuon_, true);
    fillMuonCollection(recoDisplacedMuonHandle_, nt.recoDisplacedMuon_, true);
+   // Cleaner products are absent when the input has no displacedMuons (the cleaner then puts nothing):
+   // leave originalIndex empty and nRaw at -1, as RecoDisplacedMuon_available = 0.
    if (!displacedMuonOriginalIndexToken_.isUninitialized()) {
-      nt.recoDisplacedMuonOriginalIndex_ = iEvent.get(displacedMuonOriginalIndexToken_);
-      if (nt.recoDisplacedMuonOriginalIndex_.size() != static_cast<size_t>(nt.recoDisplacedMuon_.n))
-         throw cms::Exception("ElectronSkimmer") << "displacedMuonsOriginalIndex size "
-            << nt.recoDisplacedMuonOriginalIndex_.size() << " != displacedMuons size " << nt.recoDisplacedMuon_.n;
+      const auto originalIndex = iEvent.getHandle(displacedMuonOriginalIndexToken_);
+      if (originalIndex.isValid()) {
+         nt.recoDisplacedMuonOriginalIndex_ = *originalIndex;
+         if (nt.recoDisplacedMuonOriginalIndex_.size() != static_cast<size_t>(nt.recoDisplacedMuon_.n))
+            throw cms::Exception("ElectronSkimmer") << "displacedMuonsOriginalIndex size "
+               << nt.recoDisplacedMuonOriginalIndex_.size() << " != displacedMuons size " << nt.recoDisplacedMuon_.n;
+      }
    }
-   if (!displacedMuonNRawToken_.isUninitialized())
-      nt.nRecoDisplacedMuonRaw_ = iEvent.get(displacedMuonNRawToken_);
+   if (!displacedMuonNRawToken_.isUninitialized()) {
+      const auto nRaw = iEvent.getHandle(displacedMuonNRawToken_);
+      if (nRaw.isValid())
+         nt.nRecoDisplacedMuonRaw_ = *nRaw;
+   }
    fillMuonCollection(slimmedDisplacedMuonHandle_, nt.slimmedDisplacedMuon_, true);
 
    // Handling Jets
