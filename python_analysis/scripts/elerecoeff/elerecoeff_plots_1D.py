@@ -30,6 +30,8 @@ from hist.storage import Weight
 import copy
 import mplhep as hep
 
+ptools.set_plot_style()
+
 #cuts_config = "configs/selections/minimal_cuts.py"
 #hists_config = "configs/hists/genstudy.py"
 #sample_config = "configs/samples/signal_2024_Apr2026_aEM.json"
@@ -59,14 +61,14 @@ proj_configs = [
         'alllpt_variables': ['ele_reco_alllpt_pt_lxy','ele_reco_noalllpt_pt_lxy'],
         'xlpt_variable':    'ele_reco_xlpt_pt_lxy',
         'project': {"samp": sum, "lxy": sum}, 'rebin_edges': _pt_edges,
-        'plottag': f'{seltag}_ele-reco_only-pt',  'var': r'$p_T$ [GeV]',
+        'plottag': f'{seltag}_ele-reco_only-pt',  'var': r'$p_T$ (GeV)',
     },
     {
         'variables':        ['ele_reco_lpt_pt_lxy',   'ele_reco_ged_pt_lxy',   'ele_reco_none_pt_lxy'],
         'alllpt_variables': ['ele_reco_alllpt_pt_lxy','ele_reco_noalllpt_pt_lxy'],
         'xlpt_variable':    'ele_reco_xlpt_pt_lxy',
         'project': {"samp": sum, "pt":  sum}, 'rebin_edges': _lxy_edges,
-        'plottag': f'{seltag}_ele-reco_only-xy', 'var': r'$L_{xy}$ [cm]', 'doLogx': True,
+        'plottag': f'{seltag}_ele-reco_only-xy', 'var': r'$L_{xy}$ (cm)', 'doLogx': True,
     },
     {
         'variables':        ['ele_reco_lpt_eta',   'ele_reco_ged_eta',   'ele_reco_none_eta'],
@@ -80,7 +82,7 @@ proj_configs = [
         'alllpt_variables': ['ele_reco_alllpt_lz','ele_reco_noalllpt_lz'],
         'xlpt_variable':    'ele_reco_xlpt_lz',
         'project': {"samp": sum}, 'rebin_edges': _vz_edges,
-        'plottag': f'{seltag}_ele-reco_only-vz',  'var': r'$L_z$ [cm]', 'doLogx': True,
+        'plottag': f'{seltag}_ele-reco_only-vz',  'var': r'$L_z$ (cm)', 'doLogx': True,
     },
     {
         'variables':        ['ele_reco_lpt_dr',   'ele_reco_ged_dr',   'ele_reco_none_dr'],
@@ -99,8 +101,7 @@ s_cutsidx = utils.get_signal_list_of_cuts(s_hists, get_cut_idx = True)
 s_cutsname = utils.get_signal_list_of_cuts(s_hists, get_cut_idx = False)
 
 df = utils.get_signal_cutflow_dict(s_hists, 'cutflow')
-size = (16, 12)
-fig, ax = plt.subplots(figsize=size)
+fig, ax = ptools.new_fig(plot_dict['year'], cms_label=False)
 
 style_dict = {
     'fig': fig, 'ax': ax,
@@ -186,14 +187,14 @@ def pick_pair_varying_variable(pts_df, vary_col, fix_cols):
 
 vary_configs = [
     {'vary': 'm1',    'fix': ['delta', 'ctau'], 'tag': 'varyM1',    'label': r'vary $M_1$'},
-    {'vary': 'delta', 'fix': ['m1',    'ctau'], 'tag': 'varyDelta', 'label': r'vary $\Delta$'},
+    {'vary': 'delta', 'fix': ['m1',    'ctau'], 'tag': 'varyDelta', 'label': r'vary $\delta$'},
     {'vary': 'ctau',  'fix': ['m1',   'delta'], 'tag': 'varyCTau',  'label': r'vary $c\tau$'},
 ]
 sample_pairs = {vc['tag']: pick_pair_varying_variable(s_pts, vc['vary'], vc['fix']) for vc in vary_configs}
 representative_samples = pick_representative_samples(s_pts, max_samples=6)
 
 def sample_label(row):
-    return rf"$M_1$={row['m1']:.3g}, $\Delta$={row['delta']:.3g}, $c\tau$={row['ctau']:.0f} mm"
+    return rf"$M_1$={row['m1']:.3g}, $\delta$={ptools.fmt_delta(row['delta'])}, $c\tau$={row['ctau']:.0f} mm"
 
 for cfg in proj_configs:
     sumhists = [
@@ -201,8 +202,7 @@ for cfg in proj_configs:
         for v in cfg['variables']
     ]
 
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6')
+    fig, ax = ptools.new_fig(plot_dict['year'])
     hep.histplot(sumhists, yerr=[np.sqrt(h.variances()) for h in sumhists], density=style_dict['doDensity'], ax=ax,
                  histtype='step', flow=style_dict['flow'], label=['Lpt', 'GED', 'None'])
     binwidth = sumhists[0].axes.widths[0][0]
@@ -214,7 +214,7 @@ for cfg in proj_configs:
     if cfg.get('doLogx'):
         ax.set_xscale('log')
     plt.title(rf"{title}: {cfg['var']}")
-    plt.legend()
+    ptools.place_legend(ax)
     plt.savefig(f"{plotdir}/hist_{cfg['plottag']}_hist_allpts.png")
     plt.close(fig)
 
@@ -236,8 +236,7 @@ for cfg in proj_configs:
     h_xlpt_eff   = ratio_hist(xlpt_hist_rb,       alllpt_hists_rb[0] + alllpt_hists_rb[1])
     effhists = [h_lpt_eff, h_ged_eff, h_both_eff, h_alllpt_eff, h_xlpt_eff]
 
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6')
+    fig, ax = ptools.new_fig(plot_dict['year'])
     hep.histplot(effhists, yerr=[np.sqrt(h.variances()) for h in effhists], density=style_dict['doDensity'], ax=ax,
                  histtype='step', flow=style_dict['flow'], label=['Lpt', 'GED', 'Both', 'AllLowPt', 'xLowPt'])
     binwidth = sumhists[0].axes.widths[0][0]
@@ -256,9 +255,8 @@ for cfg in proj_configs:
     # Per-sample efficiency plots: 3 plots, each pair controls for 2 of (m1, delta, ctau)
     for vc in vary_configs:
         pair = sample_pairs[vc['tag']]
-        fig, ax = plt.subplots(figsize=size)
-        hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6')
-        colors = [f'C{i}' for i in range(len(pair))]
+        fig, ax = ptools.new_fig(plot_dict['year'])
+        colors = ptools.cms_colors(len(pair))[:len(pair)]
         for sname, color in zip(pair, colors):
             samp_slice = {k: (sname if k == "samp" else v) for k, v in cfg['project'].items()}
             ps_hists = [
@@ -307,10 +305,9 @@ for cfg in proj_configs:
         {'tag': 'alllpt', 'label': 'AllLowPt'},
         {'tag': 'xlpt',   'label': 'xLowPt'},
     ]
-    rep_colors = plt.cm.tab10(np.linspace(0, 0.9, len(representative_samples)))
+    rep_colors = ptools.cms_colors(len(representative_samples))
     for et in eff_types:
-        fig, ax = plt.subplots(figsize=size)
-        hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6')
+        fig, ax = ptools.new_fig(plot_dict['year'])
         for sname, color in zip(representative_samples, rep_colors):
             samp_slice = {k: (sname if k == "samp" else v) for k, v in cfg['project'].items()}
             ps_hists = [
@@ -351,13 +348,12 @@ for cfg in proj_configs:
         plt.close(fig)
 
 # ── Comparison plots ──────────────────────────────────────────────────────────
-cmap = ["#3f90da", "#ffa90e", "#bd1f01", "#94a4a2", "#832db6", "#a96b59", "#e76300", "#b9ac70", "#717581", "#92dadd"]
 _comp_pt_edges  = list(range(0, 31))   # 30 × 1-GeV bins
 _comp_lxy_edges = list(range(0, 21))   # 20 × 1-cm bins
 _comp_pt_vars     = ['ele_reco_lpt_pt_lxy', 'ele_reco_ged_pt_lxy', 'ele_reco_none_pt_lxy']
 _comp_alllpt_vars = ['ele_reco_alllpt_pt_lxy', 'ele_reco_noalllpt_pt_lxy', 'ele_reco_xlpt_pt_lxy']
 _comp_eff_labels  = ['LowPt', 'GED', 'Both', 'AllLowPt', 'xLowPt']
-_comp_colors      = cmap[0:5] #['C0', 'C1', 'C2', 'C3', 'C4']
+_comp_colors      = ptools.cms_colors(len(_comp_eff_labels))   # 5 efficiency types -> CMS 6-colour
 _cut = plot_dict['cut']
 
 def _comp_effhists(hists_rb, alllpt_rb):
@@ -373,8 +369,7 @@ def _comp_effhists(hists_rb, alllpt_rb):
     ]
 
 def _comp_plot(effhists, xlabel, title_str, savepath):
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6')
+    fig, ax = ptools.new_fig(plot_dict['year'])
     for h, label, color in zip(effhists, _comp_eff_labels, _comp_colors):
         hep.histplot(h, yerr=np.sqrt(h.variances()), ax=ax,
                      histtype='step', linestyle='-', color=color, label=label)
@@ -391,14 +386,14 @@ _h  = [s_hists[v][{"cut": _cut, "samp": sum, "lxy": sum}] for v in _comp_pt_vars
 _ha = [s_hists[v][{"cut": _cut, "samp": sum, "lxy": sum}] for v in _comp_alllpt_vars]
 _comp_plot(_comp_effhists([rebin_variable(h, _comp_pt_edges) for h in _h],
                           [rebin_variable(h, _comp_pt_edges) for h in _ha]),
-           r'$p_T$ [GeV]', rf'{title} Efficiency vs $p_T$',
+           r'$p_T$ (GeV)', rf'{title} Efficiency vs $p_T$',
            f'{plotdir}/hist_{seltag}_comp_eff_pt.png')
 
 # Plot 1b: efficiency vs pT, all Lxy, no rebinning
 _h  = [s_hists[v][{"cut": _cut, "samp": sum, "lxy": sum}] for v in _comp_pt_vars]
 _ha = [s_hists[v][{"cut": _cut, "samp": sum, "lxy": sum}] for v in _comp_alllpt_vars]
 _comp_plot(_comp_effhists(_h, _ha),
-           r'$p_T$ [GeV]', rf'{title} Efficiency vs $p_T$ (no rebin)',
+           r'$p_T$ (GeV)', rf'{title} Efficiency vs $p_T$ (no rebin)',
            f'{plotdir}/hist_{seltag}_comp_eff_pt_norebin.png')
 
 # Plot 2: efficiency vs Lxy, all pT
@@ -406,7 +401,7 @@ _h  = [s_hists[v][{"cut": _cut, "samp": sum, "pt": sum}] for v in _comp_pt_vars]
 _ha = [s_hists[v][{"cut": _cut, "samp": sum, "pt": sum}] for v in _comp_alllpt_vars]
 _comp_plot(_comp_effhists([rebin_variable(h, _comp_lxy_edges) for h in _h],
                           [rebin_variable(h, _comp_lxy_edges) for h in _ha]),
-           r'$L_{xy}$ [cm]', rf'{title} Efficiency vs $L_{{xy}}$',
+           r'$L_{xy}$ (cm)', rf'{title} Efficiency vs $L_{{xy}}$',
            f'{plotdir}/hist_{seltag}_comp_eff_lxy.png')
 
 # Plots 3-7: efficiency vs pT in Lxy slices
@@ -429,7 +424,7 @@ for slc in _lxy_slices:
     _ha = [s_hists[v][{"cut": _cut, "samp": sum, "lxy": lxy_sl}] for v in _comp_alllpt_vars]
     _comp_plot(_comp_effhists([rebin_variable(h, _comp_pt_edges) for h in _h],
                               [rebin_variable(h, _comp_pt_edges) for h in _ha]),
-               r'$p_T$ [GeV]',
+               r'$p_T$ (GeV)',
                rf'{title} Efficiency vs $p_T$, {slc["label"]}',
                f'{plotdir}/hist_{seltag}_comp_eff_pt_{slc["tag"]}.png')
 
@@ -453,6 +448,6 @@ for slc in _pt_slices:
     _ha = [s_hists[v][{"cut": _cut, "samp": sum, "pt": pt_sl}] for v in _comp_alllpt_vars]
     _comp_plot(_comp_effhists([rebin_variable(h, _comp_lxy_edges) for h in _h],
                               [rebin_variable(h, _comp_lxy_edges) for h in _ha]),
-               r'$L_{xy}$ [cm]',
+               r'$L_{xy}$ (cm)',
                rf'{title} Efficiency vs {axlab}, {slc["label"]}',
                f'{plotdir}/hist_{seltag}_comp_eff_lxy_{slc["tag"]}.png')

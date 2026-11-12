@@ -3,10 +3,13 @@ import matplotlib.pyplot as plt
 import hist
 import coffea.util as util
 import analysisTools.utils as utils
+import analysisTools.plotTools as ptools
 from trainBDT.feature_sets import FEATURE_SETS
 import os
 
-plt.rcParams.update({
+# Smaller fonts than the house default: the matrix has one tick label per
+# variable and long two-line titles.
+ptools.set_plot_style(**{
     'font.size':        20,
     'axes.titlesize':   24,
     'axes.labelsize':   20,
@@ -56,13 +59,8 @@ indiv_samps = [
 _CONST = '_const'
 
 
-def _samp_name(s_pts, m1, delta, ctau):
-    row = s_pts[np.isclose(s_pts.m1, m1) & np.isclose(s_pts.delta, delta) & (s_pts.ctau == ctau)]
-    return row['name'].iloc[0] if not row.empty else None
-
-
 def _sig_label(m1, delta, ctau):
-    return rf'$M_1$={m1}, $\Delta$={delta}, $c\tau$={ctau} mm'
+    return rf'$M_1$={m1}, $\delta$={ptools.fmt_delta(delta)}, $c\tau$={ctau} mm'
 
 
 def _sig_tag(m1, delta, ctau):
@@ -130,11 +128,12 @@ def _subset_corr(names, corr, feature_set):
 def plot_corr(names, corr, title, fname):
     n = len(names)
     size = max(12, 0.55 * n + 4)
-    fig, ax = plt.subplots(figsize=(size + 2, size))
+    fig, ax = ptools.new_fig(year, cms_label=False, figsize=(size + 2, size))
 
     im = ax.imshow(corr, cmap='RdBu_r', vmin=-1, vmax=1)
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     cbar.set_label('Weighted Pearson correlation')
+    ptools.add_cms_label(ax, year)
 
     ax.set_xticks(range(n))
     ax.set_yticks(range(n))
@@ -151,7 +150,7 @@ def plot_corr(names, corr, title, fname):
             ax.text(j, i, f'{c:.2f}', ha='center', va='center', fontsize=fs,
                     color='white' if abs(c) > 0.6 else 'black')
 
-    ax.set_title(title, pad=20)
+    ax.set_title(title)
     fig.tight_layout()
     fig.savefig(f'{plotdir}/{fname}.png', dpi=150)
     plt.close(fig)
@@ -190,7 +189,7 @@ def plot_signal(s_hists):
 
         # individual samples
         for m1, delta, ctau in indiv_samps:
-            samp = _samp_name(s_pts, m1, delta, ctau)
+            samp = ptools.samp_name(s_pts, m1, delta, ctau)
             if samp is None:
                 print(f'No sample for m1={m1}, delta={delta}, ctau={ctau}; skipping')
                 continue

@@ -18,6 +18,8 @@ import json
 import os
 import glob
 
+ptools.set_plot_style()
+
 #cuts_config = "configs/selections/minimal_cuts.py"
 #hists_config = "configs/hists/genstudy.py"
 #sample_config = "configs/samples/signal_2024_May2026_aEM.json"
@@ -57,11 +59,12 @@ plot_dict_sig_eff = {
     'ctaus': ctaus,
 
     # Plot display styling
+    'year': 2024,      # for the CMS label
     'ylim': [1e-5, 1], # None for default
     'doLog': True,
     
     'ylabel': 'Efficiency', # None for default
-    'title': rf"Signal Cutflow [AN Selection]: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm",
+    'title': "Signal Cutflow [AN Selection]\n" rf"$M_1$ = {m1s}, $\delta$ = {ptools.fmt_delta(deltas)}, c$\tau$ = {ctaus}mm",
     'label': None,
 
     # Plot saving
@@ -75,60 +78,66 @@ deltas = [0.1]
 ctaus = [10]
 
 plot_dict_sig_eff['m1s'] = m1s; plot_dict_sig_eff['deltas'] = deltas; plot_dict_sig_eff['ctaus'] = ctaus
-plot_dict_sig_eff['title'] = rf"Signal Cutflow [AN Selection]: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm"
+plot_dict_sig_eff['title'] = "Signal Cutflow [AN Selection]\n" rf"$M_1$ = {m1s}, $\delta$ = {ptools.fmt_delta(deltas)}, c$\tau$ = {ctaus}mm"
 plot_dict_sig_eff['outName'] = f'cutflow/cutflow_{plottag}_ctau-{utils.stringfy_friendly(ctaus[0])}_delta-{utils.stringfy_friendly(deltas[0])}_m1-wide.png'
 
 ptools.plot_signal_efficiency(s_hists, df, plot_dict_sig_eff, df_wts=df_wts)
+plt.close()
 
 m1s = [0.5, 1, 2, 5]
 deltas = [0.1]
 ctaus = [10]
 
 plot_dict_sig_eff['m1s'] = m1s; plot_dict_sig_eff['deltas'] = deltas; plot_dict_sig_eff['ctaus'] = ctaus
-plot_dict_sig_eff['title'] = rf"Signal Cutflow [AN Selection]: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm"
+plot_dict_sig_eff['title'] = "Signal Cutflow [AN Selection]\n" rf"$M_1$ = {m1s}, $\delta$ = {ptools.fmt_delta(deltas)}, c$\tau$ = {ctaus}mm"
 plot_dict_sig_eff['outName'] = f'cutflow/cutflow_{plottag}_ctau-{utils.stringfy_friendly(ctaus[0])}_delta-{utils.stringfy_friendly(deltas[0])}_m1-narrow.png'
 
 ptools.plot_signal_efficiency(s_hists, df, plot_dict_sig_eff, df_wts=df_wts)
+plt.close()
 
 m1s = [0.5]
 deltas = [0.1]
 ctaus = [1, 10, 100]
 
 plot_dict_sig_eff['m1s'] = m1s; plot_dict_sig_eff['deltas'] = deltas; plot_dict_sig_eff['ctaus'] = ctaus
-plot_dict_sig_eff['title'] = rf"Signal Cutflow [AN Selection]: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm"
+plot_dict_sig_eff['title'] = "Signal Cutflow [AN Selection]\n" rf"$M_1$ = {m1s}, $\delta$ = {ptools.fmt_delta(deltas)}, c$\tau$ = {ctaus}mm"
 plot_dict_sig_eff['outName'] = f'cutflow/cutflow_{plottag}_m1-{utils.stringfy_friendly(m1s[0])}_delta-{utils.stringfy_friendly(deltas[0])}.png'
 
 ptools.plot_signal_efficiency(s_hists, df, plot_dict_sig_eff, df_wts=df_wts)
+plt.close()
 
 m1s = [0.5]
 deltas = [0.05, 0.1, 0.2]
 ctaus = [10]
 
 plot_dict_sig_eff['m1s'] = m1s; plot_dict_sig_eff['deltas'] = deltas; plot_dict_sig_eff['ctaus'] = ctaus
-plot_dict_sig_eff['title'] = rf"Signal Cutflow [AN Selection]: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm"
+plot_dict_sig_eff['title'] = "Signal Cutflow [AN Selection]\n" rf"$M_1$ = {m1s}, $\delta$ = {ptools.fmt_delta(deltas)}, c$\tau$ = {ctaus}mm"
 plot_dict_sig_eff['outName'] = f'cutflow/cutflow_{plottag}_m1-{utils.stringfy_friendly(m1s[0])}_ctau-{utils.stringfy_friendly(ctaus[0])}.png'
 
 ptools.plot_signal_efficiency(s_hists, df, plot_dict_sig_eff, df_wts=df_wts)
+plt.close()
 
 m1s = [5]
 deltas = [0.1]
 ctaus = [1, 10, 100]
 
 plot_dict_sig_eff['m1s'] = m1s; plot_dict_sig_eff['deltas'] = deltas; plot_dict_sig_eff['ctaus'] = ctaus
-plot_dict_sig_eff['title'] = rf"Signal Cutflow [AN Selection]: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm"
+plot_dict_sig_eff['title'] = "Signal Cutflow [AN Selection]\n" rf"$M_1$ = {m1s}, $\delta$ = {ptools.fmt_delta(deltas)}, c$\tau$ = {ctaus}mm"
 plot_dict_sig_eff['outName'] = f'cutflow/cutflow_{plottag}_m1-{utils.stringfy_friendly(m1s[0])}_delta-{utils.stringfy_friendly(deltas[0])}.png'
 
 ptools.plot_signal_efficiency(s_hists, df, plot_dict_sig_eff, df_wts=df_wts)
+plt.close()
 
 m1s = [5]
 deltas = [0.05, 0.1, 0.2]
 ctaus = [10]
 
 plot_dict_sig_eff['m1s'] = m1s; plot_dict_sig_eff['deltas'] = deltas; plot_dict_sig_eff['ctaus'] = ctaus
-plot_dict_sig_eff['title'] = rf"Signal Cutflow [AN Selection]: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm"
+plot_dict_sig_eff['title'] = "Signal Cutflow [AN Selection]\n" rf"$M_1$ = {m1s}, $\delta$ = {ptools.fmt_delta(deltas)}, c$\tau$ = {ctaus}mm"
 plot_dict_sig_eff['outName'] = f'cutflow/cutflow_{plottag}_m1-{utils.stringfy_friendly(m1s[0])}_ctau-{utils.stringfy_friendly(ctaus[0])}.png'
 
 ptools.plot_signal_efficiency(s_hists, df, plot_dict_sig_eff, df_wts=df_wts)
+plt.close()
 
 
 

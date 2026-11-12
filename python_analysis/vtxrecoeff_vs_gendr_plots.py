@@ -8,7 +8,13 @@ from hist import Hist
 from hist.storage import Weight
 
 import analysisTools.utils as utils
+import analysisTools.plotTools as ptools
 import coffea.util as util
+
+ptools.set_plot_style()
+
+# signal samples are combined across years, so no year on the CMS label
+year = None
 
 outdir = 'workarea'
 plotdir = './plots/vtxrecoeff'
@@ -95,7 +101,7 @@ def plot_vtx_eff_vs_gendr(sig_histo, plot_dict):
     h = sig_histo['gen_diele_dR']
     h_eff = combine_neff_ratio(h, samples, num_cut=vertex_idx, den_cut=DENOM_CUT_IDX)
 
-    fig, ax = plt.subplots(figsize=(10, 8))
+    fig, ax = ptools.new_fig(year)
     centers = h_eff.axes[0].centers
     vals = h_eff.values()
     errs = np.sqrt(h_eff.variances())

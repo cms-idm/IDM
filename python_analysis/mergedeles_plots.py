@@ -3,22 +3,10 @@ import matplotlib.pyplot as plt
 import mplhep as hep
 import coffea.util as util
 import analysisTools.utils as utils
+import analysisTools.plotTools as ptools
 import os
 
-plt.rcParams.update({
-    'font.size':        24,
-    'axes.titlesize':   32,
-    # Lift the title clear of the CMS / lumi label hep.cms.label draws just
-    # above the axes.
-    'axes.titlepad':    44,
-    'axes.labelsize':   34,
-    'xtick.labelsize':  30,
-    'ytick.labelsize':  30,
-    'legend.fontsize':  24,
-    'figure.titlesize': 32,
-})
-
-CMS_LABEL_FS = 26
+ptools.set_plot_style()
 
 outdir    = 'workarea'
 vers      = 'Jul2026noID'
@@ -28,40 +16,18 @@ saved_signal_hists = f"{outdir}/hists_sig{vers}_{selection}-sel_{hists_tag}.coff
 seltag = 'minjdphi'
 cut    = 'cut8'
 year   = 2024
-size   = (16, 12)
 
 s_hists = util.load(saved_signal_hists)[0]
 
-
-def _new_fig():
-    fig, ax = plt.subplots(figsize=size)
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax, fontsize=CMS_LABEL_FS)
-    return fig, ax
-
-
-def _legend_headroom(ax, leg, pad=0.04):
-    """Raise the y-axis top so the data sits below the (upper-placed) legend
-    instead of underneath it: the old y-range is squeezed into the bottom
-    (1 - legend height - pad) of the axes, in log or linear space."""
-    fig = ax.figure
-    fig.canvas.draw()
-    frac = leg.get_window_extent().height / ax.get_window_extent().height + pad
-    frac = min(frac, 0.6)
-    lo, hi = ax.get_ylim()
-    if ax.get_yscale() == 'log':
-        llo, lhi = np.log10(lo), np.log10(hi)
-        ax.set_ylim(lo, 10 ** (llo + (lhi - llo) / (1 - frac)))
-    else:
-        ax.set_ylim(lo, lo + (hi - lo) / (1 - frac))
-
-os.makedirs('plots', exist_ok=True)
+outdir = 'plots/mergedeles'
+os.makedirs(outdir, exist_ok=True)
 
 # mele_gen_lxy_vs_svProxyVxy has linear-binned axes (not log), so its plot
 # is excluded from the log-scale axis treatment applied to the others.
 _LINEAR_2D_KEYS = {'mele_gen_lxy_vs_svProxyVxy'}
 
 # Short y-axis names used in plot titles in place of the full axis label.
-_TITLE_YLABELS = {'mele_gen_lxy_vs_lxyEst': r'Reco $L_{xy}^{est}$ [cm]'}
+_TITLE_YLABELS = {'mele_gen_lxy_vs_lxyEst': r'Reco $L_{xy}^{est}$ (cm)'}
 
 def _plot_2d_group(varlist):
     for key, xlabel, ylabel in varlist:
@@ -70,8 +36,8 @@ def _plot_2d_group(varlist):
         h = s_hists[key][{'cut': cut, 'samp': sum}]
         if np.sum(h.values()) == 0:
             continue
-        fig, ax = _new_fig()
-        hep.hist2dplot(h, ax=ax, norm=plt.matplotlib.colors.LogNorm(), cbarextend=True)
+        fig, ax = ptools.new_fig(year)
+        hep.hist2dplot(h, ax=ax, norm=plt.matplotlib.colors.LogNorm(), cbarextend=False)
         ax.axline((0, 0), slope=1, color='k', linestyle=':', linewidth=2)
         if key not in _LINEAR_2D_KEYS:
             ax.set_xscale('log')
@@ -80,16 +46,16 @@ def _plot_2d_group(varlist):
         ax.set_ylabel(ylabel)
         ax.set_title(f'Merged electron: {_TITLE_YLABELS.get(key, ylabel)} vs {xlabel}')
         plt.tight_layout()
-        plt.savefig(f'plots/hist_{seltag}_{key}_allsamps.png')
+        plt.savefig(f'{outdir}/hist_{seltag}_{key}_allsamps.png')
         plt.close(fig)
 
 # ── Merged-electron gen Lxy vs reco displacement correlations (all-samples) ──
 
 print("Merged electron: gen Lxy vs reco displacement (all-samples)")
 _plot_2d_group([
-    ('mele_gen_lxy_vs_dxy',        r'Gen $L_{xy}$ [cm]', r'Reco $|d_{xy}|$ [cm]'),
-    ('mele_gen_lxy_vs_svProxyVxy', r'Gen $L_{xy}$ [cm]', r'Reco SV proxy $v_{xy}$ [cm]'),
-    ('mele_gen_lxy_vs_lxyEst',     r'Gen $L_{xy}$ [cm]', r'Reco $|d_{xy}|/\sin(\Delta\phi(e, p_{T}^{miss}))$ [cm]'),
+    ('mele_gen_lxy_vs_dxy',        r'Gen $L_{xy}$ (cm)', r'Reco $|d_{xy}|$ (cm)'),
+    ('mele_gen_lxy_vs_svProxyVxy', r'Gen $L_{xy}$ (cm)', r'Reco SV proxy $v_{xy}$ (cm)'),
+    ('mele_gen_lxy_vs_lxyEst',     r'Gen $L_{xy}$ (cm)', r'Reco $|d_{xy}|/\sin(\Delta\phi(e, p_{T}^{miss}))$ (cm)'),
 ])
 
 # ── Merged-electron gen Lxy vs reco displacement correlations, sliced by
@@ -99,8 +65,8 @@ _plot_2d_group([
 s_pts = utils.get_signal_point_dict(s_hists)
 
 _mele_lxy_corr_vars = [
-    ('mele_gen_lxy_vs_dxy',    r'Gen $L_{xy}$ [cm]', r'Reco $|d_{xy}|$ [cm]'),
-    ('mele_gen_lxy_vs_lxyEst', r'Gen $L_{xy}$ [cm]', r'Reco $|d_{xy}|/\sin(\Delta\phi(e, p_{T}^{miss}))$ [cm]'),
+    ('mele_gen_lxy_vs_dxy',    r'Gen $L_{xy}$ (cm)', r'Reco $|d_{xy}|$ (cm)'),
+    ('mele_gen_lxy_vs_lxyEst', r'Gen $L_{xy}$ (cm)', r'Reco $|d_{xy}|/\sin(\Delta\phi(e, p_{T}^{miss}))$ (cm)'),
 ]
 
 def _plot_2d_group_sliced(varlist, samp_mask, out_suffix, title_suffix):
@@ -114,8 +80,8 @@ def _plot_2d_group_sliced(varlist, samp_mask, out_suffix, title_suffix):
         h = s_hists[key][{'cut': cut, 'samp': samps}][{'samp': sum}]
         if np.sum(h.values()) == 0:
             continue
-        fig, ax = _new_fig()
-        hep.hist2dplot(h, ax=ax, norm=plt.matplotlib.colors.LogNorm(), cbarextend=True)
+        fig, ax = ptools.new_fig(year)
+        hep.hist2dplot(h, ax=ax, norm=plt.matplotlib.colors.LogNorm(), cbarextend=False)
         ax.axline((0, 0), slope=1, color='k', linestyle=':', linewidth=2)
         if key not in _LINEAR_2D_KEYS:
             ax.set_xscale('log')
@@ -126,7 +92,7 @@ def _plot_2d_group_sliced(varlist, samp_mask, out_suffix, title_suffix):
         # version runs off the figure.
         ax.set_title(f'Merged electron: {_TITLE_YLABELS.get(key, ylabel)} vs {xlabel}\n({title_suffix})')
         plt.tight_layout()
-        plt.savefig(f'plots/hist_{seltag}_{key}_{out_suffix}.png')
+        plt.savefig(f'{outdir}/hist_{seltag}_{key}_{out_suffix}.png')
         plt.close(fig)
 
 print("Merged electron: gen Lxy vs reco displacement, sliced by ctau")
@@ -150,10 +116,6 @@ for m1 in [0.05, 0.5, 5, 50]:
 # ── Merged-electron gen Lxy vs reco displacement correlations, for a few
 # individual (unsummed) signal points ────────────────────────────────────────
 
-def _samp_name(m1, delta, ctau):
-    row = s_pts[np.isclose(s_pts.m1, m1) & np.isclose(s_pts.delta, delta) & (s_pts.ctau == ctau)]
-    return row['name'].iloc[0] if not row.empty else None
-
 _mele_lxy_corr_indiv_pts = [
     (0.5, 0.1,   1),
     (0.5, 0.1,  10),
@@ -163,7 +125,7 @@ _mele_lxy_corr_indiv_pts = [
 
 print("Merged electron: gen Lxy vs reco displacement, individual signal points")
 for m1, delta, ctau in _mele_lxy_corr_indiv_pts:
-    sname = _samp_name(m1, delta, ctau)
+    sname = ptools.samp_name(s_pts, m1, delta, ctau)
     if sname is None:
         print(f"No sample matched for m1={m1}, delta={delta}, ctau={ctau}")
         continue
@@ -171,7 +133,7 @@ for m1, delta, ctau in _mele_lxy_corr_indiv_pts:
         _mele_lxy_corr_vars,
         s_pts.name == sname,
         f'm1-{utils.stringfy_friendly(m1)}_d-{utils.stringfy_friendly(delta)}_ctau-{ctau}',
-        rf'$m_1$={m1} GeV, $\Delta$={delta}, c$\tau$={ctau} mm',
+        rf'$m_1$={m1} GeV, $\delta$={ptools.fmt_delta(delta)}, c$\tau$={ctau} mm',
     )
 
 # ── Merged-electron reco vs truth angular correlation (all-samples) ─────────
@@ -192,7 +154,7 @@ _mele_1d_dphi_vars = [
     ('mele_dphi_chi2_vs_genmet',     r'$\Delta\phi$(gen $\chi_2$, gen $p_{T}^{miss}$)',         'C3'),
 ]
 
-fig, ax = _new_fig()
+fig, ax = ptools.new_fig(year)
 any_drawn = False
 for key, label, color in _mele_1d_dphi_vars:
     if key not in s_hists:
@@ -210,9 +172,9 @@ if any_drawn:
     ax.set_title(r'Merged electron: reco-vs-gen $\Delta\phi$ comparison')
     leg = ax.legend(loc='upper right')
     plt.tight_layout()
-    _legend_headroom(ax, leg)
+    ptools.legend_headroom(ax, leg)
     plt.tight_layout()
-    plt.savefig(f'plots/hist_{seltag}_mele_dphi_reco_vs_gen_allsamps.png')
+    plt.savefig(f'{outdir}/hist_{seltag}_mele_dphi_reco_vs_gen_allsamps.png')
 plt.close(fig)
 
 # ── Reco-quality comparison between the two gen-Lxy populations seen in the
@@ -232,7 +194,7 @@ def _plot_pop_overlay(key, xlabel, out_name, log_x=False):
     h_displaced = h[{'pop': 'displaced'}]
     if np.sum(h_prompt.values()) == 0 and np.sum(h_displaced.values()) == 0:
         return
-    fig, ax = _new_fig()
+    fig, ax = ptools.new_fig(year)
     if np.sum(h_prompt.values()) > 0:
         hep.histplot(h_prompt, ax=ax, histtype='step', density=True, yerr=False,
                      label=r'Prompt (Gen $L_{xy} < 0.01$ cm)', color='C0', linewidth=2)
@@ -250,14 +212,14 @@ def _plot_pop_overlay(key, xlabel, out_name, log_x=False):
     ax.set_title(f'Merged electron: {xlabel}')
     leg = ax.legend(loc='upper right')
     plt.tight_layout()
-    _legend_headroom(ax, leg)
+    ptools.legend_headroom(ax, leg)
     plt.tight_layout()
-    plt.savefig(f'plots/hist_{seltag}_{out_name}_allsamps.png')
+    plt.savefig(f'{outdir}/hist_{seltag}_{out_name}_allsamps.png')
     plt.close(fig)
 
 print("Merged electron: reco-quality comparison between gen-Lxy populations (all-samples)")
 _mele_popcompare_vars = [
-    ('pt',             r'Reco $p_{T}$ [GeV]'),
+    ('pt',             r'Reco $p_{T}$ (GeV)'),
     ('eta',            r'Reco $\eta$'),
     ('trkChi2',        r'Track $\chi^2/df$'),
     ('trkProb',        r'Track $\chi^2$ Probability'),
@@ -271,7 +233,7 @@ _mele_popcompare_vars = [
     ('ID',             r'Low $p_T$ Electron ID Score'),
     ('dxySignif',      r'Track $d_{xy}/\sigma_{d_{xy}}$'),
     ('HoverE',           r'$H/E$'),
-    ('EoverPInv',        r'$|1/E - 1/p|$ [GeV$^{-1}$]'),
+    ('EoverPInv',        r'$|1/E - 1/p|$ (GeV$^{-1}$)'),
     ('dEtaSeed',         r'$|\Delta\eta_{seed}|$'),
     ('dPhiIn',           r'$|\Delta\phi_{in}|$'),
     ('sigmaIetaIeta',    r'Full5x5 $\sigma_{i\eta i\eta}$'),
@@ -302,13 +264,13 @@ _LOG_X_LEADSUBLEAD_VARS = {'mele_dr_ee_reco', 'mele_dr_lead_reco', 'mele_dr_subl
 
 print("Merged electron: lead/sublead resolution & separation by gen-Lxy population (all-samples)")
 _mele_leadsublead_vars = [
-    ('mele_gen_lxy',          r'Gen $L_{xy}$ [cm]'),
+    ('mele_gen_lxy',          r'Gen $L_{xy}$ (cm)'),
     ('mele_dr_ee_reco',       r'$\Delta R$(gen $ee$, reco)'),
     ('mele_dr_lead_reco',     r'$\Delta R$(gen lead, reco)'),
     ('mele_dr_sublead_reco',  r'$\Delta R$(gen sublead, reco)'),
     ('mele_ptres_ee',         r'$(p_T^{reco} - p_T^{gen,ee})/p_T^{gen,ee}$'),
     ('mele_ptres_lead',       r'$(p_T^{reco} - p_T^{gen,lead})/p_T^{gen,lead}$'),
-    ('mele_dpt_lead_sublead', r'Gen $p_T^{lead} - p_T^{sublead}$ [GeV]'),
+    ('mele_dpt_lead_sublead', r'Gen $p_T^{lead} - p_T^{sublead}$ (GeV)'),
     ('mele_dxyres_lead',      r'$(d_{xy}^{reco} - d_{xy}^{gen,lead})/d_{xy}^{gen,lead}$'),
     ('mele_dxyres_sublead',   r'$(d_{xy}^{reco} - d_{xy}^{gen,sublead})/d_{xy}^{gen,sublead}$'),
 ]

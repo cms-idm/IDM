@@ -22,7 +22,7 @@ cut  = StrCategory([], name="cut",  label="Cut Applied",  growth=True)
 
 vtx_sign = IntCategory([-1, 1], name="sign", label="Vertex sign (q1*q2)")
 
-ele_pt        = Regular(50, 0,   50,  name="pt",          label="$p_{T}$ [GeV]")
+ele_pt        = Regular(50, 0,   50,  name="pt",          label="$p_{T}$ (GeV)")
 ele_eta       = Regular(50, -3,   3,  name="eta",         label=r"$\eta$")
 ele_phi       = Regular(50, -3.2, 3.2, name="phi",        label=r"$\phi$")
 ele_trkHits   = Regular(50, 0,   30,  name="numTrkHits",   label="Number of Tracker Hits")
@@ -39,8 +39,8 @@ ele_miniIsoCorr    = Regular(50, 0, 100, name="iso", label="Corrected Mini Iso")
 ele_miniRelIsoCorr = Regular(50, 0,  10, name="iso", label="Corrected Mini Relative Iso")
 ele_prob    = Regular(50, 0, 1,   name="prob",   label=r"Electron Track $\chi^2$ Probability")
 ele_angRes  = Regular(50, 0, 0.1, name="angRes", label=r"Angular Resolution $\sqrt{\sigma_\eta^2 + \sigma_\phi^2}$")
-ele_dxy     = Regular(50, 0, 40,  name="dxy",    label="Electron Track $d_{xy}$ [cm]")
-ele_dz      = Regular(50, 0, 5,   name="dz",     label="Electron Track $d_{z}$ [cm]")
+ele_dxy     = Regular(50, 0, 40,  name="dxy",    label="Electron Track $d_{xy}$ (cm)")
+ele_dz      = Regular(50, 0, 5,   name="dz",     label="Electron Track $d_{z}$ (cm)")
 ele_id      = Regular(50, -1, 4,  name="ele_id", label="Low $p_T$ electron ID Score")
 
 ee_dr = Regular(50, 0, 1, name='dr', label=r"$\Delta R$")
@@ -51,15 +51,15 @@ dR_zoom  = Regular(50, 0, 1,   name='dr_zoom', label=r"$\Delta R$")
 dRj      = Regular(50, 0, 6,   name='drj',     label=r"$\Delta R$")
 
 # ── Extra axes not in histobins ──────────────────────────────────────────────
-_e_energy  = Regular(50,  0, 100,  name='e',        label='E [GeV]')
-_calIso    = Regular(50,  0, 100,  name='iso',       label='Calo Iso [GeV]')
+_e_energy  = Regular(50,  0, 100,  name='e',        label='E (GeV)')
+_calIso    = Regular(50,  0, 100,  name='iso',       label='Calo Iso (GeV)')
 _calRelIso = Regular(50,  0,   5,  name='relIso',    label='Calo Relative Iso')
-_rhoEA     = Regular(50,  0,  20,  name='rhoEA',     label=r'$\rho \times EA$ [GeV]')
+_rhoEA     = Regular(50,  0,  20,  name='rhoEA',     label=r'$\rho \times EA$ (GeV)')
 _sieie     = Regular(50,  0,0.05,  name='sieie',     label=r'$\sigma_{i\eta i\eta}$')
 _dEtaSeed  = Regular(50,  0,0.01,  name='dEtaSeed',  label=r'$|\Delta\eta_\mathrm{seed}|$')
 _dPhiIn    = Regular(50,  0, 0.1,  name='dPhiIn',    label=r'$|\Delta\phi_\mathrm{in}|$')
 _HoE       = Regular(50,  0,   1,  name='HoE',       label='H/E')
-_invEmP    = Regular(50,  0, 0.1,  name='invEmP',    label=r'$|1/E - 1/p|$ [GeV$^{-1}$]')
+_invEmP    = Regular(50,  0, 0.1,  name='invEmP',    label=r'$|1/E - 1/p|$ (GeV$^{-1}$)')
 _missHits  = Integer(0,    5,       name='missHits',  label='Exp. Missing Inner Hits')
 _charge    = IntCategory([-1, 1],   name='charge',    label='Charge')
 _r9        = Regular(50,  0, 1.5,  name='r9',        label='R9')
@@ -69,12 +69,12 @@ _angRes    = Regular(50,0,0.02,name="angRes",label=r"Angular Resolution $\sqrt{\
 # Relational axes: selected merged electron vs. its nearest other AllLptElectron
 # -- large dPt/dVxy/dVz/opposite charge point to a genuine second electron,
 # while near-zero values across the board point to a duplicate GSF track.
-_dPt      = Regular(50, -50, 50, name='dpt',    label=r'$p_T(e_{\mathrm{sel}}) - p_T(e_{\mathrm{near}})$ [GeV]')
+_dPt      = Regular(50, -50, 50, name='dpt',    label=r'$p_T(e_{\mathrm{sel}}) - p_T(e_{\mathrm{near}})$ (GeV)')
 _dPtRel   = Regular(50,  -2,  2, name='dptRel', label=r'$(p_T(e_{\mathrm{sel}}) - p_T(e_{\mathrm{near}}))/p_T(e_{\mathrm{sel}})$')
-_dVxyNear = Regular(50,   0, 10, name='dvxy',   label=r'$|v_{xy}(e_{\mathrm{sel}}) - v_{xy}(e_{\mathrm{near}})|$ [cm]')
-_dVzNear  = Regular(50,   0, 10, name='dvz',    label=r'$|v_z(e_{\mathrm{sel}}) - v_z(e_{\mathrm{near}})|$ [cm]')
-_dDxyNear = Regular(50,   0,  5, name='ddxy',   label=r'$|d_{xy}(e_{\mathrm{sel}}) - d_{xy}(e_{\mathrm{near}})|$ [cm]')
-_dDzNear  = Regular(50,   0,  5, name='ddz',    label=r'$|d_z(e_{\mathrm{sel}}) - d_z(e_{\mathrm{near}})|$ [cm]')
+_dVxyNear = Regular(50,   0, 10, name='dvxy',   label=r'$|v_{xy}(e_{\mathrm{sel}}) - v_{xy}(e_{\mathrm{near}})|$ (cm)')
+_dVzNear  = Regular(50,   0, 10, name='dvz',    label=r'$|v_z(e_{\mathrm{sel}}) - v_z(e_{\mathrm{near}})|$ (cm)')
+_dDxyNear = Regular(50,   0,  5, name='ddxy',   label=r'$|d_{xy}(e_{\mathrm{sel}}) - d_{xy}(e_{\mathrm{near}})|$ (cm)')
+_dDzNear  = Regular(50,   0,  5, name='ddz',    label=r'$|d_z(e_{\mathrm{sel}}) - d_z(e_{\mathrm{near}})|$ (cm)')
 
 # Diagnostic for the chargeProd==-1 (oppositely charged) subset of
 # mele_nearestEle: the near track's *only* possible gen match is the lepton
@@ -96,7 +96,7 @@ _oppQFailReason = StrCategory(
 # Same variable-width style as histobins.py's ele_lxy_res, extended out to 150 cm.
 _gen_lxy = Variable(
     [0, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.7, 1, 1.5, 2, 3, 4, 5, 7, 10, 15, 20, 30, 40, 50, 70, 100, 150],
-    name='lxy', label='$L_{xy}$ [cm]',
+    name='lxy', label='$L_{xy}$ (cm)',
 )
 
 # (field_name_on_AllLptElectron, hist_axis)

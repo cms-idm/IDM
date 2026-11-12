@@ -3,26 +3,10 @@ import matplotlib.pyplot as plt
 import mplhep as hep
 import coffea.util as util
 import analysisTools.utils as utils
+import analysisTools.plotTools as ptools
 import os
 
-plt.rcParams.update({
-    'font.size':        24,
-    'axes.titlesize':   32,
-    # Lift the title clear of the CMS / lumi label hep.cms.label draws just
-    # above the axes.
-    'axes.titlepad':    44,
-    'axes.labelsize':   34,
-    'xtick.labelsize':  30,
-    'ytick.labelsize':  30,
-    'legend.fontsize':  28,
-    'figure.titlesize': 32,
-})
-
-CMS_LABEL_FS = 26
-
-
-def _cms_label(ax):
-    hep.cms.label('Private Work', data=True, year=year, com='13.6', ax=ax, fontsize=CMS_LABEL_FS)
+ptools.set_plot_style(**{'legend.fontsize': 28})
 
 outdir    = 'workarea'
 vers      = 'Jul2026noID'
@@ -30,7 +14,6 @@ selection = 'anabrv'
 seltag    = 'minjdphi'
 cut       = 'cut3'
 year      = 2024
-size      = (16, 12)
 
 # Signal-only: no background run currently targets the mergedcats/resolvedcats
 # hist configs (histmaker_background.py is on 'appearingtrack'), so there is
@@ -74,13 +57,10 @@ PARAM_SETS = [
 ]
 
 
-def _samp_name(m1, delta, ctau):
-    row = s_pts[np.isclose(s_pts.m1, m1) & np.isclose(s_pts.delta, delta) & (s_pts.ctau == ctau)]
-    return row['name'].iloc[0] if not row.empty else None
 
 
 def _sig_label(m1, delta, ctau):
-    return rf'$M_1$={m1}, $\Delta$={delta}, $c\tau$={ctau} mm'
+    return rf'$M_1$={m1}, $\delta$={ptools.fmt_delta(delta)}, $c\tau$={ctau} mm'
 
 
 def _param_tag(m1s, deltas, ctaus):
@@ -159,8 +139,7 @@ def _cats_overlay(field, cat_prefix, field_override=None, doLogy=False, varbin=F
     field_override = field_override or {}
     fname_key = fname_key or field
 
-    fig, ax = plt.subplots(figsize=size)
-    _cms_label(ax)
+    fig, ax = ptools.new_fig(year)
     any_drawn = False
     xlabel = None
     for cat, prefix in cat_prefix.items():
@@ -341,8 +320,7 @@ for hkey, doLogy in _VTX_ONLY_PAIR_FIELDS:
     h = _select(hkey, sum)
     if h is None or np.sum(h.values()) == 0:
         continue
-    fig, ax = plt.subplots(figsize=size)
-    _cms_label(ax)
+    fig, ax = ptools.new_fig(year)
     xlabel = h.axes[-1].label
     _histplot(h, ax, histtype='step', color=cat_styles['vtx']['color'], linewidth=2)
     ax.set_xlabel(xlabel)
@@ -433,8 +411,7 @@ def _cat_event_fracs(samp_sel):
 print("Section 2: category fractions (all-samples)")
 fracs, errs = _cat_event_fracs(sum)
 if sum(fracs.values()) > 0:
-    fig, ax = plt.subplots(figsize=size)
-    _cms_label(ax)
+    fig, ax = ptools.new_fig(year)
     x      = np.arange(len(_CAT_ORDER))
     vals   = [fracs[c] for c in _CAT_ORDER]
     errs_  = [errs[c]  for c in _CAT_ORDER]
@@ -462,13 +439,12 @@ def _cat_frac_series(pset):
     if n == 0:
         return False
 
-    fig, ax = plt.subplots(figsize=size)
-    _cms_label(ax)
+    fig, ax = ptools.new_fig(year)
     x     = np.arange(len(_CAT_ORDER))
     bar_w = 0.8 / n
     any_drawn = False
     for idx, (m1, delta, ctau) in enumerate(points):
-        sname = _samp_name(m1, delta, ctau)
+        sname = ptools.samp_name(s_pts, m1, delta, ctau)
         if sname is None:
             continue
         fracs, errs = _cat_event_fracs(sname)
@@ -478,7 +454,7 @@ def _cat_frac_series(pset):
         errs_ = [errs[c]  for c in _CAT_ORDER]
         offsets = x - 0.4 + bar_w * (idx + 0.5)
         ax.bar(offsets, vals, width=bar_w, yerr=errs_, label=_sig_label(m1, delta, ctau),
-               color=f'C{idx}', alpha=0.8, edgecolor='black', linewidth=0.5,
+               color=ptools.cms_colors(n)[idx], alpha=0.8, edgecolor='black', linewidth=0.5,
                error_kw={'ecolor': 'black', 'capsize': 3, 'elinewidth': 1.0})
         any_drawn = True
     if not any_drawn:
@@ -535,13 +511,12 @@ def _merged_cat_frac_series(pset):
     if n == 0:
         return False
 
-    fig, ax = plt.subplots(figsize=size)
-    _cms_label(ax)
+    fig, ax = ptools.new_fig(year)
     x     = np.arange(len(_MERGED_CAT_GROUPS))
     bar_w = 0.8 / n
     any_drawn = False
     for idx, (m1, delta, ctau) in enumerate(points):
-        sname = _samp_name(m1, delta, ctau)
+        sname = ptools.samp_name(s_pts, m1, delta, ctau)
         if sname is None:
             continue
         fracs, errs = _merged_cat_event_fracs(sname)
@@ -551,7 +526,7 @@ def _merged_cat_frac_series(pset):
         errs_ = [errs[c]  for c in _MERGED_CAT_GROUPS]
         offsets = x - 0.4 + bar_w * (idx + 0.5)
         ax.bar(offsets, vals, width=bar_w, yerr=errs_, label=_sig_label(m1, delta, ctau),
-               color=f'C{idx}', alpha=0.8, edgecolor='black', linewidth=0.5,
+               color=ptools.cms_colors(n)[idx], alpha=0.8, edgecolor='black', linewidth=0.5,
                error_kw={'ecolor': 'black', 'capsize': 3, 'elinewidth': 1.0})
         any_drawn = True
     if not any_drawn:
@@ -614,8 +589,7 @@ def _reason_plot_allsamples(hkey, title, ylabel, fname):
     cats, fracs = _reason_fractions(hkey, sum)
     if cats is None:
         return False
-    fig, ax = plt.subplots(figsize=size)
-    _cms_label(ax)
+    fig, ax = ptools.new_fig(year)
     ax.bar(cats, fracs, color='C0')
     val_fs = 18 if len(cats) > 8 else 22
     for i, f in enumerate(fracs):
@@ -642,13 +616,12 @@ def _reason_plot_series(hkey, pset, title, ylabel, fname):
     if ref_cats is None:
         return False
 
-    fig, ax = plt.subplots(figsize=size)
-    _cms_label(ax)
+    fig, ax = ptools.new_fig(year)
     x = np.arange(len(ref_cats))
     width = 0.8 / n
     any_drawn = False
     for i, (m1, delta, ctau) in enumerate(points):
-        sname = _samp_name(m1, delta, ctau)
+        sname = ptools.samp_name(s_pts, m1, delta, ctau)
         if sname is None:
             continue
         cats, fracs = _reason_fractions(hkey, sname)
@@ -657,7 +630,7 @@ def _reason_plot_series(hkey, pset, title, ylabel, fname):
         frac_by_cat = dict(zip(cats, fracs))
         heights = [frac_by_cat.get(c, 0.0) for c in ref_cats]
         offset = (i - (n - 1) / 2) * width
-        ax.bar(x + offset, heights, width=width, color=f'C{i}', label=_sig_label(m1, delta, ctau))
+        ax.bar(x + offset, heights, width=width, color=ptools.cms_colors(n)[i], label=_sig_label(m1, delta, ctau))
         any_drawn = True
     if not any_drawn:
         plt.close(fig)

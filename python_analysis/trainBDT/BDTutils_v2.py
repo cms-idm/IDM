@@ -7,6 +7,18 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_curve, roc_auc_score
 import mplhep as hep
 import json
+import sys
+
+def _ptools():
+    """House plot style helpers from analysisTools/plotTools.py. Imported lazily
+    (plotTools pulls in coffea/utils and sets a global mplhep style), so only the
+    plotting code pays for it; also applies the house rcParams."""
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if repo_root not in sys.path:
+        sys.path.append(repo_root)
+    import analysisTools.plotTools as ptools
+    ptools.set_plot_style()
+    return ptools
 
 def write_h5(data,fname):
     with h5py.File(fname,'w') as f:
@@ -217,67 +229,68 @@ def run_training(bdt_name,variables,sig_data,sig_sf_arr,sig_xsec_norm,sig_point,
     # make plots
     preds = bst.predict_proba(train)[:,1]
     
-    plt.figure(figsize=(8,6))
+    ptools = _ptools()
+    # CMS colours: signal blue / background red; the single ROC/PR curve takes the first palette colour
+    sig_color, bkg_color = ptools.CMS_COLORS_6[0], ptools.CMS_COLORS_6[2]
+    curve_color = ptools.CMS_COLORS_6[0]
+    fig, ax = ptools.new_fig(None)
     bins = 50
-    h,bins,_ = plt.hist(preds[y_train==0],bins=bins,density=True, histtype='stepfilled', label='Background', alpha=0.2, color='red')
-    h,bins,_ = plt.hist(preds[y_train==1],bins=bins,density=True, histtype='stepfilled', label='Signal', alpha=0.2, color='blue')
-    plt.legend()
+    h,bins,_ = plt.hist(preds[y_train==0],bins=bins,density=True, histtype='stepfilled', label='Background', alpha=0.2, color=bkg_color)
+    h,bins,_ = plt.hist(preds[y_train==1],bins=bins,density=True, histtype='stepfilled', label='Signal', alpha=0.2, color=sig_color)
     #plt.title(bdt_name)
     plt.xlabel('BDT Score')
     plt.ylabel('A.U.')
     plt.yscale('log')
-    hep.cms.text("Private Work")
+    ptools.place_legend(ax)
     os.makedirs(f"plots/{bdt_name}/",exist_ok=True)
-    plt.savefig(f'plots/{bdt_name}/{bdt_name}_scores_maxDepth{max_depth}_nEst{n_estimators}_lr{learning_rate}.pdf')
+    plt.savefig(f'plots/{bdt_name}/{bdt_name}_scores_maxDepth{max_depth}_nEst{n_estimators}_lr{learning_rate}.png')
+    plt.close(fig)
 
     # importance
-    plt.figure(figsize=(8,6))
     label_dict = {}
     for idx, var in enumerate(variables):
         label_dict['f{}'.format(idx)] = var
+    # throwaway figure, only used to read the feature order off the tick labels
     plt.figure(figsize=(8,6))
     xgb.plot_importance(bst,ax=plt.gca())
     ticks = [ item.get_text() for item in plt.gca().get_yticklabels() ]
     plt.close()
-    plt.figure(figsize=(8,6))
     relabel = [ label_dict[tick] for tick in ticks ]
-    plt.figure(figsize=(8,6))
-    xgb.plot_importance(bst,ax=plt.gca())
+    fig, ax = ptools.new_fig(None)
+    xgb.plot_importance(bst,ax=ax)
     plt.title("")
-    plt.gca().set_yticklabels(relabel)
-    hep.cms.text("Private Work")
-    plt.savefig(f'plots/{bdt_name}/{bdt_name}_importance.pdf', bbox_inches = "tight")
-    
+    ax.set_yticklabels(relabel)
+    plt.savefig(f'plots/{bdt_name}/{bdt_name}_importance.png', bbox_inches = "tight")
+    plt.close(fig)
+
     # ROC
     from sklearn.metrics import roc_auc_score, classification_report, accuracy_score, roc_curve, confusion_matrix, average_precision_score, precision_recall_curve, auc
-    plt.figure(figsize=(8,8))
+    fig, ax = ptools.new_fig(None)
     # test predictions
     fpr, tpr, thresholds = roc_curve(y_train, preds)
     auc = roc_auc_score(y_train, preds)
-    plt.plot(fpr, tpr, color = "red", label = F"AUC = {auc:.4f}")
+    plt.plot(fpr, tpr, color = curve_color, label = F"AUC = {auc:.4f}")
     plt.plot([0,1], [0,1] , color = "black", ls = "--")
     plt.xlim([-0.01, 1.01])
     plt.ylim([-0.01, 1.01])
-    plt.xlabel('FPR' , fontsize=12)
-    plt.ylabel('TPR' , fontsize=12)
-    plt.tick_params(axis='both', which='major', labelsize=12)
-    plt.legend( prop={'size':12} , loc = 4)
-    hep.cms.text("Private Work")
-    plt.savefig(f'plots/{bdt_name}/{bdt_name}_roc_curve.pdf')
-    
+    plt.xlabel('FPR')
+    plt.ylabel('TPR')
+    plt.legend(loc = 4)
+    plt.savefig(f'plots/{bdt_name}/{bdt_name}_roc_curve.png')
+    plt.close(fig)
+
     # PR
     # train predictions
-    plt.figure(figsize=(8,8))
+    fig, ax = ptools.new_fig(None)
     from sklearn.metrics import auc
     # test predictions
     precision, recall, thresholds2 = precision_recall_curve(y_train, preds)
-    plt.plot(recall, precision, color = "red", label=f"PR: {auc(recall, precision):.4f}")
-    plt.ylabel('Precision (TP/(TP+FP))', fontsize=12)
-    plt.xlabel('Signal Efficiency (TPR)', fontsize=12)
-    plt.tick_params(axis='both', which='major', labelsize=12)
-    plt.legend( prop={'size':12} , loc = 3)
-    hep.cms.text("Private Work")
-    plt.savefig(f'plots/{bdt_name}/{bdt_name}_PR_curve.pdf')
+    plt.plot(recall, precision, color = curve_color, label=f"PR: {auc(recall, precision):.4f}")
+    plt.ylabel('Precision (TP/(TP+FP))')
+    plt.xlabel('Signal Efficiency (TPR)')
+    plt.legend(loc = 3)
+    plt.savefig(f'plots/{bdt_name}/{bdt_name}_PR_curve.png')
+    plt.close(fig)
     
     # save model
     bst.save_model(f'models/{bdt_name}.json')

@@ -116,7 +116,7 @@ def cut7(events, info):
 def cut8(events, info):
     name = 'cut8'
     desc = r'min$_{j \in \mathrm{jets}} |\Delta \phi(\vec{p}_T^{miss}, j)| > 0.75$'
-    plots = False
+    plots = True
     jets = events.PFJet
     cut = ak.min(abs(jets.METdPhi), axis=1) > 0.75
     return events[cut], name, desc, plots

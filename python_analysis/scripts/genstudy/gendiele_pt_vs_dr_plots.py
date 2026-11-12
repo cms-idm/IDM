@@ -24,6 +24,8 @@ import time
 import json
 import glob
 
+ptools.set_plot_style()
+
 #cuts_config = "configs/selections/minimal_cuts.py"
 #hists_config = "configs/hists/genstudy.py"
 #sample_config = "configs/samples/signal_2024_Apr2026_aEM.json"
@@ -44,8 +46,6 @@ s_cutsname = utils.get_signal_list_of_cuts(s_hists, get_cut_idx = False)
 #print(s_cutsname)
 
 df = utils.get_signal_cutflow_dict(s_hists, 'cutflow')
-
-size = (16, 12)
 
 # Plot settings
 plot_label = 'gen-diele-pt-vs-dr'
@@ -77,14 +77,14 @@ ctaus = [1, 10, 100]
 for m1 in m1s:
     for delta in deltas:
         for ctau in ctaus:
-            fig, ax = plt.subplots(figsize=size)
+            fig, ax = ptools.new_fig(plot_dict['year'], cms_label=False)
             style_dict['fig'] = fig; style_dict['ax'] = ax
             ptools.plot_signal_2D(s_hists, m1, delta, ctau, plot_dict, style_dict)
 
-            plt.title(rf'{plot_title}: $M_1$ = {m1}, $\Delta$ = {delta}, c$\tau$ = {ctau}mm')
+            plt.title(rf'{plot_title}: $M_1$ = {m1}, $\delta$ = {ptools.fmt_delta(delta)}, c$\tau$ = {ctau}mm')
             #plt.show()
             sm1 = utils.stringfy_friendly(m1)
             sdm = utils.stringfy_friendly(delta)
             sct = utils.stringfy_friendly(ctau)
             plt.savefig(f"{plotdir}/pt_vs_dr_2D/hist_{sel_label}_{plot_label}_m1-{sm1}_delta-{sdm}_ctau-{sct}.png")
-            plt.close()
+            plt.close(fig)

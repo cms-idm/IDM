@@ -24,6 +24,8 @@ import time
 import json
 import glob
 
+ptools.set_plot_style()
+
 outdir = os.path.join(REPO_ROOT, 'workarea')
 plotdir = os.path.join(REPO_ROOT, 'plots', 'genstudy', 'bryan')
 os.makedirs(plotdir, exist_ok=True)
@@ -38,7 +40,6 @@ s_cutsname = utils.get_signal_list_of_cuts(s_hists, get_cut_idx = False)
 
 df = utils.get_signal_cutflow_dict(s_hists, 'cutflow')
 
-size = (16, 12)
 sel_label = 'prevtx'
 
 # Requested plots, one entry per variable. 'log_variables'/'doLogx' are only
@@ -76,14 +77,15 @@ def make_plot(varcfg, m1s, deltas, ctaus, doLog):
     use_dedicated_log_hist = doLog and varcfg['log_variables'] is not None
     variables = varcfg['log_variables'] if use_dedicated_log_hist else varcfg['variables']
 
-    fig, ax = plt.subplots(figsize=size)
     plot_dict = {
         'variable': variables,
         'year': 2024,
         'cut': varcfg['cut'],
     }
+    fig, ax = ptools.new_fig(plot_dict['year'])
     style_dict = {
         'fig': fig, 'ax': ax,
+        'doCMSLabel': False,
         'rebin': 1j, 'xlim': None,
         'doLogy': doLog, 'doLogx': use_dedicated_log_hist, 'doDensity': True, 'doYerr': False,
         'xlabel': None, 'ylabel': None, 'label': None,
@@ -96,13 +98,13 @@ def make_plot(varcfg, m1s, deltas, ctaus, doLog):
     for m1 in m1s:
         for delta in deltas:
             for ctau in ctaus:
-                ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx=cmap_idx)
+                ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx=cmap_idx, ncolors=len(m1s)*len(deltas)*len(ctaus))
                 cmap_idx += 1
 
     scale_suffix = '-log' if doLog else ''
     title_suffix = ' (log scale)' if doLog else ''
-    plt.title(rf"{varcfg['title']}{title_suffix}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm")
-    plt.legend()
+    plt.title(rf"{varcfg['title']}{title_suffix}: $M_1$ = {m1s}, $\delta$ = {ptools.fmt_delta(deltas)}, c$\tau$ = {ctaus}mm")
+    ptools.place_legend(ax)
     tag = param_tag(m1s, deltas, ctaus)
     plt.savefig(f"{plotdir}/hist_{sel_label}_{varcfg['label']}{scale_suffix}_{tag}.png")
     plt.close(fig)

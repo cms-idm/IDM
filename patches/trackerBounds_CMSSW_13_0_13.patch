@@ -1,0 +1,15 @@
+diff --git a/RecoVertex/VertexTools/interface/SequentialVertexFitter.h b/RecoVertex/VertexTools/interface/SequentialVertexFitter.h
+index 4b09e50718e0..cef47170a365 100644
+--- a/RecoVertex/VertexTools/interface/SequentialVertexFitter.h
++++ b/RecoVertex/VertexTools/interface/SequentialVertexFitter.h
+@@ -243,8 +243,8 @@ private:
+   int theMaxStep;
+ 
+   // FIXME using hard-coded tracker bounds as default instead of taking them from geometry service
+-  float trackerBoundsRadius{112.};
+-  float trackerBoundsHalfLength{273.5};
++  float trackerBoundsRadius{740.};  // iDM: was 112 (CMSSW default); interim, see kb DECISIONS
++  float trackerBoundsHalfLength{960.};  // iDM: was 273.5 (CMSSW default); interim, see kb DECISIONS
+ 
+   edm::ParameterSet thePSet;
+   LinearizationPointFinder* theLinP;

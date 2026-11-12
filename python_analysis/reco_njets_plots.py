@@ -19,6 +19,8 @@ import json
 import os
 import glob
 
+ptools.set_plot_style()
+
 #cuts_config = "configs/selections/minimal_cuts.py"
 #hists_config = "configs/hists/genstudy.py"
 #sample_config = "configs/samples/signal_2024_Apr2026_aEM.json"
@@ -48,13 +50,13 @@ m1s = [0.05, 0.5, 5, 50]
 deltas = [0.1, 0.2]
 ctaus = [10]
 
-size = (16, 12)
-fig, ax = plt.subplots(figsize=size)
+year = 2024
+fig, ax = ptools.new_fig(year)
 
 # Plot settings
 plot_dict = {
     'variable': 'reco_N_jets',
-    'year': 2024,
+    'year': year,
     'cut': 'cut8',
 }
 
@@ -67,6 +69,7 @@ style_dict = {
     'label': None,    # if None, the default will show up; otherwise give as a string, i.e. 'Highest ctau signal samples'
     'flow': None,     # overflow
     'doSave': False,
+    'doCMSLabel': False,   # house CMS label comes from ptools.new_fig
     'ls': '-',
 }
 
@@ -80,19 +83,20 @@ cmap_idx = 0
 for m1 in m1s:
     for delta in deltas:
         for ctau in ctaus:
-            ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx)
+            ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx, ncolors = len(m1s)*len(deltas)*len(ctaus))
             cmap_idx += 1
 
-plt.title(rf'{title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
-plt.legend()
+plt.title(rf'{title}: $M_1$ = {m1s}, $\delta$ = {ptools.fmt_delta(deltas)}, c$\tau$ = {ctaus}mm')
+ptools.place_legend(ax)
 plt.savefig(f"plots/hist_{plottag}_delta-{utils.stringfy_friendly(deltas[0])}_ctau-{utils.stringfy_friendly(ctaus[0])}_m1-narrow.png")
+plt.close(fig)
 
 # signal points
 m1s = [0.05, 0.5, 5, 50]
 deltas = [0.1]
 ctaus = [10]
 
-fig, ax = plt.subplots(figsize=size)
+fig, ax = ptools.new_fig(year)
 style_dict['fig'] = fig; style_dict['ax'] = ax
 
 # Plot for variables signal points
@@ -100,19 +104,20 @@ cmap_idx = 0
 for m1 in m1s:
     for delta in deltas:
         for ctau in ctaus:
-            ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx)
+            ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx, ncolors = len(m1s)*len(deltas)*len(ctaus))
             cmap_idx += 1
 
-plt.title(rf'{title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
-plt.legend()
+plt.title(rf'{title}: $M_1$ = {m1s}, $\delta$ = {ptools.fmt_delta(deltas)}, c$\tau$ = {ctaus}mm')
+ptools.place_legend(ax)
 plt.savefig(f"plots/hist_{plottag}_delta-{utils.stringfy_friendly(deltas[0])}_ctau-{utils.stringfy_friendly(ctaus[0])}_m1-wide.png")
+plt.close(fig)
 
 # signal points
 m1s = [5]
 deltas = [0.1]
 ctaus = [1, 10, 100]
 
-fig, ax = plt.subplots(figsize=size)
+fig, ax = ptools.new_fig(year)
 style_dict['fig'] = fig; style_dict['ax'] = ax
 
 # Plot for variables signal points
@@ -120,19 +125,20 @@ cmap_idx = 0
 for m1 in m1s:
     for delta in deltas:
         for ctau in ctaus:
-            ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx)
+            ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx, ncolors = len(m1s)*len(deltas)*len(ctaus))
             cmap_idx += 1
 
-plt.title(rf'{title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
-plt.legend()
+plt.title(rf'{title}: $M_1$ = {m1s}, $\delta$ = {ptools.fmt_delta(deltas)}, c$\tau$ = {ctaus}mm')
+ptools.place_legend(ax)
 plt.savefig(f"plots/hist_{plottag}_m1-{utils.stringfy_friendly(m1s[0])}_delta-{utils.stringfy_friendly(deltas[0])}.png")
+plt.close(fig)
 
 # signal points
 m1s = [5]
 deltas = [0.05, 0.1, 0.2]
 ctaus = [10]
 
-fig, ax = plt.subplots(figsize=size)
+fig, ax = ptools.new_fig(year)
 style_dict['fig'] = fig; style_dict['ax'] = ax
 
 # Plot for variables signal points
@@ -140,19 +146,20 @@ cmap_idx = 0
 for m1 in m1s:
     for delta in deltas:
         for ctau in ctaus:
-            ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx)
+            ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx, ncolors = len(m1s)*len(deltas)*len(ctaus))
             cmap_idx +=	1
 
-plt.title(rf'{title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
-plt.legend()
+plt.title(rf'{title}: $M_1$ = {m1s}, $\delta$ = {ptools.fmt_delta(deltas)}, c$\tau$ = {ctaus}mm')
+ptools.place_legend(ax)
 plt.savefig(f"plots/hist_{plottag}_m1-{utils.stringfy_friendly(m1s[0])}_ctau-{utils.stringfy_friendly(ctaus[0])}.png")
+plt.close(fig)
 
 # signal points
 m1s = [0.5]
 deltas = [0.1]
 ctaus = [1, 10, 100]
 
-fig, ax = plt.subplots(figsize=size)
+fig, ax = ptools.new_fig(year)
 style_dict['fig'] = fig; style_dict['ax'] = ax
 
 # Plot for variables signal points
@@ -160,19 +167,20 @@ cmap_idx = 0
 for m1 in m1s:
     for delta in deltas:
         for ctau in ctaus:
-            ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx)
+            ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx, ncolors = len(m1s)*len(deltas)*len(ctaus))
             cmap_idx += 1
 
-plt.title(rf'{title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
-plt.legend()
+plt.title(rf'{title}: $M_1$ = {m1s}, $\delta$ = {ptools.fmt_delta(deltas)}, c$\tau$ = {ctaus}mm')
+ptools.place_legend(ax)
 plt.savefig(f"plots/hist_{plottag}_m1-{utils.stringfy_friendly(m1s[0])}_delta-{utils.stringfy_friendly(deltas[0])}.png")
+plt.close(fig)
 
 # signal points
 m1s = [0.5]
 deltas = [0.05, 0.1, 0.2]
 ctaus = [10]
 
-fig, ax = plt.subplots(figsize=size)
+fig, ax = ptools.new_fig(year)
 style_dict['fig'] = fig; style_dict['ax'] = ax
 
 # Plot for variables signal points
@@ -180,15 +188,16 @@ cmap_idx = 0
 for m1 in m1s:
     for delta in deltas:
         for ctau in ctaus:
-            ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx)
+            ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx, ncolors = len(m1s)*len(deltas)*len(ctaus))
             cmap_idx +=	1
 
-plt.title(rf'{title}: $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
-plt.legend()
+plt.title(rf'{title}: $M_1$ = {m1s}, $\delta$ = {ptools.fmt_delta(deltas)}, c$\tau$ = {ctaus}mm')
+ptools.place_legend(ax)
 plt.savefig(f"plots/hist_{plottag}_m1-{utils.stringfy_friendly(m1s[0])}_ctau-{utils.stringfy_friendly(ctaus[0])}.png")
+plt.close(fig)
 
 # All signal points summed
-fig, ax = plt.subplots(figsize=size)
+fig, ax = ptools.new_fig(year)
 style_dict['fig'] = fig; style_dict['ax'] = ax
 
 histo_sum = None
@@ -197,10 +206,10 @@ for _, row in s_pts.iterrows():
     h = s_hists[plot_dict['variable']][{"samp": samp, "cut": plot_dict['cut']}]
     histo_sum = h if histo_sum is None else histo_sum + h
 
-hep.cms.label('Private Work', data=True, year=plot_dict['year'], com='13.6')
 hep.histplot(histo_sum, ax=ax, histtype='step', label='All signal points', yerr=True)
 binwidth = histo_sum.axes.widths[0][0]
 ax.set_ylabel(f'Events/{binwidth:.3f}')
 plt.title(rf'{title}: All Signal Points')
-plt.legend()
+ptools.place_legend(ax)
 plt.savefig(f"plots/hist_{plottag}_allpoints.png")
+plt.close(fig)

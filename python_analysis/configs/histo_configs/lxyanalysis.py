@@ -48,18 +48,18 @@ _LOG = hist.axis.transform.log
 
 evttype = StrCategory(['vtx', 'mele'], name='evttype', label='Event topology')
 
-_dxy_log       = Regular(100, 1e-4, 40,  name='dxy',       label=r'Electron Track $d_{xy}$ [cm]',  transform=_LOG)
-_dxy_lin       = Regular(100, 0,    40,  name='dxy',       label=r'Electron Track $d_{xy}$ [cm]')
+_dxy_log       = Regular(100, 1e-4, 40,  name='dxy',       label=r'Electron Track $d_{xy}$ (cm)',  transform=_LOG)
+_dxy_lin       = Regular(100, 0,    40,  name='dxy',       label=r'Electron Track $d_{xy}$ (cm)')
 _betagamma_log = Regular(100, 1,    1e6, name='betagamma', label=r'$\beta\gamma$',                 transform=_LOG)
 _betagamma_lin = Regular(100, 0,    1e6, name='betagamma', label=r'$\beta\gamma$')
 _dphi_lin      = Regular(100, 0,    np.pi, name='dphi',    label=r'$\Delta\phi$')
 _dphi_log      = Regular(100, 1e-4, 1,   name='dphi',      label=r'$\Delta\phi$',                  transform=_LOG)
 _alpha_log     = Regular(100, 1e-3, 1e6, name='alpha',     label=r'$\alpha = \beta\gamma\sin(\Delta\phi)\sin(\theta)$', transform=_LOG)
 _alpha_lin     = Regular(100, 0,    1e6, name='alpha',     label=r'$\alpha = \beta\gamma\sin(\Delta\phi)\sin(\theta)$')
-_ctau_log      = Regular(100, 1e-6, 1e3, name='ctau',      label=r'$c\tau$ [cm]',                  transform=_LOG)
-_ctau_lin      = Regular(100, 0,    1e3, name='ctau',      label=r'$c\tau$ [cm]')
-_lxy_log       = Regular(100, 1e-4, 50,  name='lxy',       label=r'$L_{xy}$ [cm]',                 transform=_LOG)
-_lxy_lin       = Regular(100, 0,    50,  name='lxy',       label=r'$L_{xy}$ [cm]')
+_ctau_log      = Regular(100, 1e-6, 1e3, name='ctau',      label=r'$c\tau$ (cm)',                  transform=_LOG)
+_ctau_lin      = Regular(100, 0,    1e3, name='ctau',      label=r'$c\tau$ (cm)')
+_lxy_log       = Regular(100, 1e-4, 50,  name='lxy',       label=r'$L_{xy}$ (cm)',                 transform=_LOG)
+_lxy_lin       = Regular(100, 0,    50,  name='lxy',       label=r'$L_{xy}$ (cm)')
 
 def make_histograms():
     histograms = {

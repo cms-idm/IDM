@@ -24,13 +24,13 @@ _LOG = hist.axis.transform.log
 # Re-declared under different axis names (same binning) for the reco dxy /
 # svProxyVxy axes so all three can share one 2D hist without a name collision
 # on fill.
-_lxy_log              = Regular(120, 1e-4, 100, name='lxy',        label=r'$L_{xy}$ [cm]', transform=_LOG)
-_dxy_zoom_fine        = Regular(100, 1e-4, 2,  name='dxy',        label=r'Electron Track $d_{xy}$ [cm]', transform=_LOG)
+_lxy_log              = Regular(120, 1e-4, 100, name='lxy',        label=r'$L_{xy}$ (cm)', transform=_LOG)
+_dxy_zoom_fine        = Regular(100, 1e-4, 2,  name='dxy',        label=r'Electron Track $d_{xy}$ (cm)', transform=_LOG)
 
 # mele_gen_lxy_vs_svProxyVxy is kept linear (not log) per request, so it gets
 # its own non-transformed lxy axis alongside the linear svProxyVxy axis.
-_lxy_linear           = Regular(100, 0, 100, name='lxy',           label=r'$L_{xy}$ [cm]')
-_svProxyVxy_zoom_fine = Regular(100, 0, 100, name='svProxyVxy',    label=r'SV Proxy $v_{xy}$ [cm]')
+_lxy_linear           = Regular(100, 0, 100, name='lxy',           label=r'$L_{xy}$ (cm)')
+_svProxyVxy_zoom_fine = Regular(100, 0, 100, name='svProxyVxy',    label=r'SV Proxy $v_{xy}$ (cm)')
 
 # Reco and truth dphi axes share the same [0,pi] binning (dphi/dphi_generic in
 # histobins.py) but need distinct names to coexist on one 2D hist.
@@ -38,7 +38,7 @@ _dphi_reco  = Regular(100, 1e-4, 1, name='dphi_reco',  label=r'Reco $\Delta\phi(
 _dphi_truth = Regular(100, 1e-4, 1, name='dphi_truth', label=r'Truth $\Delta\phi(ee, \chi_2)$', transform=_LOG)
 _dphi_truth_genmet = Regular(100, 1e-4, 1, name='dphi_truth_genmet', label=r'Truth $\Delta\phi(ee, p_{T}^{miss,gen})$', transform=_LOG)
 
-_lxyEst_zoom_fine = Regular(100, 1e-4, 40, name='lxyEst', label=r'$d_{xy}\sin(\Delta\phi(e, p_{T}^{miss}))$ [cm]', transform=_LOG)
+_lxyEst_zoom_fine = Regular(100, 1e-4, 40, name='lxyEst', label=r'$d_{xy}\sin(\Delta\phi(e, p_{T}^{miss}))$ (cm)', transform=_LOG)
 
 _dphi_genee_chi2   = Regular(100, 1e-4, 1, name='dphi_genee_chi2',   label=r'Truth $\Delta\phi(ee, \chi_2)$', transform=_LOG)
 _dphi_chi2_genmet  = Regular(100, 1e-4, 1, name='dphi_chi2_genmet',  label=r'Truth $\Delta\phi(\chi_2, p_{T}^{miss,gen})$', transform=_LOG)
@@ -64,14 +64,14 @@ pop = StrCategory(['prompt', 'displaced'], name='pop', label=f'Gen Lxy populatio
 # equivalent axis (0-0.15) to avoid clipping its tail.
 _dr_reco_zoom = Regular(100, 0, 0.3, name='dr', label=r'$\Delta R$')
 
-_dpt_lead_sublead = Regular(100, 0, 30, name='dpt', label=r'Gen $p_T^{lead} - p_T^{sublead}$ [GeV]')
+_dpt_lead_sublead = Regular(100, 0, 30, name='dpt', label=r'Gen $p_T^{lead} - p_T^{sublead}$ (GeV)')
 
 # Second round of pop-compare variables: the track-fit-quality/iso/ID set
 # above showed no large separation between the two Lxy populations, so these
 # probe quantities more directly tied to the displaced track's geometry
 # (calo-matching, hit pattern, vertex/category flags) instead.
 _HoverE           = Regular(100, 0, 0.5,  name='HoverE',           label=r'$H/E$')
-_EoverPInv        = Regular(100, 0, 0.2,  name='EoverPInv',        label=r'$|1/E - 1/p|$ [GeV$^{-1}$]')
+_EoverPInv        = Regular(100, 0, 0.2,  name='EoverPInv',        label=r'$|1/E - 1/p|$ (GeV$^{-1}$)')
 _dEtaSeed         = Regular(100, 0, 0.05, name='dEtaSeed',         label=r'$|\Delta\eta_{seed}|$')
 _dPhiIn           = Regular(100, 0, 0.5,  name='dPhiIn',           label=r'$|\Delta\phi_{in}|$')
 _sigmaIetaIeta    = Regular(100, 0, 0.05, name='sigmaIetaIeta',    label=r'Full5x5 $\sigma_{i\eta i\eta}$')

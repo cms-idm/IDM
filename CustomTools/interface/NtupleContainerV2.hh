@@ -9,6 +9,7 @@ using std::map;
 using std::string;
 #include <iostream>
 
+#include "DataFormats/Math/interface/LorentzVector.h"
 #include <TTree.h>
 
 class NtupleContainerV2 {
@@ -26,16 +27,13 @@ public:
 
     // Trigger and event-level branches
     unsigned int fired_;
-    //unsigned int fired16_;
-    //unsigned int fired17_;
-    //unsigned int fired18_;
     unsigned long long eventNum_;
     unsigned long long runNum_;
     unsigned long long lumiSec_;
     bool isData_;
     bool isSignal_;
     string trigNames_[100];
-    bool trigPassed_[100]; // more than we need to be safe
+    bool trigPassed_[100];
     int numTrigs_ = 0;
     
     float fixedGridRhoFastjetAll_;
@@ -47,13 +45,16 @@ public:
     //////////////////////
     
     // Gen particles
-    int nGen_;
     float genwgt_;
     int genpuobs_;
     int genputrue_;
+
+    // All gen particles. This is the single complete gen-particle collection.
+    int nGen_;
     vector<int> genID_;
-    vector<int> genMotherID_;
-    // Only save hard-process gen particles
+    vector<int> genMotherID_;                 // immediate mother PDG ID
+    vector<int> genPartFirstDifferentMotherID_;   // first mother after walking through same-PDG copies
+    vector<int> genPartStatus_;
     vector<int> genCharge_;
     vector<float> genPt_;
     vector<float> genEta_;
@@ -67,6 +68,267 @@ public:
     vector<float> genVx_;
     vector<float> genVy_;
     vector<float> genMass_;
+    vector<int> genPartIsFirstCopy_;
+    vector<int> genPartIsLastCopy_;
+    vector<int> genPartIsLastCopyBeforeFSR_;
+    vector<int> genPartIsHardProcess_;
+    vector<int> genPartFromHardProcessFinalState_;
+    vector<int> genPartFromHardProcessBeforeFSR_;
+    vector<int> genPartIsPromptFinalState_;
+
+    // All gen-lepton entries available in prunedGenParticles:
+    // 11 <= abs(pdgId) <= 16.
+    //
+    // This includes charged leptons and neutrinos. No kinematic, geometric,
+    // hard-process, status, or copy requirement is applied.
+    // genLeptonGenParticleIdx_ links each entry back to the authoritative
+    // GenPart_* collection.
+    //
+    // Station-2 propagation status:
+    //   0 = not attempted because the lepton is neutral
+    //   1 = charged-lepton propagation attempted but failed
+    //   2 = propagation succeeded
+    //
+    // genLeptonPropSt2Idx_ is -1 unless status == 2; otherwise it indexes
+    // PropGenLeptonSt2_*.
+    int nGenLepton_;
+    vector<int> genLeptonGenParticleIdx_;
+    vector<int> genLeptonID_;
+    vector<int> genLeptonMotherID_;
+    vector<int> genLeptonFirstDifferentMotherID_;
+    vector<int> genLeptonStatus_;
+    vector<int> genLeptonCharge_;
+    vector<math::XYZTLorentzVector> genLeptonP4_;
+    vector<float> genLeptonVxy_;
+    vector<float> genLeptonVz_;
+    vector<float> genLeptonVx_;
+    vector<float> genLeptonVy_;
+    vector<int> genLeptonIsFirstCopy_;
+    vector<int> genLeptonIsLastCopy_;
+    vector<int> genLeptonIsLastCopyBeforeFSR_;
+    vector<int> genLeptonIsHardProcess_;
+    vector<int> genLeptonFromHardProcessFinalState_;
+    vector<int> genLeptonFromHardProcessBeforeFSR_;
+    vector<int> genLeptonIsPromptFinalState_;
+    vector<int> genLeptonIsSignal_;
+    vector<int> genLeptonPropSt2Status_;
+    vector<int> genLeptonPropSt2Idx_;
+
+    // Successfully propagated gen leptons at Station 2. The p4 is constructed
+    // from the propagated momentum and the source gen-lepton mass.
+    int nPropGenLeptonSt2_;
+    vector<int> propGenLeptonSt2GenLeptonIdx_;
+    vector<math::XYZTLorentzVector> propGenLeptonSt2P4_;
+    vector<float> propGenLeptonSt2PositionEta_;
+    vector<float> propGenLeptonSt2PositionPhi_;
+
+    // Signal-gen-lepton view: last-copy entries in GenLepton_* whose first
+    // different mother has abs(PDG ID) == 1000023. The propagated collection
+    // points both to this signal view and directly to the GenLepton entry.
+    int nGenSigLepton_;
+    vector<int> genSigLeptonGenLeptonIdx_;
+    vector<int> genSigLeptonPropSt2Idx_;
+
+    int nPropGenSigLeptonSt2_;
+    vector<int> propGenSigLeptonSt2GenSigLeptonIdx_;
+    vector<int> propGenSigLeptonSt2GenLeptonIdx_;
+    vector<math::XYZTLorentzVector> propGenSigLeptonSt2P4_;
+    vector<float> propGenSigLeptonSt2PositionEta_;
+    vector<float> propGenSigLeptonSt2PositionPhi_;
+
+    // Gen Signal Muon from iDM signal only: status == 1 and motherID == 1000023
+    int genSigMuonCharge_;
+    int genSigMuonMotherID_;
+    int genSigMuonStatus_;
+    float genSigMuonPt_;
+    float genSigMuonEta_;
+    float genSigMuonPhi_;
+    float genSigMuonEn_;
+    float genSigMuonPx_;
+    float genSigMuonPy_;
+    float genSigMuonPz_;
+    float genSigMuonVxy_;
+    float genSigMuonVz_;
+    float genSigMuonVx_;
+    float genSigMuonVy_;
+    bool genSigMuonMatched_;
+    std::string genSigMuonMatchType_;
+    int genSigMuonMatchIdxLocal_;
+    int genSigMuonMatchIdxGlobal_;
+    float genSigMuonMass_;
+    int genSigMuonImmediateMotherID_;
+    int genSigMuonFirstDifferentMotherID_;
+    int genSigMuonIsFirstCopy_;
+    int genSigMuonIsLastCopy_;
+    int genSigMuonIsLastCopyBeforeFSR_;
+    int genSigMuonIsHardProcess_;
+    int genSigMuonFromHardProcessFinalState_;
+    int genSigMuonFromHardProcessBeforeFSR_;
+    int genSigMuonIsPromptFinalState_;
+
+    // New nearest-reco matching diagnostics
+    float genSigMuonMinDrToRecoMuon_;
+    int genSigMuonMatchRecoMuonIdx_;
+    float genSigMuonMinDrToSTAMuon_;
+    int genSigMuonMatchSTAMuonIdx_;
+    float genSigMuonMinDrToDSAMuon_;
+    int genSigMuonMatchDSAMuonIdx_;
+
+    // Propagated gen signal muon to muon-station surfaces
+    int   genSigMuonPropSt1Valid_;
+    float genSigMuonPropSt1Eta_;
+    float genSigMuonPropSt1Phi_;
+    float genSigMuonPropSt1MomEta_;
+    float genSigMuonPropSt1MomPhi_;
+    math::XYZTLorentzVector genSigMuonPropSt1P4_;
+
+    int   genSigMuonPropSt2Valid_;
+    float genSigMuonPropSt2Eta_;
+    float genSigMuonPropSt2Phi_;
+    float genSigMuonPropSt2MomEta_;
+    float genSigMuonPropSt2MomPhi_;
+    math::XYZTLorentzVector genSigMuonPropSt2P4_;
+
+    int   genSigMuonPropSt3Valid_;
+    float genSigMuonPropSt3Eta_;
+    float genSigMuonPropSt3Phi_;
+    float genSigMuonPropSt3MomEta_;
+    float genSigMuonPropSt3MomPhi_;
+    math::XYZTLorentzVector genSigMuonPropSt3P4_;
+
+    int   genSigMuonPropSt4Valid_;
+    float genSigMuonPropSt4Eta_;
+    float genSigMuonPropSt4Phi_;
+    float genSigMuonPropSt4MomEta_;
+    float genSigMuonPropSt4MomPhi_;
+    math::XYZTLorentzVector genSigMuonPropSt4P4_;
+
+    // Propagated same-sign STA matching diagnostics
+    float genSigMuonMinDrToSTAMuonPropSt1_;
+    int   genSigMuonMatchSTAMuonPropSt1Idx_;
+    float genSigMuonMinDrToSTAMuonPropSt2_;
+    int   genSigMuonMatchSTAMuonPropSt2Idx_;
+
+    // Propagated same-sign DSA matching diagnostics
+    float genSigMuonMinDrToDSAMuonPropSt1_;
+    int   genSigMuonMatchDSAMuonPropSt1Idx_;
+    float genSigMuonMinDrToDSAMuonPropSt2_;
+    int   genSigMuonMatchDSAMuonPropSt2Idx_;
+    float genSigMuonMinDrToDSAMuonPropSt3_;
+    int   genSigMuonMatchDSAMuonPropSt3Idx_;
+    float genSigMuonMinDrToDSAMuonPropSt4_;
+    int   genSigMuonMatchDSAMuonPropSt4Idx_;
+
+    // Gen signal muon propagated to each DSA muon's actual outermost valid hit surface
+    float genSigMuonMinDrToDSAMuonOuterHit_;
+    int   genSigMuonMatchDSAMuonOuterHitIdx_;
+
+    // Gen Signal Anti-Muon from iDM signal only: status == 1 and motherID == 1000023
+    int genSigAntiMuonCharge_;
+    int genSigAntiMuonMotherID_;
+    int genSigAntiMuonStatus_;
+    float genSigAntiMuonPt_;
+    float genSigAntiMuonEta_;
+    float genSigAntiMuonPhi_;
+    float genSigAntiMuonEn_;
+    float genSigAntiMuonPx_;
+    float genSigAntiMuonPy_;
+    float genSigAntiMuonPz_;
+    float genSigAntiMuonVxy_;
+    float genSigAntiMuonVz_;
+    float genSigAntiMuonVx_;
+    float genSigAntiMuonVy_;
+    bool genSigAntiMuonMatched_;
+    std::string genSigAntiMuonMatchType_;
+    int genSigAntiMuonMatchIdxLocal_;
+    int genSigAntiMuonMatchIdxGlobal_;
+    float genSigAntiMuonMass_;
+    int genSigAntiMuonImmediateMotherID_;
+    int genSigAntiMuonFirstDifferentMotherID_;
+    int genSigAntiMuonIsFirstCopy_;
+    int genSigAntiMuonIsLastCopy_;
+    int genSigAntiMuonIsLastCopyBeforeFSR_;
+    int genSigAntiMuonIsHardProcess_;
+    int genSigAntiMuonFromHardProcessFinalState_;
+    int genSigAntiMuonFromHardProcessBeforeFSR_;
+    int genSigAntiMuonIsPromptFinalState_;
+
+    // New nearest-reco matching diagnostics
+    float genSigAntiMuonMinDrToRecoMuon_;
+    int genSigAntiMuonMatchRecoMuonIdx_;
+    float genSigAntiMuonMinDrToSTAMuon_;
+    int genSigAntiMuonMatchSTAMuonIdx_;
+    float genSigAntiMuonMinDrToDSAMuon_;
+    int genSigAntiMuonMatchDSAMuonIdx_;
+
+
+    // Propagated gen signal anti-muon to muon-station surfaces
+    int   genSigAntiMuonPropSt1Valid_;
+    float genSigAntiMuonPropSt1Eta_;
+    float genSigAntiMuonPropSt1Phi_;
+    float genSigAntiMuonPropSt1MomEta_;
+    float genSigAntiMuonPropSt1MomPhi_;
+    math::XYZTLorentzVector genSigAntiMuonPropSt1P4_;
+
+    int   genSigAntiMuonPropSt2Valid_;
+    float genSigAntiMuonPropSt2Eta_;
+    float genSigAntiMuonPropSt2Phi_;
+    float genSigAntiMuonPropSt2MomEta_;
+    float genSigAntiMuonPropSt2MomPhi_;
+    math::XYZTLorentzVector genSigAntiMuonPropSt2P4_;
+
+    int   genSigAntiMuonPropSt3Valid_;
+    float genSigAntiMuonPropSt3Eta_;
+    float genSigAntiMuonPropSt3Phi_;
+    float genSigAntiMuonPropSt3MomEta_;
+    float genSigAntiMuonPropSt3MomPhi_;
+    math::XYZTLorentzVector genSigAntiMuonPropSt3P4_;
+
+    int   genSigAntiMuonPropSt4Valid_;
+    float genSigAntiMuonPropSt4Eta_;
+    float genSigAntiMuonPropSt4Phi_;
+    float genSigAntiMuonPropSt4MomEta_;
+    float genSigAntiMuonPropSt4MomPhi_;
+    math::XYZTLorentzVector genSigAntiMuonPropSt4P4_;
+
+    // Propagated same-sign STA matching diagnostics
+    float genSigAntiMuonMinDrToSTAMuonPropSt1_;
+    int   genSigAntiMuonMatchSTAMuonPropSt1Idx_;
+    float genSigAntiMuonMinDrToSTAMuonPropSt2_;
+    int   genSigAntiMuonMatchSTAMuonPropSt2Idx_;
+
+    // Propagated same-sign DSA matching diagnostics
+    float genSigAntiMuonMinDrToDSAMuonPropSt1_;
+    int   genSigAntiMuonMatchDSAMuonPropSt1Idx_;
+    float genSigAntiMuonMinDrToDSAMuonPropSt2_;
+    int   genSigAntiMuonMatchDSAMuonPropSt2Idx_;
+    float genSigAntiMuonMinDrToDSAMuonPropSt3_;
+    int   genSigAntiMuonMatchDSAMuonPropSt3Idx_;
+    float genSigAntiMuonMinDrToDSAMuonPropSt4_;
+    int   genSigAntiMuonMatchDSAMuonPropSt4Idx_;
+
+    // Gen signal anti-muon propagated to each DSA muon's actual outermost valid hit surface
+    float genSigAntiMuonMinDrToDSAMuonOuterHit_;
+    int   genSigAntiMuonMatchDSAMuonOuterHitIdx_;
+
+    // Gen Signal Dimuon
+    float genSigDimuonPt_;
+    float genSigDimuonEta_;
+    float genSigDimuonPhi_;
+    float genSigDimuonEn_;
+    float genSigDimuonMass_;
+    float genSigDimuonDr_;
+    float genSigDimuonMETdPhi_;
+    float genSigDimuonVxy_;
+    float genSigDimuonVz_;
+    float genSigDimuonVx_;
+    float genSigDimuonVy_;
+
+    int nGenSigMuonFinal_;
+    bool genSigMuonIsValid_;
+    bool genSigAntiMuonIsValid_;
+    bool genSigDimuonIsValid_;
+    bool signalDimuonReconstructed_;
 
     // Gen Electron & Positron from iDM signal
     int genEleCharge_;
@@ -109,6 +371,16 @@ public:
     bool genPosMatchedAllLowPt_;
     int genPosMatchIdxAllLowPt_;
 
+    // resolution studies
+    float genEleGEDPtRes_;
+    float genEleGEDPtResRel_;
+    float genEleLptPtRes_;
+    float genEleLptPtResRel_;
+    float genPosGEDPtRes_;
+    float genPosGEDPtResRel_;
+    float genPosLptPtRes_;
+    float genPosLptPtResRel_;
+
     // Gen Electron + Positron info
     float genEEPt_;
     float genEEEta_;
@@ -122,9 +394,10 @@ public:
     float genEEVx_;
     float genEEVy_;
 
-    // Track whether full signal (e and p) are reconstructed
+    // Track whether full signal (e and p) are reconstructed (as well as vertex, to factor out vertexing eff)
     bool signalReconstructed_;
-    
+    bool signalVertexReconstructed_;
+
     // Gen jet
     int nGenJet_;
     vector<float> genJetPt_;
@@ -139,13 +412,34 @@ public:
     float genLeadMETPy_;
     float genLeadMETET_;
 
-    // Reco Particles
-    // Muons: used only for SF measurement with Z/Gamma events
+    ///////////////////////
+    //// Reco branches ////
+    ///////////////////////
+
+    // Muons
     int nMuon_;
+    vector<int> recoMuonPatIdx_;
     vector<float> recoMuonPt_;
+    vector<float> recoMuonPtErr_;
     vector<float> recoMuonEta_;
+    vector<float> recoMuonEtaErr_;
     vector<float> recoMuonPhi_;
+    vector<float> recoMuonPhiErr_;
     vector<float> recoMuonEnergy_;
+    vector<float> recoMuonE_;
+    vector<float> recoMuonVxy_;
+    vector<float> recoMuonVz_;
+    vector<float> recoMuonVx_;
+    vector<float> recoMuonVy_;
+    vector<float> recoMuonDxy_;
+    vector<float> recoMuonDxyError_;
+    vector<float> recoMuonDz_;
+    vector<float> recoMuonDzError_;
+    vector<float> recoMuonTrkChi2_;
+    vector<float> recoMuonTrkProb_;
+    vector<int> recoMuonTrkNumTrackerHits_;
+    vector<int> recoMuonTrkNumPixHits_;
+    vector<int> recoMuonTrkNumStripHits_;
     vector<float> recoMuonCharge_;
     vector<int> recoMuonIDcutBasedLoose_;
     vector<int> recoMuonIDcutBasedMedium_;
@@ -154,6 +448,128 @@ public:
     vector<int> recoMuonIsPFMuon_;
     vector<int> recoMuonIsGlobalMuon_;
     vector<int> recoMuonIsStandAloneMuon_;
+
+    // Separate MiniAOD displaced products. A missing product has available=0;
+    // an available but empty collection has available=1 and n=0.
+    // Embedded track arrays align with their parent muons. Missing references
+    // have valid=0, zero p4, and -999 for floating track quantities.
+    // Arrays align with the source tracks (or parent muons for embedded tracks).
+    // Status: 0 = missing track, 1 = failed, 2 = succeeded.
+    // Invalid states have zero p4 and position eta/phi = -999.
+    struct DisplacedTrackPropagationFields {
+        vector<int> status;
+        vector<math::XYZTLorentzVector> p4;
+        vector<float> positionEta, positionPhi;
+    };
+    struct DisplacedTrackFields {
+        int available = 0;
+        int n = 0;
+        vector<math::XYZTLorentzVector> p4;
+        vector<int> valid, charge, extraAvailable;
+        vector<float> ptError, vxy, vz, dxy, dz, normalizedChi2;
+        vector<int> nMuonHits, nCSCHits, nDTHits, nTrackerHits, nPixelHits, nStripHits;
+        DisplacedTrackPropagationFields propSt1, propSt2, propSt3, propSt4;
+        void clear() { *this = DisplacedTrackFields{}; }
+    } displacedTrack_, displacedGlobalTrack_;
+
+    struct DisplacedMuonFields {
+        int available = 0;
+        int n = 0;
+        vector<math::XYZTLorentzVector> p4;
+        vector<int> charge, isStandAlone, isTracker, isGlobal, isPF, nMatchedStations;
+        vector<int> timeValid;
+        vector<float> timeAtIpInOut;
+        DisplacedTrackFields outer, inner, global;
+        void clear() { *this = DisplacedMuonFields{}; }
+    } slimmedMuon_, recoDisplacedMuon_, slimmedDisplacedMuon_;
+    // Only for cleaned displacedMuons (DisplacedMuonDuplicateCleaner): raw index of each muon and the
+    // raw collection size (-1 = input not cleaned).
+    vector<int> recoDisplacedMuonOriginalIndex_;
+    int nRecoDisplacedMuonRaw_ = -1;
+
+    // Complete PF-muon view of slimmedMuons, with no pT or acceptance cuts.
+    // pfMuonPatIdx_ is the index in the input slimmedMuons collection.
+    //
+    // Propagation-track type:
+    //   0 = no usable track
+    //   1 = globalTrack
+    //   2 = outerTrack / standAloneMuon
+    //   3 = innerTrack
+    // Track quantities below use that selected track; dxy/dz are signed
+    // relative to the primary vertex. Missing track values use -999.
+    //
+    // Station-1/2/3/4 status:
+    //   0 = no usable propagation track
+    //   1 = propagation attempted but failed
+    //   2 = propagation succeeded
+    int nPFMuon_;
+    vector<int> pfMuonPatIdx_;
+    vector<math::XYZTLorentzVector> pfMuonP4_;
+    vector<int> pfMuonCharge_;
+    vector<int> pfMuonIDcutBasedLoose_;
+    vector<int> pfMuonIDcutBasedMedium_;
+    vector<int> pfMuonIDcutBasedMediumPrompt_;
+    vector<int> pfMuonIDcutBasedTight_;
+    vector<int> pfMuonIsGlobalMuon_;
+    vector<int> pfMuonIsStandAloneMuon_;
+    vector<int> pfMuonPropagationTrackType_;
+    vector<int> pfMuonTrkNumValidMuonHits_;
+    vector<int> pfMuonTrkNumValidTrackerHits_;
+    vector<int> pfMuonTrkNumValidPixelHits_;
+    vector<int> pfMuonTrkNumValidStripHits_;
+    vector<int> pfMuonNumMatchedStations_;
+    vector<int> pfMuonTrkNumMuonStations_;
+    vector<int> pfMuonTrkNumCSCHits_;
+    vector<int> pfMuonTrkNumDTHits_;
+    vector<float> pfMuonTrkPt_;
+    vector<float> pfMuonTrkEta_;
+    vector<float> pfMuonTrkEtaError_;
+    vector<float> pfMuonTrkPhi_;
+    vector<float> pfMuonTrkPhiError_;
+    vector<float> pfMuonTrkOuterEta_;
+    vector<float> pfMuonTrkOuterPhi_;
+    vector<float> pfMuonTrkNormalizedChi2_;
+    vector<float> pfMuonTrkPtError_;
+    vector<float> pfMuonTrkVxy_;
+    vector<float> pfMuonTrkVz_;
+    vector<float> pfMuonTrkDxy_;
+    vector<float> pfMuonTrkDxyError_;
+    vector<float> pfMuonTrkDz_;
+    vector<float> pfMuonTrkDzError_;
+    vector<float> pfMuonTrkProb_;
+    vector<int> pfMuonPropSt1Status_;
+    vector<int> pfMuonPropSt1Idx_;
+    vector<int> pfMuonPropSt2Status_;
+    vector<int> pfMuonPropSt2Idx_;
+
+    // Successfully propagated PF muons at Station 1.
+    int nPropPFMuonSt1_;
+    vector<int> propPFMuonSt1PFMuonIdx_;
+    vector<math::XYZTLorentzVector> propPFMuonSt1P4_;
+    vector<float> propPFMuonSt1PositionEta_;
+    vector<float> propPFMuonSt1PositionPhi_;
+
+    // Successfully propagated PF muons at Station 2.
+    int nPropPFMuonSt2_;
+    vector<int> propPFMuonSt2PFMuonIdx_;
+    vector<math::XYZTLorentzVector> propPFMuonSt2P4_;
+    vector<float> propPFMuonSt2PositionEta_;
+    vector<float> propPFMuonSt2PositionPhi_;
+    
+    vector<int> pfMuonPropSt3Status_;
+    vector<int> pfMuonPropSt3Idx_;
+    int nPropPFMuonSt3_;
+    vector<int> propPFMuonSt3PFMuonIdx_;
+    vector<math::XYZTLorentzVector> propPFMuonSt3P4_;
+    vector<float> propPFMuonSt3PositionEta_;
+    vector<float> propPFMuonSt3PositionPhi_;
+    vector<int> pfMuonPropSt4Status_;
+    vector<int> pfMuonPropSt4Idx_;
+    int nPropPFMuonSt4_;
+    vector<int> propPFMuonSt4PFMuonIdx_;
+    vector<math::XYZTLorentzVector> propPFMuonSt4P4_;
+    vector<float> propPFMuonSt4PositionEta_;
+    vector<float> propPFMuonSt4PositionPhi_;
     
     // Normal Electrons
     int nElectronDefault_;
@@ -410,7 +826,96 @@ public:
     vector<int> recoAllLowPtElectronGEDidx_;
     vector<bool> recoAllLowPtElectronGEDisMatched_;
 
+    // Standard standalone (STA) muons from standAloneMuons:UpdatedAtVtx.
+    // The source collection is kept without kinematic or ID cuts.
+    int staMuonAvailable_;
+    int nSTAMuon_;
+    std::vector<float> recoSTAMuonPt_;
+    std::vector<float> recoSTAMuonPtErr_;
+    std::vector<float> recoSTAMuonEta_;
+    std::vector<float> recoSTAMuonEtaErr_;
+    std::vector<float> recoSTAMuonPhi_;
+    std::vector<float> recoSTAMuonPhiErr_;
+    std::vector<float> recoSTAMuonOuterPhi_;
+    std::vector<float> recoSTAMuonOuterEta_;
+    std::vector<float> recoSTAMuonE_;
+    std::vector<float> recoSTAMuonPx_;
+    std::vector<float> recoSTAMuonPy_;
+    std::vector<float> recoSTAMuonPz_;
+    std::vector<float> recoSTAMuonVxy_;
+    std::vector<float> recoSTAMuonVz_;
+    std::vector<float> recoSTAMuonDxy_;
+    std::vector<float> recoSTAMuonDxyError_;
+    std::vector<float> recoSTAMuonDz_;
+    std::vector<float> recoSTAMuonDzError_;
+    std::vector<float> recoSTAMuonTrkChi2_;
+    std::vector<float> recoSTAMuonTrkProb_;
+    std::vector<int> recoSTAMuonTrkNumTrackerHits_;
+    std::vector<int> recoSTAMuonTrkNumPixHits_;
+    std::vector<int> recoSTAMuonTrkNumStripHits_;
+    std::vector<int> recoSTAMuonCharge_;
+    std::vector<int> recoSTAMuonDisplacedId_;
+    std::vector<int> recoSTAMuonTrkNumCSCHits_;
+    std::vector<int> recoSTAMuonTrkNumHits_;
+    std::vector<int> recoSTAMuonTrkNumPlanes_;
+    std::vector<int> recoSTAMuonTrkNumDTHits_;
+    std::vector<int> recoSTAMuonIdx_;
+    std::vector<math::XYZTLorentzVector> recoSTAMuonP4_;
+
+    // STA tracks propagated to Stations 1 through 4. The aligned arrays
+    // have one entry per STAMuon; the compact PropSTAMuon collections contain
+    // only successful propagations and are linked in both directions by index.
+    std::vector<int>   recoSTAMuonPropSt1Valid_;
+    std::vector<float> recoSTAMuonPropSt1Eta_;
+    std::vector<float> recoSTAMuonPropSt1Phi_;
+    std::vector<float> recoSTAMuonPropSt1MomEta_;
+    std::vector<float> recoSTAMuonPropSt1MomPhi_;
+    std::vector<int>   recoSTAMuonPropSt1Idx_;
+
+    std::vector<int>   recoSTAMuonPropSt2Valid_;
+    std::vector<float> recoSTAMuonPropSt2Eta_;
+    std::vector<float> recoSTAMuonPropSt2Phi_;
+    std::vector<float> recoSTAMuonPropSt2MomEta_;
+    std::vector<float> recoSTAMuonPropSt2MomPhi_;
+    std::vector<int>   recoSTAMuonPropSt2Idx_;
+
+    int nPropSTAMuonSt1_;
+    std::vector<int> propSTAMuonSt1STAMuonIdx_;
+    std::vector<math::XYZTLorentzVector> propSTAMuonSt1P4_;
+    std::vector<float> propSTAMuonSt1PositionEta_;
+    std::vector<float> propSTAMuonSt1PositionPhi_;
+
+    int nPropSTAMuonSt2_;
+    std::vector<int> propSTAMuonSt2STAMuonIdx_;
+    std::vector<math::XYZTLorentzVector> propSTAMuonSt2P4_;
+    std::vector<float> propSTAMuonSt2PositionEta_;
+    std::vector<float> propSTAMuonSt2PositionPhi_;
+
+    std::vector<int>   recoSTAMuonPropSt3Valid_;
+    std::vector<float> recoSTAMuonPropSt3Eta_;
+    std::vector<float> recoSTAMuonPropSt3Phi_;
+    std::vector<float> recoSTAMuonPropSt3MomEta_;
+    std::vector<float> recoSTAMuonPropSt3MomPhi_;
+    std::vector<int>   recoSTAMuonPropSt3Idx_;
+    int nPropSTAMuonSt3_;
+    std::vector<int> propSTAMuonSt3STAMuonIdx_;
+    std::vector<math::XYZTLorentzVector> propSTAMuonSt3P4_;
+    std::vector<float> propSTAMuonSt3PositionEta_;
+    std::vector<float> propSTAMuonSt3PositionPhi_;
+    std::vector<int>   recoSTAMuonPropSt4Valid_;
+    std::vector<float> recoSTAMuonPropSt4Eta_;
+    std::vector<float> recoSTAMuonPropSt4Phi_;
+    std::vector<float> recoSTAMuonPropSt4MomEta_;
+    std::vector<float> recoSTAMuonPropSt4MomPhi_;
+    std::vector<int>   recoSTAMuonPropSt4Idx_;
+    int nPropSTAMuonSt4_;
+    std::vector<int> propSTAMuonSt4STAMuonIdx_;
+    std::vector<math::XYZTLorentzVector> propSTAMuonSt4P4_;
+    std::vector<float> propSTAMuonSt4PositionEta_;
+    std::vector<float> propSTAMuonSt4PositionPhi_;
+
     // DSA Muons
+    int dsaMuonAvailable_;
     int nDSAMuon_;
     std::vector<float> recoDSAMuonPt_;
     std::vector<float> recoDSAMuonPtErr_;
@@ -442,6 +947,84 @@ public:
     std::vector<int>   recoDSAMuonTrkNumPlanes_;
     std::vector<int>   recoDSAMuonTrkNumDTHits_;
     std::vector<int>   recoDSAMuonIdx_;
+    std::vector<math::XYZTLorentzVector> recoDSAMuonP4_;
+    
+    // DSA reco tracks propagated to muon-station surfaces
+    std::vector<int>   recoDSAMuonPropSt1Valid_;
+    std::vector<float> recoDSAMuonPropSt1Eta_;
+    std::vector<float> recoDSAMuonPropSt1Phi_;
+    std::vector<float> recoDSAMuonPropSt1MomEta_;
+    std::vector<float> recoDSAMuonPropSt1MomPhi_;
+    std::vector<int>   recoDSAMuonPropSt1Idx_;
+
+    std::vector<int>   recoDSAMuonPropSt2Valid_;
+    std::vector<float> recoDSAMuonPropSt2Eta_;
+    std::vector<float> recoDSAMuonPropSt2Phi_;
+    std::vector<float> recoDSAMuonPropSt2MomEta_;
+    std::vector<float> recoDSAMuonPropSt2MomPhi_;
+    std::vector<int>   recoDSAMuonPropSt2Idx_;
+
+    std::vector<int>   recoDSAMuonPropSt3Valid_;
+    std::vector<float> recoDSAMuonPropSt3Eta_;
+    std::vector<float> recoDSAMuonPropSt3Phi_;
+    std::vector<float> recoDSAMuonPropSt3MomEta_;
+    std::vector<float> recoDSAMuonPropSt3MomPhi_;
+
+    std::vector<int>   recoDSAMuonPropSt4Valid_;
+    std::vector<float> recoDSAMuonPropSt4Eta_;
+    std::vector<float> recoDSAMuonPropSt4Phi_;
+    std::vector<float> recoDSAMuonPropSt4MomEta_;
+    std::vector<float> recoDSAMuonPropSt4MomPhi_;
+
+    // Successfully propagated DSA muons at Station 1.
+    int nPropDSAMuonSt1_;
+    std::vector<int> propDSAMuonSt1DSAMuonIdx_;
+    std::vector<math::XYZTLorentzVector> propDSAMuonSt1P4_;
+    std::vector<float> propDSAMuonSt1PositionEta_;
+    std::vector<float> propDSAMuonSt1PositionPhi_;
+
+    // Successfully propagated DSA muons at Station 2.
+    int nPropDSAMuonSt2_;
+    std::vector<int> propDSAMuonSt2DSAMuonIdx_;
+    std::vector<math::XYZTLorentzVector> propDSAMuonSt2P4_;
+    std::vector<float> propDSAMuonSt2PositionEta_;
+    std::vector<float> propDSAMuonSt2PositionPhi_;
+
+    std::vector<int>   recoDSAMuonPropSt3Idx_;
+    int nPropDSAMuonSt3_;
+    std::vector<int> propDSAMuonSt3DSAMuonIdx_;
+    std::vector<math::XYZTLorentzVector> propDSAMuonSt3P4_;
+    std::vector<float> propDSAMuonSt3PositionEta_;
+    std::vector<float> propDSAMuonSt3PositionPhi_;
+    std::vector<int>   recoDSAMuonPropSt4Idx_;
+    int nPropDSAMuonSt4_;
+    std::vector<int> propDSAMuonSt4DSAMuonIdx_;
+    std::vector<math::XYZTLorentzVector> propDSAMuonSt4P4_;
+    std::vector<float> propDSAMuonSt4PositionEta_;
+    std::vector<float> propDSAMuonSt4PositionPhi_;
+
+    // DSA outermost valid muon-hit diagnostics
+    std::vector<int> recoDSAMuonOuterHitValid_;
+    std::vector<int> recoDSAMuonOuterHitTrackExtraAvailable_;
+    std::vector<int> recoDSAMuonOuterHitRecHitsSize_;
+    std::vector<int> recoDSAMuonOuterHitNValidMuonHits_;
+    std::vector<unsigned int> recoDSAMuonOuterHitDetId_;
+    std::vector<float> recoDSAMuonOuterHitX_;
+    std::vector<float> recoDSAMuonOuterHitY_;
+    std::vector<float> recoDSAMuonOuterHitZ_;
+    std::vector<float> recoDSAMuonOuterHitR_;
+    std::vector<float> recoDSAMuonOuterHitEta_;
+    std::vector<float> recoDSAMuonOuterHitPhi_;
+
+    // DSA-centric closest propagated signal-gen match at that DSA outer-hit surface
+    std::vector<float> recoDSAMuonMinDrToGenSigMuonOuterHit_;
+    std::vector<int> recoDSAMuonMatchGenSigMuonOuterHitIdx_;
+    std::vector<int> recoDSAMuonMatchGenSigMuonOuterHitPdgId_;
+    std::vector<int> recoDSAMuonMatchGenSigMuonOuterHitPropValid_;
+    std::vector<float> recoDSAMuonMatchGenSigMuonOuterHitPropEta_;
+    std::vector<float> recoDSAMuonMatchGenSigMuonOuterHitPropPhi_;
+    std::vector<float> recoDSAMuonMatchGenSigMuonOuterHitPropMomEta_;
+    std::vector<float> recoDSAMuonMatchGenSigMuonOuterHitPropMomPhi_;
 
     // Photons
     int nPhotons_;
@@ -730,7 +1313,6 @@ public:
     vector<float> lptvtx_e2_refitChi2_;
 
 protected:
-    // Reco and gen TTrees
     TTree * outT;
     // Slim, all-events tree (background only; see CreateSlimTreeBranches)
     TTree * outT_slim;

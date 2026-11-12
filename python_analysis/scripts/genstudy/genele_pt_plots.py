@@ -24,6 +24,8 @@ import time
 import json
 import glob
 
+ptools.set_plot_style()
+
 #cuts_config = "configs/selections/minimal_cuts.py"
 #hists_config = "configs/hists/genstudy.py"
 #sample_config = "configs/samples/signal_2024_Apr2026_aEM.json"
@@ -52,9 +54,6 @@ m1s = [0.05, 0.5, 5, 50]
 deltas = [0.1, 0.2]
 ctaus = [10]
 
-size = (16, 12)
-fig, ax = plt.subplots(figsize=size)
-
 # Plot settings
 plot_dict = {
     'variable': ['gen_leading_ele_pt', 'gen_subleading_ele_pt'],
@@ -62,8 +61,11 @@ plot_dict = {
     'cut': 'cut1',
 }
 
+fig, ax = ptools.new_fig(plot_dict['year'])
+
 style_dict = {
     'fig': fig, 'ax': ax,
+    'doCMSLabel': False,
     'rebin': 1j, 'xlim': None,     # if None, the default will show up; otherwise give as a list, i.e. [0, 10]
     'doLogy': False, 'doLogx': False, 'doDensity': True, 'doYerr': False, 
     'xlabel': None,   # if None, the default will show up; otherwise give as a string, i.e. 'Electron dxy'
@@ -84,19 +86,20 @@ cmap_idx = 0
 for m1 in m1s:
     for delta in deltas:
         for ctau in ctaus:
-            ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx)
+            ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx, ncolors = len(m1s)*len(deltas)*len(ctaus))
             cmap_idx += 1
 
-plt.title(rf'Gen Electron $p_T$ (pre-vtx sel): $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
-plt.legend()
+plt.title(rf'Gen Electron $p_T$ (pre-vtx sel): $M_1$ = {m1s}, $\delta$ = {ptools.fmt_delta(deltas)}, c$\tau$ = {ctaus}mm')
+ptools.place_legend(ax)
 plt.savefig(f"{plotdir}/hist_prevtx_gen-ele-pt_delta-{utils.stringfy_friendly(deltas[0])}_ctau-{utils.stringfy_friendly(ctaus[0])}_m1-narrow.png")
+plt.close(fig)
 
 # signal points
 m1s = [0.05, 0.5, 5, 50]
 deltas = [0.1]
 ctaus = [10]
 
-fig, ax = plt.subplots(figsize=size)
+fig, ax = ptools.new_fig(plot_dict['year'])
 style_dict['fig'] = fig; style_dict['ax'] = ax
 
 # Plot for variables signal points
@@ -104,19 +107,20 @@ cmap_idx = 0
 for m1 in m1s:
     for delta in deltas:
         for ctau in ctaus:
-            ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx)
+            ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx, ncolors = len(m1s)*len(deltas)*len(ctaus))
             cmap_idx += 1
 
-plt.title(rf'Gen Electron $p_T$ (pre-vtx sel): $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
-plt.legend()
+plt.title(rf'Gen Electron $p_T$ (pre-vtx sel): $M_1$ = {m1s}, $\delta$ = {ptools.fmt_delta(deltas)}, c$\tau$ = {ctaus}mm')
+ptools.place_legend(ax)
 plt.savefig(f"{plotdir}/hist_prevtx_gen-ele-pt_delta-{utils.stringfy_friendly(deltas[0])}_ctau-{utils.stringfy_friendly(ctaus[0])}_m1-wide.png")
+plt.close(fig)
 
 # signal points
 m1s = [5]
 deltas = [0.1]
 ctaus = [1, 10, 100]
 
-fig, ax = plt.subplots(figsize=size)
+fig, ax = ptools.new_fig(plot_dict['year'])
 style_dict['fig'] = fig; style_dict['ax'] = ax
 
 # Plot for variables signal points
@@ -124,19 +128,20 @@ cmap_idx = 0
 for m1 in m1s:
     for delta in deltas:
         for ctau in ctaus:
-            ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx)
+            ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx, ncolors = len(m1s)*len(deltas)*len(ctaus))
             cmap_idx += 1
 
-plt.title(rf'Gen Electron $p_T$ (pre-vtx sel): $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
-plt.legend()
+plt.title(rf'Gen Electron $p_T$ (pre-vtx sel): $M_1$ = {m1s}, $\delta$ = {ptools.fmt_delta(deltas)}, c$\tau$ = {ctaus}mm')
+ptools.place_legend(ax)
 plt.savefig(f"{plotdir}/hist_prevtx_gen-ele-pt_m1-{utils.stringfy_friendly(m1s[0])}_delta-{utils.stringfy_friendly(deltas[0])}.png")
+plt.close(fig)
 
 # signal points
 m1s = [5]
 deltas = [0.05, 0.1, 0.2]
 ctaus = [10]
 
-fig, ax = plt.subplots(figsize=size)
+fig, ax = ptools.new_fig(plot_dict['year'])
 style_dict['fig'] = fig; style_dict['ax'] = ax
 
 # Plot for variables signal points
@@ -144,10 +149,11 @@ cmap_idx = 0
 for m1 in m1s:
     for delta in deltas:
         for ctau in ctaus:
-            ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx)
+            ptools.plot_signal_1D(s_hists, m1, delta, ctau, plot_dict, style_dict, cmap_idx = cmap_idx, ncolors = len(m1s)*len(deltas)*len(ctaus))
             cmap_idx +=	1
 
-plt.title(rf'Gen Electron $p_T$ (pre-vtx sel): $M_1$ = {m1s}, $\Delta$ = {deltas}, c$\tau$ = {ctaus}mm')
-plt.legend()
+plt.title(rf'Gen Electron $p_T$ (pre-vtx sel): $M_1$ = {m1s}, $\delta$ = {ptools.fmt_delta(deltas)}, c$\tau$ = {ctaus}mm')
+ptools.place_legend(ax)
 plt.savefig(f"{plotdir}/hist_prevtx_gen-ele-pt_m1-{utils.stringfy_friendly(m1s[0])}_ctau-{utils.stringfy_friendly(ctaus[0])}.png")
+plt.close(fig)
 

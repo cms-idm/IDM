@@ -45,7 +45,7 @@ _dpt_abs_edges = np.concatenate([
     np.linspace(  2,  10,  9)[:-1],  # 8 bins × 1.0 GeV
     np.linspace( 10,  40,  7),       # 6 bins × 5.0 GeV
 ])
-_dpt_abs = Variable(_dpt_abs_edges, name='dpt_abs', label=r'$p_T^{\rm reco} - p_T^{\rm gen}$ [GeV]')
+_dpt_abs = Variable(_dpt_abs_edges, name='dpt_abs', label=r'$p_T^{\rm reco} - p_T^{\rm gen}$ (GeV)')
 
 # Variable-width bins: fine (0.05) in [-0.5, 0.5] and coarser outside.
 _dpt_rel_edges = np.concatenate([

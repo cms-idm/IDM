@@ -20,7 +20,7 @@ import glob
 # ---- SETTINGS ----
 vers = 'Jul2026noID'
 cuts = 'aptrk'
-hists = 'cutflow_only'
+hists = 'secondele'
 
 
 # ---- FILES ----

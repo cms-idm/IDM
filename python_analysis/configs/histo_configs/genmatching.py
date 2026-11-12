@@ -65,8 +65,8 @@ def make_histograms():
     histograms['dr_gen_vs_dr_reco_ee_matched'] = Hist(samp, cut, _dr_gen, _dr_reco, storage=hist.storage.Weight())
     histograms['dr_gen_vs_dr_reco_ee_selvtx']  = Hist(samp, cut, _dr_gen, _dr_reco, storage=hist.storage.Weight())
 
-    _pt_gen  = Regular(100, 0, 100, name='pt_gen',  label=r'Gen $p_T(e^+e^-)$ [GeV]')
-    _pt_reco = Regular(100, 0, 100, name='pt_reco', label=r'Reco $p_T(e^+e^-)$ [GeV]')
+    _pt_gen  = Regular(100, 0, 100, name='pt_gen',  label=r'Gen $p_T(e^+e^-)$ (GeV)')
+    _pt_reco = Regular(100, 0, 100, name='pt_reco', label=r'Reco $p_T(e^+e^-)$ (GeV)')
     histograms['pt_gen_vs_pt_reco_ee_matched'] = Hist(samp, cut, _pt_gen, _pt_reco, storage=hist.storage.Weight())
     histograms['pt_gen_vs_pt_reco_ee_selvtx']  = Hist(samp, cut, _pt_gen, _pt_reco, storage=hist.storage.Weight())
             

@@ -16,6 +16,10 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
+import analysisTools.plotTools as ptools
+
+ptools.set_plot_style()
+
 outdir = os.path.join(REPO_ROOT, 'workarea')
 plotdir = os.path.join(REPO_ROOT, 'plots', 'elerecoeff')
 os.makedirs(plotdir, exist_ok=True)
@@ -25,6 +29,7 @@ selection = 'anabrv'
 hists = 'elerecoeff'
 saved_signal_hists = f'{outdir}/hists_sig{sig_vers}_{selection}-sel_{hists}.coffea'
 plottag = f'sig{sig_vers}_{selection}-sel'
+year = 2024
 
 # Cut stages to plot at -- see configs/cut_configs/anmatchvtx_selection.py.
 CUTS = {
@@ -46,7 +51,7 @@ NUMS_4D = {
 }
 DEN_4D = ['lpt', 'ged', 'none']
 
-# single signal point (m1 [GeV], delta, ctau [mm]) to also make the maps for alone
+# single signal point (m1 (GeV), delta, ctau (mm)) to also make the maps for alone
 SINGLE_POINT = (50, 0.2, 100)
 
 
@@ -108,7 +113,7 @@ def sample_m1(samp):
 
 def sample_point(samp):
     """
-    Parse the signal point (m1, delta = dMchi/m1, ctau [mm]) from a signal
+    Parse the signal point (m1, delta = dMchi/m1, ctau (mm)) from a signal
     sample name, independent of year (see sample_m1).
     """
     dmchi = float(re.search(r'dMchi-([\d]+p[\d]+)', samp).group(1).replace('p', '.'))
@@ -163,10 +168,11 @@ def plot_eff_4d(num, den, axes, cut, tag, title, ilxy, idr, point=None):
     with np.errstate(invalid='ignore', divide='ignore'):
         eff = np.where(den > 0, num / den, np.nan).T   # shape (n_eta, n_pt)
 
-    fig, ax = plt.subplots(figsize=(10, 8))
+    fig, ax = ptools.new_fig(year, cms_label=False)
     mesh = ax.pcolormesh(np.arange(n_pt + 1), np.arange(n_eta + 1), eff,
                          cmap='viridis', vmin=0, vmax=1)
     fig.colorbar(mesh, ax=ax).set_label('Reco Efficiency', fontsize=18)
+    ptools.add_cms_label(ax, year)
 
     for i in range(n_eta):
         for j in range(n_pt):
@@ -179,11 +185,11 @@ def plot_eff_4d(num, den, axes, cut, tag, title, ilxy, idr, point=None):
     ax.set_xticklabels(edge_labels(pt_axis))
     ax.set_yticks(np.arange(n_eta + 1))
     ax.set_yticklabels(edge_labels(eta_axis))
-    ax.set_xlabel(r'Gen $p_{T}(e)$ [GeV]', fontsize=20)
+    ax.set_xlabel(r'Gen $p_{T}(e)$ (GeV)', fontsize=20)
     ax.set_ylabel(r'Gen $|\eta(e)|$', fontsize=20)
     if point is not None:
         m1, delta, ctau = point
-        sample_title = rf'$m_1$ = {m1:g} GeV, $\Delta$ = {delta:g}, $c\tau$ = {ctau:g} mm'
+        sample_title = rf'$m_1$ = {m1:g} GeV, $\delta$ = {ptools.fmt_delta(delta)}, $c\tau$ = {ctau:g} mm'
         outtag = f'{plottag}_m1-{m1:g}_delta-{delta:g}_ctau-{ctau:g}'
     else:
         sample_title = 'All Signal Samples'

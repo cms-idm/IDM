@@ -25,10 +25,10 @@ import awkward as ak
 _LOG = hist.axis.transform.log
 
 # ── Extra axes not in histobins ──────────────────────────────────────────────
-_e_energy  = Regular(50,  0, 100,  name='e',        label='E [GeV]')
-_calIso    = Regular(50,  0,  50,  name='iso',       label='Calo Iso [GeV]')
+_e_energy  = Regular(50,  0, 100,  name='e',        label='E (GeV)')
+_calIso    = Regular(50,  0,  50,  name='iso',       label='Calo Iso (GeV)')
 _calRelIso = Regular(50,  0,   5,  name='relIso',    label='Calo Relative Iso')
-_rhoEA     = Regular(50,  0,  20,  name='rhoEA',     label=r'$\rho \times EA$ [GeV]')
+_rhoEA     = Regular(50,  0,  20,  name='rhoEA',     label=r'$\rho \times EA$ (GeV)')
 _sieie     = Regular(50,  0,0.05,  name='sieie',     label=r'$\sigma_{i\eta i\eta}$')
 _scEtaW    = Regular(50,  0, 0.5,  name='scEtaWidth', label=r'SC $\eta$ Width')
 _scPhiW    = Regular(50,  0, 0.5,  name='scPhiWidth', label=r'SC $\phi$ Width')
@@ -50,12 +50,12 @@ _dEtaSCTrk = Regular(50, 1e-4, 1,  name='dEtaSCTrk', label=r'$|\eta_{SC} - \eta_
 # Jets / event level
 _dRj0      = Regular(50,  0,   5,  name='drj0',      label=r'$\Delta R(e, j_0)$')
 _metLeadPt = Regular(50,  0,  10,  name='metLeadPt', label=r'$p_T^{miss}/p_T^{j_0}$')
-_HT        = Regular(50,  0, 1000, name='HT',        label=r'$H_T$ [GeV]')
+_HT        = Regular(50,  0, 1000, name='HT',        label=r'$H_T$ (GeV)')
 _nJets     = Integer(0,   10,      name='nJets',     label=r'$N_{jets}$')
 _dEtaSeed  = Regular(50,  0,0.01,  name='dEtaSeed',  label=r'$|\Delta\eta_\mathrm{seed}|$')
 _dPhiIn    = Regular(50,  0, 0.1,  name='dPhiIn',    label=r'$|\Delta\phi_\mathrm{in}|$')
 _HoE       = Regular(50,  0,   1,  name='HoE',       label='H/E')
-_invEmP    = Regular(50,  0, 0.1,  name='invEmP',    label=r'$|1/E - 1/p|$ [GeV$^{-1}$]')
+_invEmP    = Regular(50,  0, 0.1,  name='invEmP',    label=r'$|1/E - 1/p|$ (GeV$^{-1}$)')
 _missHits  = Integer(0,    5,       name='missHits',  label='Exp. Missing Inner Hits')
 _charge    = IntCategory([-1, 1],   name='charge',    label='Charge')
 _ele_chi2  = Regular(50,0,25,name="chi2",label=r"Track $\chi^2/df$")
@@ -70,10 +70,25 @@ _drNearestEle = Regular(50, 0, 5, name='drNearestEle', label=r'Min $\Delta R(e, 
 _dRj        = Regular(50, 0, 5,   name='drj',   label=r'Min $\Delta R(e, j)$')
 _dPhiJ      = Regular(64,  0, 3.2, name='dphiJ', label=r'Min $\Delta \phi(e, j)$')
 
+# ATgm_mindRj_vs_ptRatioJ: dR to the nearest PFJet vs pT(e)/pT(that jet),
+# with NO self-jet veto -- the diagnostic for the veto below. Finer dR bins
+# than _dRj (0.02) so the dR < 0.1 self-jet region spans several bins; both
+# veto thresholds (dR = 0.1, ratio = 0.3) fall on bin edges. Electrons in
+# events with no PFJet land in overflow (dR = 999) / underflow (ratio = -1).
+_dRjFine    = Regular(100, 0, 2,  name='drj',      label=r'Min $\Delta R(e, j)$ (no self-jet veto)')
+_ptRatioJ   = Regular(40,  0, 2,  name='ptRatioJ', label=r'$p_T(e)/p_T(j_{\mathrm{nearest}})$')
+
+# Self-jet veto for the ATgm_* jet quantities: a PFJet with dR(e, j) < 0.1 and
+# pT(e)/pT(j) > 0.3 is taken to be the merged electron itself clustered into a
+# jet, and is ignored. Same definition as defineGoodMergedCandidates
+# (analysisTools/analysisSubroutines.py).
+_SELF_JET_DR     = 0.1
+_SELF_JET_PTFRAC = 0.3
+
 # dxy floored at the selection cut (1e-4 cm) so the axis stays log-scale down
 # to that value; anything below the floor (shouldn't occur post-selection)
 # lands in underflow rather than being dropped.
-_dxy_log = Regular(60, 1e-4, 100, name='dxy', label=r'Electron Track $d_{xy}$ [cm]', transform=_LOG)
+_dxy_log = Regular(80, 1e-6, 100, name='dxy', label=r'Electron Track $d_{xy}$ (cm)', transform=_LOG)
 
 # Full-range linear dphi(e, ptmiss), plus a log-scale zoom toward the
 # collinear region (small dphi is the signature of a genuinely displaced
@@ -85,15 +100,21 @@ _dphi_log = Regular(50, 1e-4, 3.2, name='dphi', label=r'$\Delta\phi(e, p_{T}^{mi
 
 _cosdphi  = Regular(50, -1,   1,   name='cosdphi', label=r'$\cos(\Delta\phi(e, p_{T}^{miss}))$')
 
+# Jet--ptmiss dphi, from the same jet collection as the HT/nJets hists (i.e.
+# self-jet-vetoed for ATgm_*). Events with no jets are filled with 999 and
+# land in overflow.
+_dphi_j0_met   = Regular(32, 0, 3.2, name='dphi', label=r'$\Delta\phi(j_0, p_{T}^{miss})$')
+_mindphi_j_met = Regular(32, 0, 3.2, name='dphi', label=r'Min $\Delta\phi(j, p_{T}^{miss})$')
+
 # lxyEst = dxy / sin(dphi(e, ptmiss)): the same reco-only Lxy proxy used in
 # mergedeles.py's mele_gen_lxy_vs_lxyEst, without the gen-Lxy correlation
 # (which doesn't exist for background).
-_lxyEst_log = Regular(60, 1e-4, 100, name='lxyEst', label=r'$d_{xy}/\sin(\Delta\phi(e, p_{T}^{miss}))$ [cm]', transform=_LOG)
+_lxyEst_log = Regular(80, 1e-8, 100, name='lxyEst', label=r'$d_{xy}/\sin(\Delta\phi(e, p_{T}^{miss}))$ (cm)', transform=_LOG)
 
 # log10(dxy/dz) -- named 'log10dxydz' (rather than reusing histobins.py's
 # 'logdxydz', which vtxvars.py fills with a natural log) to be explicit about
 # the base. A tiny epsilon guards the dz denominator against division by zero.
-_log10dxydz = Regular(60, -3, 3, name='log10dxydz', label=r'$\log_{10}(d_{xy}/d_{z})$')
+_log10dxydz = Regular(80, -5, 3, name='log10dxydz', label=r'$\log_{10}(d_{xy}/d_{z})$')
 
 # Tags the selected electron's relationship to the event's gen-matched merged
 # electron (signal only, via AllLptElectron.is_merged -- see fillHistos
@@ -178,52 +199,183 @@ _ABS_FIELDS = {'vxy', 'vz', 'dxy', 'dz'}
 # mergedcats.py's mele_ID/mele_IDscore, which both pull from me.ID).
 _FIELD_ALIASES = {'IDscore': 'ID'}
 
-def _fill_single(hists, prefix, obj, evt_weight, isMerged_label, samp, cut, field_hists):
+def _fill_single(hists, prefix, obj, evt_weight, samp, cut, field_hists, cat_kw):
     """Fill `{prefix}_{field}` hists with one (already-selected, non-jagged)
-    reco electron per event.
+    reco electron per event. `cat_kw` holds any extra category-axis values
+    (e.g. {'isMerged': labels} for the AT_* hists, {} for ATgm_*).
     """
     for field, axis in field_hists:
         val = getattr(obj, _FIELD_ALIASES.get(field, field))
         if field in _ABS_FIELDS:
             val = np.abs(val)
         hists[f'{prefix}_{field}'].fill(
-            samp=samp, cut=cut, isMerged=isMerged_label, weight=evt_weight,
+            samp=samp, cut=cut, weight=evt_weight, **cat_kw,
             **{axis.name: val},
         )
 
+def _book(histograms, prefix, cat_axes):
+    """Book the full set of `{prefix}_*` hists with extra category axes
+    `cat_axes` inserted between (samp, cut) and the variable axis/axes.
+    """
+    def _h(*axes):
+        return Hist(samp, cut, *cat_axes, *axes, storage=hist.storage.Weight())
+    for field, axis in _ELE_HISTS:
+        histograms[f'{prefix}_{field}'] = _h(axis)
+
+    histograms[f'{prefix}_ptmiss']            = _h(met_pt)
+    histograms[f'{prefix}_dphi_e_ptmiss']     = _h(_dphi_lin)
+    histograms[f'{prefix}_dphi_e_ptmiss_log'] = _h(_dphi_log)
+    histograms[f'{prefix}_cosdphi_e_ptmiss']  = _h(_cosdphi)
+    histograms[f'{prefix}_lxyEst']            = _h(_lxyEst_log)
+    histograms[f'{prefix}_log10dxydz']        = _h(_log10dxydz)
+    histograms[f'{prefix}_dxy_vs_dphi']       = _h(_dxy_log, _dphi_log)
+    histograms[f'{prefix}_met_leadPt_ratio']  = _h(_metLeadPt)
+    histograms[f'{prefix}_HT']                = _h(_HT)
+    histograms[f'{prefix}_nJets']             = _h(_nJets)
+    histograms[f'{prefix}_dphi_j0_ptmiss']    = _h(_dphi_j0_met)
+    histograms[f'{prefix}_mindphi_j_ptmiss']  = _h(_mindphi_j_met)
+
 def make_histograms():
     histograms = {}
-    for field, axis in _ELE_HISTS:
-        histograms[f'AT_{field}'] = Hist(samp, cut, isMerged, axis, storage=hist.storage.Weight())
-
-    histograms['AT_ptmiss']            = Hist(samp, cut, isMerged, met_pt,       storage=hist.storage.Weight())
-    histograms['AT_dphi_e_ptmiss']     = Hist(samp, cut, isMerged, _dphi_lin,    storage=hist.storage.Weight())
-    histograms['AT_dphi_e_ptmiss_log'] = Hist(samp, cut, isMerged, _dphi_log,    storage=hist.storage.Weight())
-    histograms['AT_cosdphi_e_ptmiss']  = Hist(samp, cut, isMerged, _cosdphi,     storage=hist.storage.Weight())
-    histograms['AT_lxyEst']            = Hist(samp, cut, isMerged, _lxyEst_log,  storage=hist.storage.Weight())
-    histograms['AT_log10dxydz']        = Hist(samp, cut, isMerged, _log10dxydz,  storage=hist.storage.Weight())
-    histograms['AT_dxy_vs_dphi']       = Hist(samp, cut, isMerged, _dxy_log, _dphi_log, storage=hist.storage.Weight())
-    histograms['AT_met_leadPt_ratio']  = Hist(samp, cut, isMerged, _metLeadPt,   storage=hist.storage.Weight())
-    histograms['AT_HT']                = Hist(samp, cut, isMerged, _HT,          storage=hist.storage.Weight())
-    histograms['AT_nJets']             = Hist(samp, cut, isMerged, _nJets,       storage=hist.storage.Weight())
+    # AT_*: the selected candidate (events.best_merged), signal + background,
+    # split by its relationship to the gen-matched merged electron.
+    _book(histograms, 'AT', [isMerged])
+    # ATgm_*: the gen-matched merged electron itself (AllLptElectron with
+    # isGenMerged), signal only, for every event that has one -- regardless of
+    # whether a best_merged candidate exists or which electron it is.
+    _book(histograms, 'ATgm', [])
+    histograms['ATgm_mindRj_vs_ptRatioJ'] = Hist(samp, cut, _dRjFine, _ptRatioJ,
+                                                 storage=hist.storage.Weight())
     return histograms
 
 subroutines = ['computeMergedCatVars']
 
+def _dphi(a, b):
+    d = np.abs(a - b)
+    return ak.where(d > np.pi, 2 * np.pi - d, d)
+
+def _dr(eta1, phi1, eta2, phi2):
+    return np.sqrt((eta1 - eta2)**2 + _dphi(phi1, phi2)**2)
+
+def _safe_ratio(num, den):
+    # A non-positive denominator gives -1 (lands in underflow) rather than inf/nan.
+    return ak.where(den > 0, num / ak.where(den > 0, den, 1), -1)
+
+def _add_derived(ele, coll):
+    """Derived fields needed by _ELE_HISTS, for one AllLptElectron record per
+    event (`ele`) out of that event's AllLptElectron collection (`coll`):
+    mindRj/mindPhiJ (same convention as mergedcats.py), drNearestEle (the dR
+    to the nearest other AllLptElectron, self excluded by matching
+    pt/eta/phi), and the shower-shape / supercluster ratios.
+    """
+    is_self = (coll.pt == ele.pt) & (coll.eta == ele.eta) & (coll.phi == ele.phi)
+    dr_ee   = ak.where(is_self, np.inf, _dr(ele.eta, ele.phi, coll.eta, coll.phi))
+    ele = ak.with_field(ele, ak.fill_none(ak.min(ele.dRJets,   axis=-1), 999), 'mindRj')
+    ele = ak.with_field(ele, ak.fill_none(ak.min(np.abs(ele.dPhiJets), axis=-1), 999), 'mindPhiJ')
+    ele = ak.with_field(ele, ak.fill_none(ak.min(dr_ee,        axis=-1), 999), 'drNearestEle')
+
+    ele = ak.with_field(ele, _safe_ratio(ele.full55e1x5,    ele.full55e5x5), 'e1x5Frac')
+    ele = ak.with_field(ele, _safe_ratio(ele.full55e2x5Max, ele.full55e5x5), 'e2x5Frac')
+    ele = ak.with_field(ele, _safe_ratio(ele.scEnergy, ele.pt * np.cosh(ele.eta)), 'scEoverP')
+    ele = ak.with_field(ele, _safe_ratio(ele.scRawE,   ele.scEnergy),            'scRawFrac')
+    ele = ak.with_field(ele, np.abs(ele.scEta - ele.eta), 'dEtaSCTrk')
+    return ele
+
+def _nearest_jet_ratio(ele, jets):
+    """dR from `ele` (one per event) to its nearest jet in `jets`, and
+    pT(e)/pT(that jet). No self-jet veto. Events with no jets give
+    (999, -1)."""
+    dr  = _dr(ele.eta, ele.phi, jets.eta, jets.phi)
+    idx = ak.argmin(dr, axis=1, keepdims=True)
+    near_dr    = ak.fill_none(ak.firsts(dr[idx]), 999)
+    near_ratio = ak.fill_none(ele.pt / ak.firsts(jets.pt[idx]), -1)
+    return near_dr, near_ratio
+
+def _veto_self_jets(ele, jets):
+    """Drop the electron's own jet (dR < _SELF_JET_DR and pT(e)/pT(j) >
+    _SELF_JET_PTFRAC) from `jets`, and recompute ele's jet fields (mindRj,
+    mindPhiJ, dRj0) from the remaining jets. Returns (ele, kept_jets)."""
+    dr      = _dr(ele.eta, ele.phi, jets.eta, jets.phi)
+    is_self = (dr < _SELF_JET_DR) & (ele.pt / jets.pt > _SELF_JET_PTFRAC)
+    kept    = jets[~is_self]
+    lead    = kept[ak.argmax(kept.pt, axis=1, keepdims=True)]
+    ele = ak.with_field(ele, ak.fill_none(ak.min(dr[~is_self], axis=1), 999), 'mindRj')
+    ele = ak.with_field(ele, ak.fill_none(ak.min(_dphi(ele.phi, kept.phi), axis=1), 999), 'mindPhiJ')
+    ele = ak.with_field(ele, ak.fill_none(ak.firsts(_dr(ele.eta, ele.phi, lead.eta, lead.phi)), 999), 'dRj0')
+    return ele, kept
+
+def _fill_all(hists, prefix, evts, ele, jets, wgt, samp, cut, cat_kw):
+    """Fill every `{prefix}_*` hist booked by _book, for one electron per
+    event (`ele`, already passed through _add_derived) in events `evts`.
+    `jets` is the PFJet collection used for the event-level jet quantities
+    (leading-jet pT, HT, nJets).
+    """
+    # ── Reco-quantity fills ────────────────────────────────────────────────
+    _fill_single(hists, prefix, ele, wgt, samp, cut, _ELE_HISTS, cat_kw)
+
+    ptmiss     = evts.PFMET.pt
+    dphi_e_met = _dphi(ele.phi, evts.PFMET.phi)
+    lxyEst     = np.abs(ele.dxy) / np.sin(dphi_e_met)
+    # Epsilon guards the dz denominator against division by zero (same
+    # convention as vtxvars.py's e_dxydz).
+    log10dxydz = np.log10(np.abs(ele.dxy) / (np.abs(ele.dz) + 1e-9))
+
+    common = dict(samp=samp, cut=cut, weight=wgt, **cat_kw)
+    hists[f'{prefix}_ptmiss'           ].fill(met_pt=ptmiss, **common)
+    hists[f'{prefix}_dphi_e_ptmiss'    ].fill(dphi=dphi_e_met, **common)
+    hists[f'{prefix}_dphi_e_ptmiss_log'].fill(dphi=dphi_e_met, **common)
+    hists[f'{prefix}_cosdphi_e_ptmiss' ].fill(cosdphi=np.cos(dphi_e_met), **common)
+    hists[f'{prefix}_lxyEst'           ].fill(lxyEst=lxyEst, **common)
+    hists[f'{prefix}_log10dxydz'       ].fill(log10dxydz=log10dxydz, **common)
+    hists[f'{prefix}_dxy_vs_dphi'      ].fill(dxy=np.abs(ele.dxy), dphi=dphi_e_met, **common)
+
+    # Jet/event-level. MET/leading-jet pT is -1 (underflow) for events with no PFJet.
+    lead_jet_pt = ak.fill_none(ak.firsts(jets.pt), 0)
+    met_lead    = ak.where(lead_jet_pt > 0, ptmiss / ak.where(lead_jet_pt > 0, lead_jet_pt, 1), -1)
+    hists[f'{prefix}_met_leadPt_ratio' ].fill(metLeadPt=met_lead, **common)
+    hists[f'{prefix}_HT'               ].fill(HT=ak.sum(jets.pt, axis=1), **common)
+    hists[f'{prefix}_nJets'            ].fill(nJets=ak.num(jets.pt, axis=1), **common)
+
+    # Jet--ptmiss dphi. Leading jet by pT (jets aren't assumed pT-ordered after
+    # the ATgm_* self-jet veto).
+    dphi_j_met  = _dphi(jets.phi, evts.PFMET.phi)
+    lead_idx    = ak.argmax(jets.pt, axis=1, keepdims=True)
+    dphi_j0_met = ak.fill_none(ak.firsts(dphi_j_met[lead_idx]), 999)
+    min_dphi    = ak.fill_none(ak.min(dphi_j_met, axis=1), 999)
+    hists[f'{prefix}_dphi_j0_ptmiss'   ].fill(dphi=dphi_j0_met, **common)
+    hists[f'{prefix}_mindphi_j_ptmiss' ].fill(dphi=min_dphi, **common)
+
 def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
     wgt_all = events.eventWgt / sum_wgt
+
+    # ── Gen-matched merged electron (signal only): ATgm_* ─────────────────────
+    # Filled before the best_merged early-return below, since these don't
+    # depend on a selected candidate existing. isGenMerged (= is_merged &
+    # cat_merged) is set by defineGoodMergedCandidates via computeMergedVars
+    # (analysisTools/analysisSubroutines.py): the electron matched to both
+    # gens, in an event that is neither resolved (cat_sep) nor vertexed. At
+    # most one AllLptElectron per event is expected to carry it, so take the
+    # first.
+    if (info['type'] == 'signal' and 'AllLptElectron' in events.fields
+            and 'isGenMerged' in events.AllLptElectron.fields):
+        has_gm = ak.any(events.AllLptElectron.isGenMerged, axis=1)
+        if ak.sum(has_gm) > 0:
+            evts_gm = events[has_gm]
+            coll_gm = evts_gm.AllLptElectron
+            ele_gm  = _add_derived(ak.firsts(coll_gm[coll_gm.isGenMerged]), coll_gm)
+            wgt_gm  = wgt_all[has_gm]
+            # 2D self-jet diagnostic: filled BEFORE the veto, from all PFJets.
+            near_dr, near_ratio = _nearest_jet_ratio(ele_gm, evts_gm.PFJet)
+            hists['ATgm_mindRj_vs_ptRatioJ'].fill(samp=samp, cut=cut, weight=wgt_gm,
+                                                  drj=near_dr, ptRatioJ=near_ratio)
+            # All other ATgm_* jet quantities ignore the electron's own jet.
+            ele_gm, jets_gm = _veto_self_jets(ele_gm, evts_gm.PFJet)
+            _fill_all(hists, 'ATgm', evts_gm, ele_gm, jets_gm, wgt_gm, samp, cut, {})
 
     # best_merged is only set when AllLptElectron is in the ntuple (see
     # computeMergedVars).
     if 'best_merged' not in events.fields:
         return
-
-    def _dphi(a, b):
-        d = np.abs(a - b)
-        return ak.where(d > np.pi, 2 * np.pi - d, d)
-
-    def _dr(eta1, phi1, eta2, phi2):
-        return np.sqrt((eta1 - eta2)**2 + _dphi(phi1, phi2)**2)
 
     # ── Selected electron: events.best_merged ─────────────────────────────────
     has_cand = ~ak.is_none(events.best_merged)
@@ -232,28 +384,10 @@ def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
 
     evts = events[has_cand]
     wgt  = wgt_all[has_cand]
-    ele  = evts.best_merged
     coll = evts.AllLptElectron
-
-    # Derived fields needed by _ELE_HISTS. best_merged is a copy of the
-    # AllLptElectron record, so compute them on it directly: mindRj/mindPhiJ
-    # (same convention as mergedcats.py) and drNearestEle, the dR to the
-    # nearest other AllLptElectron (self excluded by matching pt/eta/phi).
-    is_self = (coll.pt == ele.pt) & (coll.eta == ele.eta) & (coll.phi == ele.phi)
-    dr_ee   = ak.where(is_self, np.inf, _dr(ele.eta, ele.phi, coll.eta, coll.phi))
-    ele = ak.with_field(ele, ak.fill_none(ak.min(ele.dRJets,   axis=-1), 999), 'mindRj')
-    ele = ak.with_field(ele, ak.fill_none(ak.min(ele.dPhiJets, axis=-1), 999), 'mindPhiJ')
-    ele = ak.with_field(ele, ak.fill_none(ak.min(dr_ee,        axis=-1), 999), 'drNearestEle')
-
-    # Shower-shape / supercluster ratios. A non-positive denominator gives -1
-    # (lands in underflow) rather than inf/nan.
-    def _safe_ratio(num, den):
-        return ak.where(den > 0, num / ak.where(den > 0, den, 1), -1)
-    ele = ak.with_field(ele, _safe_ratio(ele.full55e1x5,    ele.full55e5x5), 'e1x5Frac')
-    ele = ak.with_field(ele, _safe_ratio(ele.full55e2x5Max, ele.full55e5x5), 'e2x5Frac')
-    ele = ak.with_field(ele, _safe_ratio(ele.scEnergy, ele.pt * np.cosh(ele.eta)), 'scEoverP')
-    ele = ak.with_field(ele, _safe_ratio(ele.scRawE,   ele.scEnergy),            'scRawFrac')
-    ele = ak.with_field(ele, np.abs(ele.scEta - ele.eta), 'dEtaSCTrk')
+    # best_merged is a copy of the AllLptElectron record, so the derived
+    # fields can be computed on it directly.
+    ele  = _add_derived(evts.best_merged, coll)
 
     # Merged-electron flag (signal only), computed by computeMergedCatVars
     # (analysisTools/analysisSubroutines.py) using the same definition as the
@@ -268,27 +402,4 @@ def fillHistos(events, hists, samp, cut, info, sum_wgt=1):
     else:
         isMerged_label = np.full(len(ele), 'n/a', dtype=object)
 
-    # ── Reco-quantity fills ────────────────────────────────────────────────
-    _fill_single(hists, 'AT', ele, wgt, isMerged_label, samp, cut, _ELE_HISTS)
-
-    ptmiss     = evts.PFMET.pt
-    dphi_e_met = _dphi(ele.phi, evts.PFMET.phi)
-    lxyEst     = np.abs(ele.dxy) / np.sin(dphi_e_met)
-    # Epsilon guards the dz denominator against division by zero (same
-    # convention as vtxvars.py's e_dxydz).
-    log10dxydz = np.log10(np.abs(ele.dxy) / (np.abs(ele.dz) + 1e-9))
-
-    hists['AT_ptmiss'           ].fill(samp=samp, cut=cut, isMerged=isMerged_label, met_pt=ptmiss,     weight=wgt)
-    hists['AT_dphi_e_ptmiss'    ].fill(samp=samp, cut=cut, isMerged=isMerged_label, dphi=dphi_e_met,   weight=wgt)
-    hists['AT_dphi_e_ptmiss_log'].fill(samp=samp, cut=cut, isMerged=isMerged_label, dphi=dphi_e_met,   weight=wgt)
-    hists['AT_cosdphi_e_ptmiss' ].fill(samp=samp, cut=cut, isMerged=isMerged_label, cosdphi=np.cos(dphi_e_met), weight=wgt)
-    hists['AT_lxyEst'           ].fill(samp=samp, cut=cut, isMerged=isMerged_label, lxyEst=lxyEst,     weight=wgt)
-    hists['AT_log10dxydz'       ].fill(samp=samp, cut=cut, isMerged=isMerged_label, log10dxydz=log10dxydz, weight=wgt)
-    hists['AT_dxy_vs_dphi'      ].fill(samp=samp, cut=cut, isMerged=isMerged_label, dxy=np.abs(ele.dxy), dphi=dphi_e_met, weight=wgt)
-
-    # Jet/event-level. MET/leading-jet pT is -1 (underflow) for events with no PFJet.
-    lead_jet_pt = ak.fill_none(ak.firsts(evts.PFJet.pt), 0)
-    met_lead    = ak.where(lead_jet_pt > 0, ptmiss / ak.where(lead_jet_pt > 0, lead_jet_pt, 1), -1)
-    hists['AT_met_leadPt_ratio' ].fill(samp=samp, cut=cut, isMerged=isMerged_label, metLeadPt=met_lead, weight=wgt)
-    hists['AT_HT'               ].fill(samp=samp, cut=cut, isMerged=isMerged_label, HT=ak.sum(evts.PFJet.pt, axis=1), weight=wgt)
-    hists['AT_nJets'            ].fill(samp=samp, cut=cut, isMerged=isMerged_label, nJets=ak.num(evts.PFJet.pt, axis=1), weight=wgt)
+    _fill_all(hists, 'AT', evts, ele, evts.PFJet, wgt, samp, cut, {'isMerged': isMerged_label})
