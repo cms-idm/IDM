@@ -46,12 +46,7 @@ vxy_range = {1:[0,20],10:[0,50],100:[0,50],1000:[0,50]}
 vxy_rebin = {1:5,10:20,100:20,1000:20}
 
 class Analyzer:
-# <<<<<<< HEAD
-#      def __init__(self,fileList,histoList,cuts,model_json=None,systematics=None,max_samples=-1,max_files_per_samp=-1,newCoffea=False,nJet_isNominal=None,isSFstudies=False,good_vtx='none'):
-    
-# =======
     def __init__(self,fileList,histoList,cuts,model_json=None,systematics=None,max_samples=-1,max_files_per_samp=-1,newCoffea=False,nJet_isNominal=None,isSFstudies=False,good_vtx='v11',good_merged='v1_Oct2026',slimFileList=None,processSlim=True):
-# >>>>>>> origin/Main_Run3
         # flag to see if we're using new coffea
         self.newCoffea = newCoffea
 
@@ -207,54 +202,6 @@ class Analyzer:
                     print("Error! You're mixing samples of differing types (e.g. signal and bkg, signal and data, etc)")
                     print("Please split up different kinds of samples into different configs")
                     exit()
-# <<<<<<< HEAD
-            
-#             loc = sample['location']
-#             if '.root' in loc:
-#                 # if the location is just a single file, load it in
-#                 if self.newCoffea:
-#                     self.sample_locs[name] = {'files':{sample['location']:'ntuples/outT'}}
-#                 else:
-#                     self.sample_locs[name] = [sample['location']]
-#             elif 'fileset' in sample.keys():
-#                 if self.newCoffea:
-#                     self.sample_locs[name] = {'files':{f:'ntuples/outT' for f in sample['fileset'] if f.split("/")[-1] not in sample['blacklist']}}
-#                     if self.max_files_per_samp > 0 and len(self.sample_locs[name]['files']) > self.max_files_per_samp:
-#                         self.sample_locs[name]['files'] = {k:self.sample_locs[name]['files'][k] for k in list(self.sample_locs[name]['files'].keys())[:self.max_files_per_samp]}
-#                 else:
-#                     self.sample_locs[name] = [f for f in sample['fileset'] if f.split("/")[-1] not in sample['blacklist']]
-#                     if self.max_files_per_samp > 0 and len(self.sample_locs[name]) > self.max_files_per_samp:
-#                         self.sample_locs[name] = self.sample_locs[name][:self.max_files_per_samp]
-#             else:
-#                 # if the location is a directory, use the xrootd client to get a list of files
-#                 xrdClient = client.FileSystem("root://cmseos.fnal.gov")
-#                 if type(loc) != list:
-#                     status, flist = xrdClient.dirlist(loc)
-#                     fullList = ["root://cmseos.fnal.gov/"+loc+"/"+item.name for item in flist if (('.root' in item.name) and (item.name not in sample['blacklist']))]
-#                 else:
-#                     fullList = []
-#                     for l in loc:
-#                         status, flist = xrdClient.dirlist(l)
-#                         fullList.extend(["root://cmseos.fnal.gov/"+l+"/"+item.name for item in flist if (('.root' in item.name) and (item.name not in sample['blacklist']))])
-#                 if self.max_files_per_samp > 0 and len(fullList) > self.max_files_per_samp:
-#                     fullList = fullList[:self.max_files_per_samp]
-#                 if self.newCoffea:
-#                     self.sample_locs[name] = {'files':{f:'ntuples/outT' for f in fullList}}
-#                 else:
-#                     self.sample_locs[name] = fullList
-            
-#             self.sample_info[name] = sample
-#             self.sample_names.append(name)
-#             loaded += 1
-#      def process(self,treename='ntuples/outT',execr="iterative",workers=4,merging=False,dask_client=None,procType='default',**kwargs):
-#         fileset = self.sample_locs
-#         if procType == 'default':
-#             proc = iDMeProcessor(self.sample_names,self.sample_info,self.sample_locs,self.histoFile,self.cuts,mode=self.mode,nJet_isNom=self.nJet_isNom,isSFstudies=self.isSFstudies,good_vtx=self.good_vtx,systematics=self.systematics,**kwargs)
-#     # def process(self,treename='ntuples/outT',execr="iterative",workers=4,merging=False,dask_client=None,procType='default',**kwargs):
-#     #     fileset = self.sample_locs
-#     #     if procType == 'default':
-#     #         proc = iDMeProcessor(self.sample_names,self.sample_info,self.sample_locs,self.histoFile,self.cuts,mode=self.mode,model_json=self.model,nJet_isNom=self.nJet_isNom,isSFstudies=self.isSFstudies,good_vtx=self.good_vtx,systematics=self.systematics,**kwargs)
-# =======
 
             self.sample_locs[name] = self._resolveSampleFiles(sample)
             self.sample_info[name] = sample
@@ -547,99 +494,10 @@ class iDMeProcessor(processor.ProcessorABC):
 
             cutDesc['njet'] = cutName
 
-        # needs a good vertex
-# <<<<<<< HEAD
-#         # routines.defineGoodVertices(events,version=self.good_vtx) # define "good" vertices based on whether associated electrons pass ID cuts
 
-        
-#         # events = events[events.nGoodVtx > 0]
-        
-
-        
-
-#         # define "selected" vertex based on selection criteria in the routine (nominally: lowest chi2)
-#         #routines.selectBestVertex(events)
-#         if info['type'] == "signal":
-#             print ("Signal!")
-            
-#             #  # events = routines.selectTrueVertex(events,events.good_vtx)
-#             # routines.selectBestVertex(events)
-            
-            
-#              #routines.selectBestVertex(events)
-#         else:
-#             print ("Bkg!")
-#         # routines.prepareBDT(events, self.model) # prepare BDT inference if the cuts include BDT-based cut
-#         # routines.prepareBDT(events, self.model) # prepare BDT inference if the cuts include BDT-based cut
-
-
-        
-#         # events = events[events.nGoodVtx > 0]
-#         # # define "selected" vertex based on selection criteria in the routine (nominally: lowest chi2)
-#         # #routines.selectBestVertex(events)
-#         # if info['type'] == "signal":
-#         #      events = routines.selectTrueVertex(events,events.good_vtx)
-#         #      #routines.selectBestVertex(events)
-#         # else:
-#         #      routines.selectBestVertex(events)
-#         # routines.prepareBDT(events, self.model) # prepare BDT inference if the cuts include BDT-based cut
-
-#         # Vtx SF related stuff (shitty hack)
-#         if apply_vtx_SF == True:
-#              events["eventWgt"] = events["eventWgt"] * events.sel_vtx.sf
-
-#         # Fill cutflow after baseline selection
-#         if isMC:
-         
-            
-#             cutflow['hasVtx'] += ak.sum(events.genWgt)/sum_wgt
-           
-
-
-
-            
-#         else:
-#             cutflow['hasVtx'] += len(events)/sum_wgt
-#         cutflow_nevts['hasVtx'] += len(events)
-#         cutDesc['hasVtx'] = 'Baseline Selection@'
-
-#         # For signal, (1) check if the vertex ee are gen-matched (2) check if the event has ee that are gen-matched
-#         if info['type'] == "signal":
-#             routines.projectGenLxy(events)
-#             # vtx_matched_events = events[events.sel_vtx.isMatched]
-#             # cutflow_vtx_matched['hasVtx'] += ak.sum(vtx_matched_events.genWgt)/ak.sum(events.genWgt)
-# =======
         routines.defineGoodVertices(events,version=self.good_vtx) # define "good" vertices based on whether associated electrons pass ID cuts
         events = routines.defineVertexInfo(events, info)
-        #events = events[events.nGoodVtx > 0]
-        ## define "selected" vertex based on selection criteria in the routine (nominally: lowest chi2)
-        ##routines.selectBestVertex(events)
-        #if info['type'] == "signal":
-        #     events = routines.selectTrueVertex(events,events.good_vtx)
-        #     #routines.selectBestVertex(events)
-        #else:
-        #     routines.selectBestVertex(events)
-        #routines.prepareBDT(events, self.model) # prepare BDT inference if the cuts include BDT-based cut
-        #
-        ## Vtx SF related stuff (shitty hack)
-        #if apply_vtx_SF == True:
-        #     events["eventWgt"] = events["eventWgt"] * events.sel_vtx.sf
-        #
-        ## Fill cutflow after baseline selection
-        #if isMC:
-        #    cutflow['hasVtx'] += ak.sum(events.genWgt)/sum_wgt
-        #else:
-        #    cutflow['hasVtx'] += len(events)/sum_wgt
-        #cutflow_nevts['hasVtx'] += len(events)
-        #cutDesc['hasVtx'] = 'Baseline Selection@'
-        #
-        ## For signal, (1) check if the vertex ee are gen-matched (2) check if the event has ee that are gen-matched
-        #if info['type'] == "signal":
-        #    routines.projectGenLxy(events)
-        #    vtx_matched_events = events[events.sel_vtx.isMatched]
-        #    cutflow_vtx_matched['hasVtx'] += ak.sum(vtx_matched_events.genWgt)/ak.sum(events.genWgt)
-
-        # merged-electron categories/candidates (cat_merged, merged_candidates, best_merged, ...)
+        
         routines.computeMergedVars(events,good_merged=self.good_merged)
 # >>>>>>> origin/Main_Run3
 
@@ -669,11 +527,7 @@ class iDMeProcessor(processor.ProcessorABC):
                 cutflow_wgts2[cutName] += ak.sum(events.genWgt**2)/sum_wgt**2
             else:
                 cutflow[cutName] += len(events)/sum_wgt
-# <<<<<<< HEAD
-#             cutflow_nevts[cutName] += len(events)            
-#                 # vtx_matched_events = events[events.sel_vtx.isMatched]
-#                 # cutflow_vtx_matched[cutName] += ak.sum(vtx_matched_events.genWgt)/ak.sum(events.genWgt)
-# =======
+
             cutflow_nevts[cutName] += len(events)
             if info['type'] == "signal":
                 if 'sel_vtx' in events.fields:
