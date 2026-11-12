@@ -101,36 +101,6 @@ options.register('slimOutfile',
         "",
         VarParsing.VarParsing.multiplicity.singleton,
         VarParsing.VarParsing.varType.string,
-        "File list to ntuplize")
-options.register('outfile',
-        "test_output.root",
-        VarParsing.VarParsing.multiplicity.singleton,
-        VarParsing.VarParsing.varType.string,
-        "Output file name")
-options.register('selectionMode',
-        "hlt",
-        VarParsing.VarParsing.multiplicity.singleton,
-        VarParsing.VarParsing.varType.string,
-        "Criterion gating the full-event background stream; background only, must not be "
-        "set when signal=1. 'metThreshold': ptmiss >= metThreshold. 'hlt': OR of hltSelectionPaths.")
-options.register('metThreshold',
-        200.0,
-        VarParsing.VarParsing.multiplicity.singleton,
-        VarParsing.VarParsing.varType.float,
-        "ptmiss threshold (GeV) gating the full-event background stream, used when "
-        "selectionMode == 'metThreshold'; irrelevant for signal")
-options.register('hltSelectionPaths',
-        "",
-        VarParsing.VarParsing.multiplicity.list,
-        VarParsing.VarParsing.varType.string,
-        "Trigger paths ORed together when selectionMode == 'hlt'")
-# VarParsing.register() appends a list default as a single nested item rather than
-# extending, so the real default is set here via attribute assignment instead.
-options.hltSelectionPaths = ["HLT_PFMETNoMu120_PFMHTNoMu120_IDTight", "HLT_PFMETNoMu120_PFMHTNoMu120_IDTight_PFHT60"]
-options.register('slimOutfile',
-        "",
-        VarParsing.VarParsing.multiplicity.singleton,
-        VarParsing.VarParsing.varType.string,
         "Output file for the slim, all-events background stream (background only). "
         "If left empty, derived by inserting '_slim' before the '.root' extension of outfile.")
 
