@@ -14,8 +14,8 @@ def stringfy_friendly(num):
         raise ValueError("{0} is not a number!".format(num))
 
 vers = 'Nov2026noIDdR'
-CMSSW = 'CMSSW_14_0_21'
-compiled_CMSSW_envs='ntuplizer_CMSSW_14_0_21_acrobert.tar.gz'
+CMSSW = os.environ['CMSSW_VERSION']
+compiled_CMSSW_envs = f'ntuplizer_{CMSSW}_acrobert.tar.gz'
 
 m1l = [0.5, 1, 2, 5, 50]
 dml = [0.05, 0.1, 0.2] 
