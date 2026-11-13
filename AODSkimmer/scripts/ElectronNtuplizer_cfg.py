@@ -16,8 +16,11 @@ import sys
 import os
 
 cmsswRelease = os.environ.get("CMSSW_VERSION", "")
-if cmsswRelease not in ("CMSSW_13_0_13", "CMSSW_14_0_21"):
-    raise RuntimeError("Supported releases: CMSSW_13_0_13 and CMSSW_14_0_21; got " + cmsswRelease)
+supportedReleases = ("CMSSW_13_0_13", "CMSSW_14_0_21", "CMSSW_15_0_20")
+if cmsswRelease not in supportedReleases:
+    raise RuntimeError("Supported releases: " + ", ".join(supportedReleases) + "; got " + cmsswRelease)
+# releases that support 2023/2024 and use the standalone EgammaUser post-reco tools
+newRelease = cmsswRelease in ("CMSSW_14_0_21", "CMSSW_15_0_20")
 
 # argument parsing
 options = VarParsing.VarParsing('analysis')
@@ -158,13 +161,13 @@ elif options.year in ["2022", "2022EE"]:
     era = Run3
     recoEgammaTools_era = '2022-Prompt' #XYZ FIX
 
-elif options.year == "2023" and cmsswRelease == "CMSSW_14_0_21":
+elif options.year == "2023" and newRelease:
     from Configuration.Eras.Era_Run3_2023_cff import Run3_2023         #corresponds to Run3 2023
     globaltag = '130X_dataRun3_PromptAnalysis_v1' if options.data else '130X_mcRun3_2023_realistic_v14'
     era = Run3_2023
     recoEgammaTools_era = '2022-Prompt' #XYZ FIX
 
-elif options.year == "2024" and cmsswRelease == "CMSSW_14_0_21":
+elif options.year == "2024" and newRelease:
     from Configuration.Eras.Era_Run3_2024_cff import Run3_2024         # 2024
     globaltag = '' if options.data else '150X_mcRun3_2024_realistic_v2'
     era = Run3_2024
@@ -172,7 +175,7 @@ elif options.year == "2024" and cmsswRelease == "CMSSW_14_0_21":
 
 else:
     print("Invalid or unsupported year for {1}: {0}".format(options.year, cmsswRelease))
-    print("Supported years here: 2016APV, 2016, 2017, 2018, 2022, 2022EE; 2023 and 2024 additionally in CMSSW_14_0_21")
+    print("Supported years here: 2016APV, 2016, 2017, 2018, 2022, 2022EE; 2023 and 2024 additionally in CMSSW_14_0_21 / CMSSW_15_0_20")
     sys.exit(1)
 
 

@@ -13,10 +13,10 @@ category=${10:-signal}
 outDirName=${11}
 
 # Match the submitted environment to the active release and architecture.
-if [ "$CMSSW" != "CMSSW_13_0_13" ] && [ "$CMSSW" != "CMSSW_14_0_21" ]; then
-    echo "Unsupported CMSSW release: $CMSSW" >&2
-    exit 1
-fi
+case "$CMSSW" in
+    CMSSW_13_0_13|CMSSW_14_0_21|CMSSW_15_0_20) ;;
+    *) echo "Unsupported CMSSW release: $CMSSW" >&2; exit 1 ;;
+esac
 if [ "$CMSSW_VERSION" != "$CMSSW" ]; then
     echo "Run cmsenv for $CMSSW before submitting." >&2
     exit 1
