@@ -857,7 +857,17 @@ void NtupleContainerV2::CreateTreeBranches() {
     outT->Branch("CaloMET_ET",&CaloMET_ET_);
     outT->Branch("CaloMET_pt",&CaloMET_Pt_);
     outT->Branch("CaloMET_phi",&CaloMET_Phi_);
-    
+
+    outT->Branch("PFMET_rawPt",&PFMETRaw_Pt_);
+    outT->Branch("PFMET_rawPhi",&PFMETRaw_Phi_);
+    outT->Branch("PFMET_significance",&PFMET_significance_);
+    outT->Branch("PuppiMET_pt",&PuppiMET_Pt_);
+    outT->Branch("PuppiMET_phi",&PuppiMET_Phi_);
+    outT->Branch("PFMETNoMu_pt",&PFMETNoMu_Pt_);
+    outT->Branch("PFMETNoMu_phi",&PFMETNoMu_Phi_);
+    outT->Branch("PFMHTNoMu_pt",&PFMHTNoMu_Pt_);
+    outT->Branch("PFMHTNoMu_phi",&PFMHTNoMu_Phi_);
+
     // Pileup density
     outT->Branch("rho",&rho_);
     outT->Branch("fixedGridRhoFastjetAll",&fixedGridRhoFastjetAll_);
@@ -1003,6 +1013,9 @@ void NtupleContainerV2::CreateTreeBranches() {
         outT->Branch("GenMET_px",&genLeadMETPx_);
         outT->Branch("GenMET_py",&genLeadMETPy_);
         outT->Branch("GenMET_ET",&genLeadMETET_);
+        outT->Branch("GenPromptLep_nEle",&nGenPromptEle_);
+        outT->Branch("GenPromptLep_nMu",&nGenPromptMu_);
+        outT->Branch("GenPromptLep_nTau",&nGenPromptTau_);
     }
     if (!isData_) {
         // Authoritative complete gen-particle collection. GenLepton_* below is
@@ -1406,7 +1419,14 @@ void NtupleContainerV2::CreateSlimTreeBranches() {
     outT_slim->Branch("CaloMET_pt",&CaloMET_Pt_,"CaloMET_pt/f");
     outT_slim->Branch("CaloMET_phi",&CaloMET_Phi_,"CaloMET_phi/f");
 
+    outT_slim->Branch("PFMET_rawPt",&PFMETRaw_Pt_,"PFMET_rawPt/f");
+    outT_slim->Branch("PFMET_significance",&PFMET_significance_,"PFMET_significance/f");
+    outT_slim->Branch("PuppiMET_pt",&PuppiMET_Pt_,"PuppiMET_pt/f");
+    outT_slim->Branch("PFMETNoMu_pt",&PFMETNoMu_Pt_,"PFMETNoMu_pt/f");
+    outT_slim->Branch("PFMHTNoMu_pt",&PFMHTNoMu_Pt_,"PFMHTNoMu_pt/f");
+
     outT_slim->Branch("fixedGridRhoFastjetAll",&fixedGridRhoFastjetAll_,"fixedGridRhoFastjetAll/f");
+    outT_slim->Branch("numPV",&numPV_);
 
     outT_slim->Branch("nElectron",&nElectronDefault_);
     outT_slim->Branch("nLptElectron",&nElectronLowPt_);
@@ -1421,6 +1441,10 @@ void NtupleContainerV2::CreateSlimTreeBranches() {
         outT_slim->Branch("genWgt", &genwgt_);
         outT_slim->Branch("genPU_obs", &genpuobs_);
         outT_slim->Branch("genPU_true", &genputrue_);
+        outT_slim->Branch("GenMET_pt",&genLeadMETPt_,"GenMET_pt/f");
+        outT_slim->Branch("GenPromptLep_nEle",&nGenPromptEle_);
+        outT_slim->Branch("GenPromptLep_nMu",&nGenPromptMu_);
+        outT_slim->Branch("GenPromptLep_nTau",&nGenPromptTau_);
     }
 }
 
@@ -1757,6 +1781,10 @@ void NtupleContainerV2::ClearTreeBranches() {
     genLeadMETET_ = -9999;
     genLeadMETPx_ = -9999;
     genLeadMETPy_ = -9999;
+
+    nGenPromptEle_ = 0;
+    nGenPromptMu_ = 0;
+    nGenPromptTau_ = 0;
 
     // Muons
     nMuon_ = 0;
@@ -2465,6 +2493,16 @@ void NtupleContainerV2::ClearTreeBranches() {
     CaloMET_ET_ = -999;
     CaloMET_Pt_ = -999;
     CaloMET_Phi_ = -999;
+
+    PFMETRaw_Pt_ = -999;
+    PFMETRaw_Phi_ = -999;
+    PFMET_significance_ = -999;
+    PuppiMET_Pt_ = -999;
+    PuppiMET_Phi_ = -999;
+    PFMETNoMu_Pt_ = -999;
+    PFMETNoMu_Phi_ = -999;
+    PFMHTNoMu_Pt_ = -999;
+    PFMHTNoMu_Phi_ = -999;
 
     rho_ = -9999;
 
