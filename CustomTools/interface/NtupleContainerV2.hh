@@ -30,7 +30,7 @@ public:
     void FillFlatP4();
 
     // Trigger and event-level branches
-    unsigned int fired_;
+    unsigned long long fired_; // bit i = triggerPaths[i]; 64-bit, so at most 64 paths (enforced in ElectronSkimmer::beginJob)
     unsigned long long eventNum_;
     unsigned long long runNum_;
     unsigned long long lumiSec_;
@@ -415,6 +415,12 @@ public:
     float genLeadMETPx_;
     float genLeadMETPy_;
     float genLeadMETET_;
+
+    // Prompt gen-lepton counts from prunedGenParticles, no pT/eta cuts:
+    // e/mu = isPromptFinalState() (excludes tau decay products), tau = isPrompt() && isLastCopy()
+    int nGenPromptEle_;
+    int nGenPromptMu_;
+    int nGenPromptTau_;
 
     ///////////////////////
     //// Reco branches ////
@@ -1186,6 +1192,17 @@ public:
     float CaloMET_ET_;
     float CaloMET_Pt_;
     float CaloMET_Phi_;
+
+    float PFMETRaw_Pt_;          // uncorrected (raw) PF ptmiss
+    float PFMETRaw_Phi_;
+    float PFMET_significance_;   // pat::MET::metSignificance()
+    float PuppiMET_Pt_;          // Type-1 PUPPI ptmiss
+    float PuppiMET_Phi_;
+    float PFMETNoMu_Pt_;         // |Type-1 PF ptmiss + sum of PF-muon pT|
+    float PFMETNoMu_Phi_;
+    float PFMHTNoMu_Pt_;         // |-sum jet pT*(1 - muon energy fraction)|, tight-ID jets pT > 20, |eta| < 5
+    float PFMHTNoMu_Phi_;
+    // (the *_Phi_ members above are written to the full tree only, not the slim tree)
 
     // Pileup density
     float rho_;

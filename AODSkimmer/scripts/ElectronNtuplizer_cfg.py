@@ -261,7 +261,9 @@ jetTrigs = [
     #"HLT_AK4PFJet100", # not included in Run 3
     #"HLT_AK4PFJet120", # not included in Run 3
 ]
-eleTrigs = list(set([
+# dict.fromkeys dedupes while keeping the written order; set() order varies per process
+# (string hash randomization), which made the trigFired bit layout differ between jobs
+eleTrigs = list(dict.fromkeys([
     "HLT_Ele50_CaloIdVT_GsfTrkIdT_PFJet165",
     "HLT_Ele30_eta2p1_WPTight_Gsf_CentralPFJet35_EleCleaned",
     "HLT_Ele28_eta2p1_WPTight_Gsf_HT150",
