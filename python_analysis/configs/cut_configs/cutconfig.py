@@ -1,11 +1,12 @@
 import numpy as np
 import awkward as ak
+import json
+import os
+try:
+    from analysisTools.analysisSubroutines import getBtagWPs, hasGoodVertex, getBDTscore_kfold
+except ModuleNotFoundError:  # run with ../analysisTools/ on sys.path (e.g. trainBDT/skimmerTools)
+    from analysisSubroutines import getBtagWPs, hasGoodVertex, getBDTscore_kfold
 
-def cut0(events,info):
-    name = "cut0"
-    desc = "Preselection"
-    plots = False
-    return events, name, desc, plots
 
 def cut1(events,info):
     name = "cut1"
@@ -112,8 +113,8 @@ def cut8(events, info):
     return events[cut], name, desc, plots
 
 def cut9(events, info):
-    events = hasGoodVertex(events, info)
+    events = hasGoodLptVertex(events, info)
     name = 'cut9' 
-    desc = 'Has Good ee Vertex' 
+    desc = 'Has Good LPt Vertex' 
     plots = True 
     return events, name, desc, plots

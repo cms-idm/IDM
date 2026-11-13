@@ -3,23 +3,25 @@ import coffea
 from coffea.nanoevents import NanoEventsFactory, NanoAODSchema, BaseSchema
 
 try:
-    from mySchema_newCoffea import MySchema
+    # from mySchema_newCoffea import MySchema
+    from mySchema import MySchema
     import analysisSubroutines as routines
     import corrections
 except ModuleNotFoundError:
-    from analysisTools.mySchema_newCoffea import MySchema
+    from analysisTools.mySchema import MySchema
+    # from analysisTools.mySchema_newCoffea import MySchema
     import analysisTools.analysisSubroutines as routines
     import analysisTools.corrections
 
 from coffea import processor
 
 
-from coffea.dataset_tools import (
-    apply_to_fileset,
-    max_chunks,
-    preprocess,
-)
-import dask
+# from coffea.dataset_tools import (
+#     apply_to_fileset,
+#     max_chunks,
+#     preprocess,
+# )
+# import dask
 
 import uproot
 import awkward as ak
@@ -111,20 +113,11 @@ class Analyzer:
         self.mode = None
 
 
-         # self.model = model_json # BDT model for inference (if used in selections)
+        self.model = model_json # BDT model for inference (if used in selections)
 
         self.nJet_isNom = nJet_isNominal # nomial njet range of NJet > 0 and NJet < 3
         self.good_vtx = good_vtx
-# <<<<<<< HEAD
 
-#         # self.model = model_json # BDT model for inference (if used in selections)
-#         # self.nJet_isNom = nJet_isNominal # nomial njet range of NJet > 0 and NJet < 3
-#         # self.good_vtx = good_vtx
-        
-#         self.loadFiles()
-    
-#      def loadFiles(self):
-# =======
         self.good_merged = good_merged
 
         self.loadFiles()
@@ -179,7 +172,6 @@ class Analyzer:
                 slimName = "bkg_{0}_{1}".format(slimSample['year'],slimSample['name'])
                 slimByName[slimName] = slimSample
 
-# >>>>>>> origin/Main_Run3
         loaded = 0
         for sample in self.fileList:
             if self.max_samples > 0 and loaded == self.max_samples:
@@ -285,12 +277,7 @@ class Analyzer:
         
         return accumulator
 class iDMeProcessor(processor.ProcessorABC):
-# <<<<<<< HEAD
 
-#     def __init__(self,samples,sampleInfo,fileSet,histoFile,cutFile,mode='signal',model_json=None,nJet_isNom=None,isSFstudies=False,good_vtx='none',systematics=None,**kwargs):
-# # class iDMeProcessor(processor.ProcessorABC):
-# #     def __init__(self,samples,sampleInfo,fileSet,histoFile,cutFile,mode='signal',model_json=None,nJet_isNom=None,isSFstudies=False,good_vtx='v11',systematics=None,**kwargs):
-# =======
     def __init__(self,samples,sampleInfo,fileSet,histoFile,cutFile,mode='signal',model_json=None,nJet_isNom=None,isSFstudies=False,good_vtx='v11',good_merged='v1_Oct2026',systematics=None,slimPairedNames=None,**kwargs):
 # >>>>>>> origin/Main_Run3
         self.samples = samples
