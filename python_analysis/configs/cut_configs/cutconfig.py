@@ -3,9 +3,9 @@ import awkward as ak
 import json
 import os
 try:
-    from analysisTools.analysisSubroutines import getBtagWPs, hasGoodVertex, getBDTscore_kfold
+    from analysisTools.analysisSubroutines import getBtagWPs, hasGoodVertex, getBDTscore_kfold, hasGoodLptVertex
 except ModuleNotFoundError:  # run with ../analysisTools/ on sys.path (e.g. trainBDT/skimmerTools)
-    from analysisSubroutines import getBtagWPs, hasGoodVertex, getBDTscore_kfold
+    from analysisSubroutines import getBtagWPs, hasGoodVertex, getBDTscore_kfold, hasGoodLptVertex
 
 
 def cut1(events,info):
