@@ -154,30 +154,30 @@ elif options.year == "2018":
     recoEgammaTools_era = '2018-UL'
 # <<<<<<< HEAD
     
-elif options.year == '2022':
-    globaltag = '130X_dataRun3_v2' if options.data else '130X_mcRun3_2022_realistic_v5'  
-    #For data, you can also use 124X_dataRun3_PromptAnalysis_v1 
-    era = Run3
-    recoEgammaTools_era = '2018-UL' #XYZ FIX
+# elif options.year == '2022':
+#     globaltag = '130X_dataRun3_v2' if options.data else '130X_mcRun3_2022_realistic_v5'  
+#     #For data, you can also use 124X_dataRun3_PromptAnalysis_v1 
+#     era = Run3
+#     recoEgammaTools_era = '2018-UL' #XYZ FIX
     
 # elif options.year == '2023':
 # =======
 
-# elif options.year in ["2022", "2022EE"]:
-#     if options.data:
-#         globaltag = "130X_dataRun3_v2"
-#     elif options.year == "2022EE":
-#         globaltag = "130X_mcRun3_2022_realistic_postEE_v6"
-#     else:
-#         globaltag = "130X_mcRun3_2022_realistic_v5"
-#     era = Run3
-#     recoEgammaTools_era = '2022-Prompt' #XYZ FIX
+elif options.year in ["2022", "2022EE"]:
+    if options.data:
+        globaltag = "130X_dataRun3_v2"
+    elif options.year == "2022EE":
+        globaltag = "130X_mcRun3_2022_realistic_postEE_v6"
+    else:
+        globaltag = "130X_mcRun3_2022_realistic_v5"
+    era = Run3
+    recoEgammaTools_era = '2018-UL' #XYZ FIX
 
 elif options.year == "2023" and newRelease:
     from Configuration.Eras.Era_Run3_2023_cff import Run3_2023         #corresponds to Run3 2023
     globaltag = '130X_dataRun3_PromptAnalysis_v1' if options.data else '130X_mcRun3_2023_realistic_v14'
     era = Run3_2023
-    recoEgammaTools_era = '2018-UL' #XYZ FIX
+    recoEgammaTools_era =  '2022-Prompt'  #XYZ FIX
 
 
 elif options.year == "2024" and newRelease:
@@ -432,14 +432,14 @@ process.ntuples = ElectronSkimmer.clone(
 )
 
 # <<<<<<< HEAD
-# # import EGamma postreco tools
+# import EGamma postreco tools
 # from RecoEgamma.EgammaTools.EgammaPostRecoTools import setupEgammaPostRecoSeq
 # =======
 ##############################
 ###### EGamma post-reco ######
 ##############################
 
-if cmsswRelease == "CMSSW_13_0_13":
+if cmsswRelease == "CMSSW_13_0_13" :
     from RecoEgamma.EgammaTools.EgammaPostRecoTools import setupEgammaPostRecoSeq
 else:
     from EgammaUser.EgammaPostRecoTools.EgammaPostRecoTools import setupEgammaPostRecoSeq
