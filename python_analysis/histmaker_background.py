@@ -18,9 +18,9 @@ import os
 import glob
 
 # ---- SETTINGS ----
-vers = 'Aug2026'
-cuts = 'aptrk'
-hists = 'cutflow_only'
+vers = 'Nov2026'
+cuts = 'an'
+hists = 'ptmiss'
 
 
 # ---- FILES ----
@@ -30,7 +30,7 @@ hists_config = f"configs/histo_configs/{hists}.py"
 outdir = 'workarea'
 
 # ---- SIGNAL -------------------------------------
-sample_config = f"configs/sample_configs/bkg_2024_{vers}.json"
+sample_config = f"configs/sample_configs/bkg_2024_{vers}-fm.json"
 #ample_config = f"configs/sample_configs/bkg_2024_{vers}_skimmed.json"
 slimmed_config = f"configs/sample_configs/bkg_2024_{vers}-slim.json"
 

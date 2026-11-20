@@ -18,9 +18,9 @@ import os
 import glob
 
 # ---- SETTINGS ----
-vers = 'Jul2026noID'
-cuts = 'aptrk'
-hists = 'secondele'
+vers = 'Nov2026'
+cuts = 'an'
+hists = 'ptmiss'
 
 
 # ---- FILES ----
