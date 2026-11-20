@@ -114,6 +114,7 @@
 #include "iDMe/CustomTools/interface/DisplacedDileptonAOD.hh"
 #include "iDMe/CustomTools/interface/JetCorrections.hh"
 #include "iDMe/CustomTools/interface/NtupleContainerV2.hh"
+#include "iDMe/AODSkimmer/plugins/MuMuVtx.h"
 //#include "iDMe/CustomTools/interface/IsolationCalculator.hh"
 #include "iDMe/CustomTools/interface/Helpers.hh"
 
@@ -226,6 +227,8 @@ class ElectronSkimmer : public edm::one::EDAnalyzer<edm::one::WatchRuns, edm::on
       PropagateToMuon genMuonPropagatorSt2_;
       const edm::ESGetToken<MuonDetLayerGeometry, MuonRecoGeometryRecord> muonGeometryToken_;
       const edm::ESGetToken<Propagator, TrackingComponentsRecord> stationPropagatorAlongToken_;
+      // mumuvtx PCA: original tracks to the fitted vertex, as PreselectedVertexing.
+      const edm::ESGetToken<Propagator, TrackingComponentsRecord> mumuVertexPropagatorToken_;
 
       const edm::EDGetTokenT<vector<reco::Track> > staMuonToken_;
       const edm::EDGetTokenT<vector<reco::Track> > dsaMuonToken_;
@@ -666,6 +669,8 @@ ElectronSkimmer::ElectronSkimmer(const edm::ParameterSet& ps)
    muonGeometryToken_(esConsumes<MuonDetLayerGeometry, MuonRecoGeometryRecord>()),
    stationPropagatorAlongToken_(esConsumes<Propagator, TrackingComponentsRecord>(
       ps.getParameter<edm::ESInputTag>("stationPropagatorAlong"))),
+   mumuVertexPropagatorToken_(esConsumes<Propagator, TrackingComponentsRecord>(
+      edm::ESInputTag("", "SteppingHelixPropagatorAny"))),
    staMuonToken_(consumes<vector<reco::Track> >(ps.getParameter<edm::InputTag>("standAloneMuons"))),
    dsaMuonToken_(consumes<vector<reco::Track> >(ps.getParameter<edm::InputTag>("displacedStandAloneMuons"))),
    displacedTrackToken_(mayConsume<vector<reco::Track> >(ps.getParameter<edm::InputTag>("displacedTracks"))),
@@ -800,6 +805,11 @@ void ElectronSkimmer::beginJob()
    nt.isData_ = isData;
    nt.isSignal_ = isSignal;
    nt.SetTree(outT);
+   // trigFired is a 64-bit mask (one bit per path), and trigNames_/trigPassed_ hold 100 entries
+   if (trigPaths_.size() > 64) {
+      throw cms::Exception("Configuration") << "ElectronSkimmer: " << trigPaths_.size()
+         << " triggerPaths configured, but the trigFired bitmask holds at most 64";
+   }
    for (size_t i = 0; i < trigPaths_.size(); i++) {
       nt.trigNames_[i] = trigPaths_[i];
       nt.numTrigs_++;
@@ -899,7 +909,8 @@ ElectronSkimmer::fillDescriptions(edm::ConfigurationDescriptions& descriptions) 
    // Cleaner products (cleanedDisplacedMuons_cff); empty = displacedMuons is raw, branches left empty.
    desc.add<edm::InputTag>("displacedMuonsOriginalIndex", edm::InputTag(""));
    desc.add<edm::InputTag>("displacedMuonsNRaw", edm::InputTag(""));
-   desc.add<edm::InputTag>("slimmedDisplacedMuons", edm::InputTag("slimmedDisplacedMuons", "", "PAT"));
+   // No process name: take the latest producer (PAT in our iDMmu MiniAOD, RECO in standard 2024 MiniAOD).
+   desc.add<edm::InputTag>("slimmedDisplacedMuons", edm::InputTag("slimmedDisplacedMuons"));
 
    // Propagators used for gen/reco muon matching at the muon stations.
    // genMuonPropagatorSt1 should use useStation2 = false.
@@ -997,6 +1008,26 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
             break;
          }
       }
+
+      // Gen MET (genMetTrue), filled before the background preselection so the slim tree has it too
+      if (genMETHandle_->size() > 0) {
+         auto genMet = (*genMETHandle_).at(0);
+         nt.genLeadMETPt_ = genMet.pt();
+         nt.genLeadMETPhi_ = genMet.phi();
+         nt.genLeadMETET_ = genMet.sumEt();
+         nt.genLeadMETPx_ = genMet.px();
+         nt.genLeadMETPy_ = genMet.py();
+      }
+
+      // Prompt gen-lepton counts, no pT/eta cuts. e/mu: isPromptFinalState() -- status 1, not from
+      // hadron/muon/tau decays, so each lepton counted once and tau decay products excluded.
+      // tau: isPrompt() && isLastCopy() -- one entry per prompt tau, after FSR.
+      for (const auto & genParticle : *genParticleHandle_) {
+         const int absId = std::abs(genParticle.pdgId());
+         if (absId == 11 && genParticle.isPromptFinalState()) nt.nGenPromptEle_++;
+         else if (absId == 13 && genParticle.isPromptFinalState()) nt.nGenPromptMu_++;
+         else if (absId == 15 && genParticle.statusFlags().isPrompt() && genParticle.isLastCopy()) nt.nGenPromptTau_++;
+      }
    }
 
    // MET Filters (as recommended here https://twiki.cern.ch/twiki/bin/view/CMS/MissingETOptionalFiltersRun2#UL_data)
@@ -1010,11 +1041,12 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    for (size_t i = 0; i < trigPathsWithVersion_.size(); i++) {
       if (trigExist_.at(i)) {
          std::string trigPath = trigPathsWithVersion_[i];
-         nt.fired_ |= (trigResultsHandle_->accept(hltConfig_.triggerIndex(trigPath)) << i);
-         nt.trigPassed_[i] = trigResultsHandle_->accept(hltConfig_.triggerIndex(trigPath));
+         const bool passed = trigResultsHandle_->accept(hltConfig_.triggerIndex(trigPath));
+         // cast before shifting: a bool promotes to a 32-bit int, and shifting that by >= 32 is undefined
+         nt.fired_ |= (static_cast<unsigned long long>(passed) << i);
+         nt.trigPassed_[i] = passed;
       }
       else {
-         nt.fired_ |= (0 <<i);
          nt.trigPassed_[i] = false;
       }
    }
@@ -1045,7 +1077,47 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       nt.CaloMET_Pt_ = met.caloMETPt();
       nt.CaloMET_Phi_ = met.caloMETPhi();
       nt.CaloMET_ET_ = met.caloMETSumEt();
+
+      // Raw (uncorrected) PF MET and MET significance
+      nt.PFMETRaw_Pt_ = met.uncorPt();
+      nt.PFMETRaw_Phi_ = met.uncorPhi();
+      nt.PFMET_significance_ = met.metSignificance();
+
+      // Offline analogue of HLT PFMETNoMu: Type-1 PF MET with all PF muons removed, i.e.
+      // the MET vector plus the pT vectors of every isPFMuon() muon (no pT cut, as at HLT)
+      double noMuPx = met.corPx(metType);
+      double noMuPy = met.corPy(metType);
+      for (const auto & mu : *pfRecoMuHandle_) {
+         if (!mu.isPFMuon()) continue;
+         noMuPx += mu.px();
+         noMuPy += mu.py();
+      }
+      nt.PFMETNoMu_Pt_ = std::hypot(noMuPx, noMuPy);
+      nt.PFMETNoMu_Phi_ = std::atan2(noMuPy, noMuPx);
    }
+
+   // Puppi MET (Type 1)
+   if (puppiMETHandle_.isValid() && puppiMETHandle_->size() > 0) {
+      nt.PuppiMET_Pt_ = (*puppiMETHandle_).at(0).corPt(pat::MET::Type1);
+      nt.PuppiMET_Phi_ = (*puppiMETHandle_).at(0).corPhi(pat::MET::Type1);
+   }
+
+   // Offline analogue of HLT PFMHTNoMu (tight ID): |-sum of jet pT| over jets passing JetID with
+   // pT > 20 GeV and |eta| < 5, with each jet's muon energy fraction removed
+   {
+      double mhtPx = 0, mhtPy = 0;
+      for (const auto & jet : *recoJetHandle_) {
+         if (jet.pt() <= 20 || std::abs(jet.eta()) >= 5.0 || !helper.JetID(jet,year)) continue;
+         const double noMuFrac = 1.0 - jet.muonEnergyFraction();
+         mhtPx -= jet.px() * noMuFrac;
+         mhtPy -= jet.py() * noMuFrac;
+      }
+      nt.PFMHTNoMu_Pt_ = std::hypot(mhtPx, mhtPy);
+      nt.PFMHTNoMu_Phi_ = std::atan2(mhtPy, mhtPx);
+   }
+
+   // Number of primary vertices (before the preselection so the slim tree has it too)
+   nt.numPV_ = primaryVertexHandle_->size();
 
    // Only reconstruct electrons/jets/muons/photons/vertices (and everything derived from them)
    // for events passing the background preselection (metThreshold or hlt, see selectionMode_);
@@ -1075,12 +1147,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    nt.PV_x_ = pv.x();
    nt.PV_y_ = pv.y();
    nt.PV_z_ = pv.z();
-
-   double nPV = 0;
-   for (const auto & ele : *primaryVertexHandle_) {
-     nPV++;
-   }
-   nt.numPV_ = nPV;
+   // (numPV_ is filled before the background preselection, see above)
 
    auto beamspot = *beamspotHandle_;
    // Set up objects for vertex reco - different for Run3
@@ -1207,14 +1274,35 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    };
    fillMuonCollection(pfRecoMuHandle_, nt.slimmedMuon_, true);
    fillMuonCollection(recoDisplacedMuonHandle_, nt.recoDisplacedMuon_, true);
+   // Cleaner products are absent when the input has no displacedMuons (the cleaner then puts nothing):
+   // leave originalIndex empty and nRaw at -1, as RecoDisplacedMuonAvailable = 0.
+   edm::Handle<vector<int>> originalIndexHandle;
    if (!displacedMuonOriginalIndexToken_.isUninitialized()) {
-      nt.recoDisplacedMuonOriginalIndex_ = iEvent.get(displacedMuonOriginalIndexToken_);
-      if (nt.recoDisplacedMuonOriginalIndex_.size() != static_cast<size_t>(nt.recoDisplacedMuon_.n))
-         throw cms::Exception("ElectronSkimmer") << "displacedMuonsOriginalIndex size "
-            << nt.recoDisplacedMuonOriginalIndex_.size() << " != displacedMuons size " << nt.recoDisplacedMuon_.n;
+      originalIndexHandle = iEvent.getHandle(displacedMuonOriginalIndexToken_);
+      if (originalIndexHandle.isValid()) {
+         nt.recoDisplacedMuonOriginalIndex_ = *originalIndexHandle;
+         if (nt.recoDisplacedMuonOriginalIndex_.size() != static_cast<size_t>(nt.recoDisplacedMuon_.n))
+            throw cms::Exception("ElectronSkimmer") << "displacedMuonsOriginalIndex size "
+               << nt.recoDisplacedMuonOriginalIndex_.size() << " != displacedMuons size " << nt.recoDisplacedMuon_.n;
+      }
    }
-   if (!displacedMuonNRawToken_.isUninitialized())
-      nt.nRecoDisplacedMuonRaw_ = iEvent.get(displacedMuonNRawToken_);
+   if (!displacedMuonNRawToken_.isUninitialized()) {
+      const auto nRaw = iEvent.getHandle(displacedMuonNRawToken_);
+      if (nRaw.isValid())
+         nt.nRecoDisplacedMuonRaw_ = *nRaw;
+   }
+   // Dimuon pairs, fixed components and signal truth labels on the cleaned collection (needs its originalIndex;
+   // skipped, with mumuvtxAvailable = 0, when either is absent). Hierarchy G > I > DSA (kb DECISIONS 2026-10-30).
+   {
+      const auto* vertexPropagator =
+         dynamic_cast<const SteppingHelixPropagator*>(&iSetup.getData(mumuVertexPropagatorToken_));
+      if (!vertexPropagator) throw cms::Exception("ElectronSkimmer") << "Expected SteppingHelixPropagatorAny";
+      const bool cleaned = recoDisplacedMuonHandle_.isValid() && originalIndexHandle.isValid();
+      mumuvtx::fill(nt, cleaned ? recoDisplacedMuonHandle_.product() : nullptr,
+                    cleaned ? originalIndexHandle.product() : nullptr,
+                    !isData && genParticleHandle_.isValid() ? genParticleHandle_.product() : nullptr,
+                    beamspot, magneticField, *theB, *vertexPropagator, genMuonPropagatorSt2_, {{2, 0, 1}});
+   }
    fillMuonCollection(slimmedDisplacedMuonHandle_, nt.slimmedDisplacedMuon_, true);
 
    // Handling Jets
@@ -1522,10 +1610,10 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
          nt.recoMuonPhi_.push_back(mu.phi());     
          nt.recoMuonEnergy_.push_back(mu.energy());
          nt.recoMuonCharge_.push_back(mu.charge());     
-      nt.recoMuonIDcutBasedLoose_.push_back(mu.passed(reco::Muon::CutBasedIdLoose));
-      nt.recoMuonIDcutBasedMedium_.push_back(mu.passed(reco::Muon::CutBasedIdMedium));
-      nt.recoMuonIDcutBasedMediumPrompt_.push_back(mu.passed(reco::Muon::CutBasedIdMediumPrompt));
-      nt.recoMuonIDcutBasedTight_.push_back(mu.passed(reco::Muon::CutBasedIdTight));
+         nt.recoMuonIDcutBasedLoose_.push_back(mu.passed(reco::Muon::CutBasedIdLoose));
+         nt.recoMuonIDcutBasedMedium_.push_back(mu.passed(reco::Muon::CutBasedIdMedium));
+         nt.recoMuonIDcutBasedMediumPrompt_.push_back(mu.passed(reco::Muon::CutBasedIdMediumPrompt));
+         nt.recoMuonIDcutBasedTight_.push_back(mu.passed(reco::Muon::CutBasedIdTight));
          nt.recoMuonIsPFMuon_.push_back(mu.isPFMuon());
          nt.recoMuonIsGlobalMuon_.push_back(mu.isGlobalMuon());
          nt.recoMuonIsStandAloneMuon_.push_back(mu.isStandAloneMuon());
@@ -2845,15 +2933,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    // extra info from MC
    // (genwgt_ and gen pileup are filled earlier, unconditionally -- see top of analyze())
    if (!isData) {
-      // Lead gen MET
-      if (genMETHandle_->size() > 0) {
-         auto met = (*genMETHandle_).at(0);
-         nt.genLeadMETPt_ = met.pt();
-         nt.genLeadMETPhi_ = met.phi();
-         nt.genLeadMETET_ = met.sumEt();
-         nt.genLeadMETPx_ = met.px();
-         nt.genLeadMETPy_ = met.py();
-      }
+      // (Gen MET is filled before the background preselection, see top of analyze())
 
       // Gen Jets
       nt.nGenJet_ = (int)genJetHandle_->size();
@@ -3728,6 +3808,7 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
       }
    }
 
+   nt.FillFlatP4();
    outT->Fill();
 
    } // end if (passesPtMiss)

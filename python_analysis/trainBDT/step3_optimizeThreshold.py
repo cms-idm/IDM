@@ -32,6 +32,10 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import BDTutils_kfold as bdt
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # repo root, for analysisTools.*
+import analysisTools.plotTools as ptools
+
+ptools.set_plot_style()
 
 # ---------------------------------------------------------------------------
 # Config
@@ -158,11 +162,11 @@ def md5(fname):
 def make_plots(plot_dir, grid, points, res_sel, ratio, min_ratio, t_common, best_t, old_t, is_bench):
     os.makedirs(plot_dir, exist_ok=True)
     def vlines(ax):
-        ax.axvline(t_common, color='r', ls='--', label=f'optimized ({t_common:.3f})')
+        ax.axvline(t_common, color=ptools.CMS_COLORS_6[2], ls='--', label=f'optimized ({t_common:.3f})')  # CMS red
         ax.axvline(old_t, color='gray', ls=':', label=f'old medium WP ({old_t:.3f})')
 
     # background yield vs threshold, with the raw-count requirement
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig, ax = ptools.new_fig(None)
     ax.plot(grid, res_sel['B'], label='B (xsec*lumi weighted)')
     ax.plot(grid, res_sel['B_raw'], label='B raw MC events')
     ax.axhline(min_bkg_raw, color='k', lw=0.8, label=f'{min_bkg_raw} raw events')
@@ -170,12 +174,12 @@ def make_plots(plot_dir, grid, points, res_sel, ratio, min_ratio, t_common, best
     ax.set_yscale('log')
     ax.set_xlabel('BDT score threshold')
     ax.set_ylabel(f'Events above threshold (folds {sel_folds}, scaled)')
-    ax.legend()
-    fig.savefig(f'{plot_dir}/bkg_vs_threshold.pdf', bbox_inches='tight')
+    ptools.place_legend(ax)
+    fig.savefig(f'{plot_dir}/bkg_vs_threshold.png', bbox_inches='tight')
     plt.close(fig)
 
     # FOM / FOM_best per point and the minimax envelope
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig, ax = ptools.new_fig(None)
     for ip in range(len(points)):
         ax.plot(grid, ratio[ip], color='C0' if is_bench[ip] else 'C1', lw=0.6, alpha=0.5)
     ax.plot(grid, min_ratio, color='k', lw=2, label='min over benchmark points')
@@ -183,8 +187,8 @@ def make_plots(plot_dir, grid, points, res_sel, ratio, min_ratio, t_common, best
     ax.set_ylim(0, 1.05)
     ax.set_xlabel('BDT score threshold')
     ax.set_ylabel(r'$(S/\sqrt{B}) \,/\, (S/\sqrt{B})_{best}$ per signal point')
-    ax.legend()
-    fig.savefig(f'{plot_dir}/fom_ratio_vs_threshold.pdf', bbox_inches='tight')
+    ptools.place_legend(ax)
+    fig.savefig(f'{plot_dir}/fom_ratio_vs_threshold.png', bbox_inches='tight')
     plt.close(fig)
 
     # best threshold per point
@@ -197,11 +201,12 @@ def make_plots(plot_dir, grid, points, res_sel, ratio, min_ratio, t_common, best
             ax.annotate(f'{v:.3f}', (x, y), textcoords='offset points', xytext=(0, 10), ha='center', fontsize=8)
         ax.set_xscale('log')
         ax.set_yscale('log')
-        ax.set_xlabel('m1 [GeV]')
-        ax.set_ylabel('ctau [mm]')
+        ax.set_xlabel('m1 (GeV)')
+        ax.set_ylabel('ctau (mm)')
         ax.set_title(f'delta = {d:g}')
     fig.colorbar(sc, ax=axes[0].tolist(), label='best threshold (loosest on plateau)')
-    fig.savefig(f'{plot_dir}/best_threshold_per_point.pdf', bbox_inches='tight')
+    ptools.add_cms_label(axes[0][0], None)
+    fig.savefig(f'{plot_dir}/best_threshold_per_point.png', bbox_inches='tight')
     plt.close(fig)
 
 

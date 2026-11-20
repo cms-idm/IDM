@@ -2,6 +2,7 @@
 #define NTUPLECONTAINERV2_HH
 
 #include <vector>
+#include <deque>
 #include <map>
 #include <string>
 using std::vector;
@@ -24,9 +25,12 @@ public:
     // of any downstream preselection (see SetSlimTree/CreateSlimTreeBranches).
     void SetSlimTree(TTree *tree);
     void CreateSlimTreeBranches();
+    // Flat pt/eta/phi/mass beside every LorentzVector branch (coffea MySchema can't read split
+    // LorentzVector records). Call once per event, after all p4 are filled and before outT->Fill().
+    void FillFlatP4();
 
     // Trigger and event-level branches
-    unsigned int fired_;
+    unsigned long long fired_; // bit i = triggerPaths[i]; 64-bit, so at most 64 paths (enforced in ElectronSkimmer::beginJob)
     unsigned long long eventNum_;
     unsigned long long runNum_;
     unsigned long long lumiSec_;
@@ -411,6 +415,12 @@ public:
     float genLeadMETPx_;
     float genLeadMETPy_;
     float genLeadMETET_;
+
+    // Prompt gen-lepton counts from prunedGenParticles, no pT/eta cuts:
+    // e/mu = isPromptFinalState() (excludes tau decay products), tau = isPrompt() && isLastCopy()
+    int nGenPromptEle_;
+    int nGenPromptMu_;
+    int nGenPromptTau_;
 
     ///////////////////////
     //// Reco branches ////
@@ -1183,6 +1193,17 @@ public:
     float CaloMET_Pt_;
     float CaloMET_Phi_;
 
+    float PFMETRaw_Pt_;          // uncorrected (raw) PF ptmiss
+    float PFMETRaw_Phi_;
+    float PFMET_significance_;   // pat::MET::metSignificance()
+    float PuppiMET_Pt_;          // Type-1 PUPPI ptmiss
+    float PuppiMET_Phi_;
+    float PFMETNoMu_Pt_;         // |Type-1 PF ptmiss + sum of PF-muon pT|
+    float PFMETNoMu_Phi_;
+    float PFMHTNoMu_Pt_;         // |-sum jet pT*(1 - muon energy fraction)|, tight-ID jets pT > 20, |eta| < 5
+    float PFMHTNoMu_Phi_;
+    // (the *_Phi_ members above are written to the full tree only, not the slim tree)
+
     // Pileup density
     float rho_;
 
@@ -1312,7 +1333,37 @@ public:
     vector<float> lptvtx_e2_refitDzErr_;
     vector<float> lptvtx_e2_refitChi2_;
 
+    // Dimuon pair candidates, fixed vertexing component and signal truth labels (AODSkimmer/plugins/MuMuVtx.h).
+    int mumuvtxAvailable_;
+    int nmumuvtx_;
+    vector<int> mumuvtx_m1_idx_, mumuvtx_m2_idx_, mumuvtx_m1_typ_, mumuvtx_m2_typ_;
+    vector<int> mumuvtx_m1_charge_, mumuvtx_m2_charge_, mumuvtx_status_, mumuvtx_pcaOK_;
+    vector<float> mumuvtx_chi2_, mumuvtx_ndof_, mumuvtx_prob_, mumuvtx_vx_, mumuvtx_vy_, mumuvtx_vz_;
+    vector<float> mumuvtx_lxyBS_, mumuvtx_mass_, mumuvtx_pcaDR_, mumuvtx_pcaMuMuPt_, mumuvtx_pcaMuMuPhi_;
+    vector<float> mumuvtx_m1_pcaPt_, mumuvtx_m1_pcaEta_, mumuvtx_m1_pcaPhi_;
+    vector<float> mumuvtx_m2_pcaPt_, mumuvtx_m2_pcaEta_, mumuvtx_m2_pcaPhi_;
+    vector<int> recoDisplacedMuonFixedComp_, recoDisplacedMuonMumusigIdx_;
+    vector<int> recoDisplacedMuonInnerTrackIdPass_, recoDisplacedMuonOuterTrackIdPass_, recoDisplacedMuonGlobalTrackIdPass_;
+    vector<int> recoDisplacedMuonInnerTrackInEta_, recoDisplacedMuonOuterTrackInEta_, recoDisplacedMuonGlobalTrackInEta_;
+    int nmumusig_;
+    vector<int> mumusig_genIdx_, mumusig_charge_, mumusig_accepted_;
+    int mumusigTwoAcc_;
+
 protected:
+    struct FlatP4Vector {
+        const vector<math::XYZTLorentzVector>* p4;
+        vector<float> pt, eta, phi, mass;
+    };
+    struct FlatP4Scalar {
+        const math::XYZTLorentzVector* p4;
+        float pt, eta, phi, mass;
+    };
+    std::deque<FlatP4Vector> flatP4Vectors_;  // deque: stable addresses for TTree branches
+    std::deque<FlatP4Scalar> flatP4Scalars_;
+    // Branch the p4 outside the collection prefix ("X_y_p4" -> "XYP4") and its flat components inside it:
+    // "X_p4" -> X_pt, X_eta, X_phi, X_mass; "XP4" -> XPt, XEta, XPhi, XMass. flat = false: p4 only.
+    void branchP4(const std::string& name, vector<math::XYZTLorentzVector>* p4, bool flat = true);
+    void branchP4(const std::string& name, math::XYZTLorentzVector* p4, bool flat = true);
     TTree * outT;
     // Slim, all-events tree (background only; see CreateSlimTreeBranches)
     TTree * outT_slim;

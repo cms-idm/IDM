@@ -7,6 +7,18 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_curve, roc_auc_score
 import mplhep as hep
 import json
+import sys
+
+def _ptools():
+    """House plot style helpers from analysisTools/plotTools.py. Imported lazily
+    (plotTools pulls in coffea/utils and sets a global mplhep style), so only the
+    plotting code pays for it; also applies the house rcParams."""
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if repo_root not in sys.path:
+        sys.path.append(repo_root)
+    import analysisTools.plotTools as ptools
+    ptools.set_plot_style()
+    return ptools
 
 # k-fold cross training: every event is assigned to fold = eventNum % K_FOLDS. The model for fold i is
 # trained on all folds != i and is the only model used to score events in fold i, so every MC event gets
@@ -266,22 +278,21 @@ def run_training(bdt_name,variables,sig_data,sig_sf_arr,sig_xsec_norm,sig_point,
 
     # importance
     os.makedirs(f"plots/{bdt_name}/",exist_ok=True)
-    plt.figure(figsize=(8,6))
+    ptools = _ptools()
     label_dict = {}
     for idx, var in enumerate(variables):
         label_dict['f{}'.format(idx)] = var
+    # throwaway figure, only used to read the feature order off the tick labels
     plt.figure(figsize=(8,6))
     xgb.plot_importance(bst,ax=plt.gca())
     ticks = [ item.get_text() for item in plt.gca().get_yticklabels() ]
     plt.close()
-    plt.figure(figsize=(8,6))
     relabel = [ label_dict[tick] for tick in ticks ]
-    plt.figure(figsize=(8,6))
-    xgb.plot_importance(bst,ax=plt.gca())
+    fig, ax = ptools.new_fig(None)
+    xgb.plot_importance(bst,ax=ax)
     plt.title("")
-    plt.gca().set_yticklabels(relabel)
-    hep.cms.text("Private Work")
-    plt.savefig(f'plots/{bdt_name}/{bdt_name}_importance.pdf', bbox_inches = "tight")
+    ax.set_yticklabels(relabel)
+    plt.savefig(f'plots/{bdt_name}/{bdt_name}_importance.png', bbox_inches = "tight")
     plt.close('all')
 
     # save model
@@ -322,34 +333,43 @@ def make_eval_plots(bdt_name,y,scores,train_y=None,train_scores=None,folds=None,
     from sklearn.metrics import precision_recall_curve, auc
     os.makedirs(f"plots/{bdt_name}/",exist_ok=True)
     fold_ids = np.unique(folds) if folds is not None else []
-    fold_colors = plt.cm.viridis(np.linspace(0,0.9,max(len(fold_ids),1)))
     if weights is None:
         weights = np.ones(len(scores))
     if train_scores is not None and train_weights is None:
         train_weights = np.ones(len(train_scores))
 
+    ptools = _ptools()
+    # CMS colours: signal blue / background red; ROC/PR curves (out-of-fold, training, one per fold)
+    # share one palette sized to the number of curves (6-colour if <= 6, else 10-colour)
+    sig_color, bkg_color = ptools.CMS_COLORS_6[0], ptools.CMS_COLORS_6[2]
+    has_train = train_scores is not None
+    curve_colors = ptools.cms_colors(1 + has_train + len(fold_ids))
+    oof_color = curve_colors[0]
+    train_color = curve_colors[1] if has_train else None
+    fold_colors = curve_colors[1 + has_train:]
+
     # score distributions
-    plt.figure(figsize=(8,6))
+    fig, ax = ptools.new_fig(None)
     bins = np.linspace(0,1,51)
-    plt.hist(scores[y==0],bins=bins,weights=weights[y==0],density=True, histtype='stepfilled', label='Out-of-fold: Background', alpha=0.2, color='red')
-    plt.hist(scores[y==1],bins=bins,weights=weights[y==1],density=True, histtype='stepfilled', label='Out-of-fold: Signal', alpha=0.2, color='blue')
+    plt.hist(scores[y==0],bins=bins,weights=weights[y==0],density=True, histtype='stepfilled', label='Out-of-fold: Background', alpha=0.2, color=bkg_color)
+    plt.hist(scores[y==1],bins=bins,weights=weights[y==1],density=True, histtype='stepfilled', label='Out-of-fold: Signal', alpha=0.2, color=sig_color)
     if train_scores is not None:
-        plt.hist(train_scores[train_y==0],bins=bins,weights=train_weights[train_y==0],density=True, histtype='step', label='Training: Background', color='red')
-        plt.hist(train_scores[train_y==1],bins=bins,weights=train_weights[train_y==1],density=True, histtype='step', label='Training: Signal', color='blue')
-    plt.legend()
+        plt.hist(train_scores[train_y==0],bins=bins,weights=train_weights[train_y==0],density=True, histtype='step', label='Training: Background', color=bkg_color)
+        plt.hist(train_scores[train_y==1],bins=bins,weights=train_weights[train_y==1],density=True, histtype='step', label='Training: Signal', color=sig_color)
     plt.xlabel('BDT Score')
     plt.ylabel('A.U.')
     plt.yscale('log')
-    hep.cms.text("Private Work")
-    plt.savefig(f'plots/{bdt_name}/{bdt_name}_scores.pdf')
+    ptools.place_legend(ax)
+    plt.savefig(f'plots/{bdt_name}/{bdt_name}_scores.png')
+    plt.close(fig)
 
     # ROC
-    plt.figure(figsize=(8,8))
+    fig, ax = ptools.new_fig(None)
     fpr, tpr, thresholds = roc_curve(y, scores, sample_weight=weights)
-    plt.plot(fpr, tpr, color = "red", label = F"Out-of-fold AUC = {roc_auc_score(y, scores, sample_weight=weights):.4f}")
+    plt.plot(fpr, tpr, color = oof_color, label = F"Out-of-fold AUC = {roc_auc_score(y, scores, sample_weight=weights):.4f}")
     if train_scores is not None:
         fpr_tr, tpr_tr, _ = roc_curve(train_y, train_scores, sample_weight=train_weights)
-        plt.plot(fpr_tr, tpr_tr, color = "blue", ls = ":", label = F"Training AUC = {roc_auc_score(train_y, train_scores, sample_weight=train_weights):.4f}")
+        plt.plot(fpr_tr, tpr_tr, color = train_color, ls = ":", label = F"Training AUC = {roc_auc_score(train_y, train_scores, sample_weight=train_weights):.4f}")
     for f, c in zip(fold_ids, fold_colors):
         in_fold = folds == f
         fpr_f, tpr_f, _ = roc_curve(y[in_fold], scores[in_fold], sample_weight=weights[in_fold])
@@ -360,17 +380,16 @@ def make_eval_plots(bdt_name,y,scores,train_y=None,train_scores=None,folds=None,
     plt.yscale('log')
     plt.xlim([1e-4, 1])
     plt.ylim([1e-4, 1])
-    plt.xlabel('FPR' , fontsize=12)
-    plt.ylabel('TPR' , fontsize=12)
-    plt.tick_params(axis='both', which='major', labelsize=12)
-    plt.legend( prop={'size':12} , loc = 4)
-    hep.cms.text("Private Work")
-    plt.savefig(f'plots/{bdt_name}/{bdt_name}_roc_curve.pdf')
+    plt.xlabel('FPR')
+    plt.ylabel('TPR')
+    plt.legend(loc = 4)
+    plt.savefig(f'plots/{bdt_name}/{bdt_name}_roc_curve.png')
+    plt.close(fig)
 
     # PR
-    plt.figure(figsize=(8,8))
+    fig, ax = ptools.new_fig(None)
     precision, recall, thresholds2 = precision_recall_curve(y, scores, sample_weight=weights)
-    plt.plot(recall, precision, color = "red", label=f"Out-of-fold PR: {auc(recall, precision):.4f}")
+    plt.plot(recall, precision, color = oof_color, label=f"Out-of-fold PR: {auc(recall, precision):.4f}")
     for f, c in zip(fold_ids, fold_colors):
         in_fold = folds == f
         precision_f, recall_f, _ = precision_recall_curve(y[in_fold], scores[in_fold], sample_weight=weights[in_fold])
@@ -379,12 +398,10 @@ def make_eval_plots(bdt_name,y,scores,train_y=None,train_scores=None,folds=None,
     plt.yscale('log')
     plt.xlim([1e-4, 1])
     plt.ylim([1e-4, 1])
-    plt.ylabel('Precision (TP/(TP+FP))', fontsize=12)
-    plt.xlabel('Signal Efficiency (TPR)', fontsize=12)
-    plt.tick_params(axis='both', which='major', labelsize=12)
-    plt.legend( prop={'size':12} , loc = 3)
-    hep.cms.text("Private Work")
-    plt.savefig(f'plots/{bdt_name}/{bdt_name}_PR_curve.pdf')
+    plt.ylabel('Precision (TP/(TP+FP))')
+    plt.xlabel('Signal Efficiency (TPR)')
+    plt.legend(loc = 3)
+    plt.savefig(f'plots/{bdt_name}/{bdt_name}_PR_curve.png')
     plt.close('all')
 
 def make_importance_plot(bdt_name,models,variables,importance_type='weight'):
@@ -396,17 +413,17 @@ def make_importance_plot(bdt_name,models,variables,importance_type='weight'):
     order = np.argsort(imp.mean(axis=0))
     k = len(models)
     width = 0.8/k
-    colors = plt.cm.viridis(np.linspace(0,0.9,k))
-    plt.figure(figsize=(8,6))
+    ptools = _ptools()
+    colors = ptools.cms_colors(k)   # one CMS colour per fold
+    fig, ax = ptools.new_fig(None)
     ypos = np.arange(len(variables))
     for i in range(k):
         plt.barh(ypos - 0.4 + (i+0.5)*width, imp[i][order], height=width, color=colors[i], label=f'Fold {i}')
     plt.yticks(ypos, [variables[j] for j in order])
     plt.xlabel(importance_type.capitalize())
     plt.ylabel('Features')
-    plt.legend()
-    hep.cms.text("Private Work")
-    plt.savefig(f'plots/{bdt_name}/{bdt_name}_importance_{importance_type}.pdf', bbox_inches = "tight")
+    ptools.place_legend(ax)
+    plt.savefig(f'plots/{bdt_name}/{bdt_name}_importance_{importance_type}.png', bbox_inches = "tight")
     plt.close('all')
 
 def save_oof_scores(fname,scores,folds,event_num,sig_point=None):
