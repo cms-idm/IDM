@@ -1626,7 +1626,9 @@ ElectronSkimmer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup
    vector<const pat::Electron*> reg_good_eles;
    vector<int> iSaved_ele; // record indices of saved electrons for later veto during isolation correction calculations
    int iele = 0;
-   for (const auto & ele : *recoNanoElectronHandle_) {
+   for (const auto & ele : *recoNanoElectronHandle_) 
+   {
+       cout << "Electron pT: " << ele.pt() << endl;
       // require pT > 5 & pass loose ID to consider GED electron
       //if (ele.pt() < 5 || !ele.electronID("cutBasedElectronID-Fall17-94X-V2-loose")) {
       //if (ele.pt() < 2 || !ele.electronID("mvaEleID-Fall17-noIso-V2-wp90")) {
