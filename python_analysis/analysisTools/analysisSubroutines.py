@@ -1090,18 +1090,31 @@ def ele_ptCategory(b,ele_arr):
         else:
             b.append(3)
 
+# def genElectronKinematicBins(events):
+#     dR_map = ak.Array(["0to0p1","0p1to0p5","0p5toInf"])
+#     vxy_map = ak.Array(["0to1","1to5","5to10","10to15","15toInf"])
+#     pt_map = ak.Array(["0to5","5to10","10to20","20toInf"])
+
+#     events["GenEle","dRbin"] = dR_map[runJitOutput(ele_dRcategory,ak.materialize(events.GenEle.dr))]
+#     events["GenEle","vxyBin"] = vxy_map[runJitOutput(ele_vxyCategory,ak.materialize(events.GenEle.vxy))]
+#     events["GenEle","ptBin"] = pt_map[runJitOutput(ele_ptCategory,ak.materialize(events.GenEle.pt))]
+
+#     events["GenPos","dRbin"] = dR_map[runJitOutput(ele_dRcategory,ak.materialize(events.GenPos.dr))]
+#     events["GenPos","vxyBin"] = vxy_map[runJitOutput(ele_vxyCategory,ak.materialize(events.GenPos.vxy))]
+#     events["GenPos","ptBin"] = pt_map[runJitOutput(ele_ptCategory,ak.materialize(events.GenPos.pt))]
+
 def genElectronKinematicBins(events):
-    dR_map = ak.Array(["0to0p1","0p1to0p5","0p5toInf"])
-    vxy_map = ak.Array(["0to1","1to5","5to10","10to15","15toInf"])
-    pt_map = ak.Array(["0to5","5to10","10to20","20toInf"])
+    dR_map = ak.Array(["0to0p1", "0p1to0p5", "0p5toInf"])
+    vxy_map = ak.Array(["0to1", "1to5", "5to10", "10to15", "15toInf"])
+    pt_map = ak.Array(["0to5", "5to10", "10to20", "20toInf"])
 
-    events["GenEle","dRbin"] = dR_map[runJitOutput(ele_dRcategory,ak.materialize(events.GenEle.dr))]
-    events["GenEle","vxyBin"] = vxy_map[runJitOutput(ele_vxyCategory,ak.materialize(events.GenEle.vxy))]
-    events["GenEle","ptBin"] = pt_map[runJitOutput(ele_ptCategory,ak.materialize(events.GenEle.pt))]
+    events["GenEle", "dRbin"] = dR_map[runJitOutput(ele_dRcategory, events.GenEle.dr)]
+    events["GenEle", "vxyBin"] = vxy_map[runJitOutput(ele_vxyCategory, events.GenEle.vxy)]
+    events["GenEle", "ptBin"] = pt_map[runJitOutput(ele_ptCategory, events.GenEle.pt)]
 
-    events["GenPos","dRbin"] = dR_map[runJitOutput(ele_dRcategory,ak.materialize(events.GenPos.dr))]
-    events["GenPos","vxyBin"] = vxy_map[runJitOutput(ele_vxyCategory,ak.materialize(events.GenPos.vxy))]
-    events["GenPos","ptBin"] = pt_map[runJitOutput(ele_ptCategory,ak.materialize(events.GenPos.pt))]
+    events["GenPos", "dRbin"] = dR_map[runJitOutput(ele_dRcategory, events.GenPos.dr)]
+    events["GenPos", "vxyBin"] = vxy_map[runJitOutput(ele_vxyCategory, events.GenPos.vxy)]
+    events["GenPos", "ptBin"] = pt_map[runJitOutput(ele_ptCategory, events.GenPos.pt)]
     
 @nb.njit
 def regEle_lptMatchID(b,ele_lptMatchIdx,lpt_ele_id):
