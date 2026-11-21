@@ -10,8 +10,7 @@ from Configuration.Eras.Era_Run2_2016_HIPM_cff import Run2_2016_HIPM
 
 #Run3 imports
 from Configuration.Eras.Era_Run3_cff import Run3                   #corresponds to Run3 2022 (maybe)
-from Configuration.Eras.Era_Run3_2023_cff import Run3_2023         #corresponds to Run3 2023
-# from Configuration.Eras.Era_Run3_2024_cff import Run3_2024         # 2024
+# Run3_2023 and Run3_2024 are imported below only in CMSSW_14_0_21 (absent from CMSSW_13_0_13).
 
 import sys
 import os
@@ -118,7 +117,6 @@ if options.signal and 'selectionMode' in _explicitArgs:
     raise ValueError("selectionMode is a background-only option and has no effect on signal "
                       "samples; remove it or set signal=0")
 
-
 # input files
 if ".txt" in options.flist:
     # list of files
@@ -152,16 +150,6 @@ elif options.year == "2018":
     globaltag = '106X_dataRun2_v37' if options.data else '106X_upgrade2018_realistic_v16_L1v1'
     era = Run2_2018
     recoEgammaTools_era = '2018-UL'
-# <<<<<<< HEAD
-    
-# elif options.year == '2022':
-#     globaltag = '130X_dataRun3_v2' if options.data else '130X_mcRun3_2022_realistic_v5'  
-#     #For data, you can also use 124X_dataRun3_PromptAnalysis_v1 
-#     era = Run3
-#     recoEgammaTools_era = '2018-UL' #XYZ FIX
-    
-# elif options.year == '2023':
-# =======
 
 elif options.year in ["2022", "2022EE"]:
     if options.data:
@@ -171,14 +159,13 @@ elif options.year in ["2022", "2022EE"]:
     else:
         globaltag = "130X_mcRun3_2022_realistic_v5"
     era = Run3
-    recoEgammaTools_era = '2018-UL' #XYZ FIX
+    recoEgammaTools_era = '2022-Prompt' #XYZ FIX
 
 elif options.year == "2023" and newRelease:
     from Configuration.Eras.Era_Run3_2023_cff import Run3_2023         #corresponds to Run3 2023
     globaltag = '130X_dataRun3_PromptAnalysis_v1' if options.data else '130X_mcRun3_2023_realistic_v14'
     era = Run3_2023
-    recoEgammaTools_era =  '2022-Prompt'  #XYZ FIX
-
+    recoEgammaTools_era = '2022-Prompt' #XYZ FIX
 
 elif options.year == "2024" and newRelease:
     from Configuration.Eras.Era_Run3_2024_cff import Run3_2024         # 2024
@@ -354,7 +341,8 @@ process.maxEvents = cms.untracked.PSet(
 )
 process.source = cms.Source("PoolSource",
     fileNames = cms.untracked.vstring(options.inputFiles),
-
+    #skipBadFiles = cms.untracked.bool(True),
+    #cacheSize = cms.untracked.uint32(0)
     skipBadFiles = cms.untracked.bool(True)
 )
 process.TFileService = cms.Service("TFileService",
@@ -431,23 +419,23 @@ process.ntuples = ElectronSkimmer.clone(
     ),
 )
 
-# <<<<<<< HEAD
-# import EGamma postreco tools
-# from RecoEgamma.EgammaTools.EgammaPostRecoTools import setupEgammaPostRecoSeq
-# =======
 ##############################
 ###### EGamma post-reco ######
 ##############################
 
-if cmsswRelease == "CMSSW_13_0_13" :
+if cmsswRelease == "CMSSW_13_0_13":
     from RecoEgamma.EgammaTools.EgammaPostRecoTools import setupEgammaPostRecoSeq
 else:
     from EgammaUser.EgammaPostRecoTools.EgammaPostRecoTools import setupEgammaPostRecoSeq
 
 setupEgammaPostRecoSeq(process,
-                       runEnergyCorrections=True,
+                       runEnergyCorrections=False, # XYZ deactivated bc not working for Run3 yet, I think?
                        runVID=True, #saves CPU time by not needlessly re-running VID, if you want the Fall17V2 IDs, set this to True or remove (default is True)
-                       era=recoEgammaTools_era)
+                       era=recoEgammaTools_era,
+                       eleIDModules=['RecoEgamma.ElectronIdentification.Identification.mvaElectronID_RunIIIWinter22_iso_V1_cff',
+                                     'RecoEgamma.ElectronIdentification.Identification.mvaElectronID_RunIIIWinter22_noIso_V1_cff',
+                                     'RecoEgamma.ElectronIdentification.Identification.cutBasedElectronID_Winter22_122X_V1_cff']
+                       )
 
 ##################################
 ###### Low-pT electron chain #####
@@ -501,3 +489,4 @@ process.iDMNanoElectronSequence = cms.Sequence(process.lowPtNanoElectronSequence
 process.iDMNanoElectron = cms.Path(process.iDMNanoElectronSequence)
 
 process.schedule = cms.Schedule(process.iDMEgammaPostReco,process.iDMNanoElectron,process.ntuplePath)
+
